@@ -26,7 +26,7 @@ Audiovisual demos in the tradition of the Amiga/PC demoscene -- built to showcas
 
 | Directory | Product | Duration | Status |
 |---|---|---|---|
-| [`planner123_01/`](planner123_01/) | [Planner123](https://planner123.com) | 84s | Complete |
+| [`planner123_01/`](planner123_01/) | [Planner123]() | 84s | Complete |
 
 Each demo is a standalone Rust crate. See the README inside each directory for details on scenes, architecture, controls, and rendering.
 
