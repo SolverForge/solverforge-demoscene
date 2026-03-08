@@ -608,6 +608,7 @@ fn main() {
 
 /// Headless render: fixed 60fps timestep, write BGR24 frames to stdout.
 /// ffmpeg reads from stdin and encodes to MP4.
+/// Also renders synth audio to demo_audio.wav for muxing.
 fn run_headless(duration: f64) {
     const FPS: f64 = 60.0;
     let dt = 1.0 / FPS;
@@ -625,6 +626,9 @@ fn run_headless(duration: f64) {
     let mut interlude_scroller = ScrollText::new(2, 180.0, RENDER_W);
     let mut logo_reveal = LogoReveal::new();
     let screenshots = Screenshots::load();
+
+    // ── Render audio to WAV ────────────────────────────────
+    render_audio_wav(duration, "demo_audio.wav");
 
     let stdout = std::io::stdout();
     let mut out = std::io::BufWriter::with_capacity(RENDER_W * RENDER_H * 3 * 4, stdout.lock());
@@ -1080,4 +1084,55 @@ fn start_audio() -> Option<cpal::Stream> {
             None
         }
     }
+}
+
+/// Render the synth audio offline to a 16-bit stereo WAV file.
+fn render_audio_wav(duration: f64, path: &str) {
+    const SAMPLE_RATE: u32 = 44100;
+    let total_samples = (duration * SAMPLE_RATE as f64).ceil() as u64;
+
+    eprintln!("[render] Rendering audio: {total_samples} samples @ {SAMPLE_RATE}Hz → {path}");
+
+    let mut synth = audio::synth::build_synth(SAMPLE_RATE as f32);
+    synth.reset();
+    synth.set_sample_rate(SAMPLE_RATE as f64);
+
+    // Render all samples
+    let mut pcm = Vec::with_capacity(total_samples as usize * 2);
+    for _ in 0..total_samples {
+        let (l, r) = synth.get_stereo();
+        let l = (l.clamp(-1.0, 1.0) * 32767.0) as i16;
+        let r = (r.clamp(-1.0, 1.0) * 32767.0) as i16;
+        pcm.push(l);
+        pcm.push(r);
+    }
+
+    // Write WAV file (44-byte header + PCM16 data)
+    let num_channels: u16 = 2;
+    let bits_per_sample: u16 = 16;
+    let byte_rate = SAMPLE_RATE * num_channels as u32 * bits_per_sample as u32 / 8;
+    let block_align = num_channels * bits_per_sample / 8;
+    let data_size = pcm.len() as u32 * 2; // 2 bytes per i16
+    let file_size = 36 + data_size;
+
+    let mut wav = Vec::with_capacity(44 + data_size as usize);
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&file_size.to_le_bytes());
+    wav.extend_from_slice(b"WAVE");
+    wav.extend_from_slice(b"fmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes()); // chunk size
+    wav.extend_from_slice(&1u16.to_le_bytes()); // PCM format
+    wav.extend_from_slice(&num_channels.to_le_bytes());
+    wav.extend_from_slice(&SAMPLE_RATE.to_le_bytes());
+    wav.extend_from_slice(&byte_rate.to_le_bytes());
+    wav.extend_from_slice(&block_align.to_le_bytes());
+    wav.extend_from_slice(&bits_per_sample.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_size.to_le_bytes());
+    for sample in &pcm {
+        wav.extend_from_slice(&sample.to_le_bytes());
+    }
+
+    std::fs::write(path, &wav).expect("Failed to write audio WAV");
+    eprintln!("[render] Audio written: {path} ({:.1} MB)", wav.len() as f64 / 1_048_576.0);
 }

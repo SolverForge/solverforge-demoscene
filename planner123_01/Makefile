@@ -74,7 +74,7 @@ run: ## Build and run the demo in a window
 	cargo run $(CARGO_FLAGS)
 
 # ── Render to MP4 ────────────────────────────────────────────────────
-render: ## Render headless to MP4 via ffmpeg
+render: ## Render headless to MP4 via ffmpeg (with audio)
 	@echo "═══ RENDERING $(RENDER_SECS)s @ $(RENDER_W)x$(RENDER_H) $(RENDER_FPS)fps ═══"
 	@echo "    Output: $(RENDER_OUT)"
 	@echo ""
@@ -86,11 +86,15 @@ render: ## Render headless to MP4 via ffmpeg
 			-video_size $(RENDER_W)x$(RENDER_H) \
 			-framerate $(RENDER_FPS) \
 			-i - \
+			-i demo_audio.wav \
 			-c:v $(FFMPEG_VCODEC) \
+			-c:a aac -b:a 192k \
 			-crf $(FFMPEG_CRF) \
 			-preset $(FFMPEG_PRESET) \
 			-pix_fmt yuv420p \
+			-shortest \
 			$(RENDER_OUT)
+	@rm -f demo_audio.wav
 	@echo ""
 	@echo "═══ RENDERED: $(RENDER_OUT) ═══"
 	@ls -lh $(RENDER_OUT)
@@ -118,7 +122,7 @@ render-gif: ## Render headless to GIF (lower fps, palette-quantized)
 clean: ## Remove build artifacts and rendered output
 	@echo "═══ CLEANING ═══"
 	cargo clean
-	@rm -f $(RENDER_OUT) $(RENDER_GIF)
+	@rm -f $(RENDER_OUT) $(RENDER_GIF) demo_audio.wav
 	@echo "═══ CLEAN ═══"
 
 # ── Check ─────────────────────────────────────────────────────────────
