@@ -9,7 +9,7 @@ static PLAN_PNG: &[u8] = include_bytes!("screenshots/plan.png");
 static GANTT_PNG: &[u8] = include_bytes!("screenshots/gantt.png");
 static CALENDAR_PNG: &[u8] = include_bytes!("screenshots/calendar.png");
 
-/// A decoded screenshot: RGBA pixels, original dimensions.
+// A decoded screenshot: RGBA pixels, original dimensions.
 pub struct Screenshot {
     pub pixels: Vec<u32>, // 0x00RRGGBB
     pub width: usize,
@@ -48,7 +48,7 @@ impl Screenshot {
     }
 }
 
-/// All three screenshots, decoded once at startup.
+// All three screenshots, decoded once at startup.
 pub struct Screenshots {
     pub plan: Screenshot,
     pub gantt: Screenshot,
@@ -80,10 +80,10 @@ impl Screenshots {
     }
 }
 
-/// Blit a screenshot into the pixel buffer, scaled to fit a target rect,
-/// with fade (0.0=transparent, 1.0=opaque), blended over whatever is in buffer.
-/// The image is centered in the target rect, preserving aspect ratio (letterbox).
-/// Uses bilinear interpolation for pixel-perfect downscaling.
+// Blit a screenshot into the pixel buffer, scaled to fit a target rect,
+// with fade (0.0=transparent, 1.0=opaque), blended over whatever is in buffer.
+// The image is centered in the target rect, preserving aspect ratio (letterbox).
+// Uses bilinear interpolation for pixel-perfect downscaling.
 pub fn blit(
     buffer: &mut [u32],
     buf_w: usize,
@@ -171,7 +171,7 @@ pub fn blit(
     }
 }
 
-/// Bilinear interpolation across 4 packed 0x00RRGGBB pixels.
+// Bilinear interpolation across 4 packed 0x00RRGGBB pixels.
 #[inline(always)]
 fn bilerp(p00: u32, p10: u32, p01: u32, p11: u32, tx: f32, ty: f32) -> u32 {
     let lerp_row = |a: u32, b: u32, t: f32| -> (f32, f32, f32) {
@@ -191,7 +191,7 @@ fn bilerp(p00: u32, p10: u32, p01: u32, p11: u32, tx: f32, ty: f32) -> u32 {
     (r.min(255) << 16) | (g.min(255) << 8) | b.min(255)
 }
 
-/// Draw a 1px border around the blit rect.
+// Draw a 1px border around the blit rect.
 pub fn draw_border(
     buffer: &mut [u32],
     buf_w: usize,

@@ -3,11 +3,11 @@
 // Hand-crafted. Zero external files.
 // ═══════════════════════════════════════════════════════════════
 
-use crate::palette;
+use crate::palette::{self, Surface};
 
-// 8x8 pixel font data.
-// Each char is 8 rows of 8 bits (MSB left).
-// Covers ASCII 32..=127 (space through tilde).
+/// 8x8 pixel font data.
+/// Each char is 8 rows of 8 bits (MSB left).
+/// Covers ASCII 32..=127 (space through tilde).
 pub const FONT_8X8: [[u8; 8]; 96] = [
     // 32: SPACE
     [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
@@ -203,12 +203,10 @@ pub const FONT_8X8: [[u8; 8]; 96] = [
     [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
 ];
 
-// Draw a single character at pixel position (x, y) with scale and color.
-// scale=1 -> 8x8px, scale=2 -> 16x16px, etc.
+/// Draw a single character at pixel position (x, y) with scale and color.
+/// scale=1 -> 8x8px, scale=2 -> 16x16px, etc.
 pub fn draw_char(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     ch: char,
     x: i32,
     y: i32,
@@ -216,7 +214,7 @@ pub fn draw_char(
     color: u32,
 ) {
     let idx = ch as usize;
-    if idx < 32 || idx > 127 {
+    if !(32..=127).contains(&idx) {
         return;
     }
     let glyph = &FONT_8X8[idx - 32];
@@ -228,8 +226,8 @@ pub fn draw_char(
                     for sx in 0..scale {
                         let px = x + col * scale + sx;
                         let py = y + row * scale + sy;
-                        if px >= 0 && py >= 0 && px < width as i32 && py < height as i32 {
-                            buffer[py as usize * width + px as usize] = color;
+                        if px >= 0 && py >= 0 && px < s.w as i32 && py < s.h as i32 {
+                            s.buf[py as usize * s.w + px as usize] = color;
                         }
                     }
                 }
@@ -238,11 +236,9 @@ pub fn draw_char(
     }
 }
 
-// Draw a string. Returns x position after the last character.
+/// Draw a string. Returns x position after the last character.
 pub fn draw_text(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     text: &str,
     x: i32,
     y: i32,
@@ -251,17 +247,15 @@ pub fn draw_text(
 ) -> i32 {
     let mut cx = x;
     for ch in text.chars() {
-        draw_char(buffer, width, height, ch, cx, y, scale, color);
+        draw_char(s, ch, cx, y, scale, color);
         cx += 8 * scale + scale; // character advance with 1px spacing scaled
     }
     cx
 }
 
-// Draw text centered horizontally
+/// Draw text centered horizontally
 pub fn draw_text_centered(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     text: &str,
     cx: i32,
     y: i32,
@@ -271,14 +265,12 @@ pub fn draw_text_centered(
     let char_width = 8 * scale + scale;
     let text_width = text.len() as i32 * char_width;
     let x = cx - text_width / 2;
-    draw_text(buffer, width, height, text, x, y, scale, color);
+    draw_text(s, text, x, y, scale, color);
 }
 
-// Draw text with a glow effect (render glow in dimmed color first, then sharp on top)
+/// Draw text with a glow effect (render glow in dimmed color first, then sharp on top)
 pub fn draw_text_glow(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     text: &str,
     x: i32,
     y: i32,
@@ -291,19 +283,17 @@ pub fn draw_text_glow(
         for dx in -2i32..=2 {
             if dx != 0 || dy != 0 {
                 let glow = palette::dim(glow_color, 0.3 / ((dx * dx + dy * dy) as f32).sqrt());
-                draw_text(buffer, width, height, text, x + dx, y + dy, scale, glow);
+                draw_text(s, text, x + dx, y + dy, scale, glow);
             }
         }
     }
     // Sharp text on top
-    draw_text(buffer, width, height, text, x, y, scale, color);
+    draw_text(s, text, x, y, scale, color);
 }
 
-// Draw text centered with glow
+/// Draw text centered with glow
 pub fn draw_text_centered_glow(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     text: &str,
     cx: i32,
     y: i32,
@@ -314,10 +304,10 @@ pub fn draw_text_centered_glow(
     let char_width = 8 * scale + scale;
     let text_width = text.len() as i32 * char_width;
     let x = cx - text_width / 2;
-    draw_text_glow(buffer, width, height, text, x, y, scale, color, glow_color);
+    draw_text_glow(s, text, x, y, scale, color, glow_color);
 }
 
-// Measure text pixel width
+/// Measure text pixel width
 pub fn text_width(text: &str, scale: i32) -> i32 {
     text.len() as i32 * (8 * scale + scale)
 }

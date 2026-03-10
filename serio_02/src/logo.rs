@@ -21,7 +21,7 @@
 //   v6:( 35, 95)→(-0.867,-0.067)  v7:( 50, 50)→(-0.667,-0.667)
 // ═══════════════════════════════════════════════════════════════
 
-use crate::palette::{self, EMERALD_300, EMERALD_400, EMERALD_500, EMERALD_800, GREEN_500};
+use crate::palette::{self, Surface, EMERALD_300, EMERALD_400, EMERALD_500, EMERALD_800, GREEN_500};
 
 // ── Outer 8-point polygon vertices, normalized (÷75 from SVG) ──
 const VERTS: [(f32, f32); 8] = [
@@ -60,12 +60,10 @@ const MIDPOINT_SQUARES: [(f32, f32); 6] = [
     (-0.333, -0.680), // ( 75-100, 49-100)/75
 ];
 
-// Draw the SolverForge ouroboros logo centered at (cx,cy) with given radius.
-// progress: 0.0→nothing, 1.0→fully drawn. time for pulse. brightness for fade.
+/// Draw the SolverForge ouroboros logo centered at (cx,cy) with given radius.
+/// progress: 0.0→nothing, 1.0→fully drawn. time for pulse. brightness for fade.
 pub fn draw_logo(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     cx: f32,
     cy: f32,
     radius: f32,
@@ -75,11 +73,11 @@ pub fn draw_logo(
 ) {
     let progress = progress.clamp(0.0, 1.0);
     // px-per-SVG-unit: SVG uses 75px max extent = 1.0 normalized
-    let s = radius / 75.0;
+    let sc = radius / 75.0;
 
     // ── 1. Outer body: closed 8-point polygon, stroke-width=14 ──
     // Gradient: #22c55e (head/top) → #10b981 → #059669 (tail)
-    let sw = (14.0 * s).max(2.0);
+    let sw = (14.0 * sc).max(2.0);
     let segs_drawn = (progress * 8.0).min(8.0);
 
     for seg in 0..8usize {
@@ -105,9 +103,7 @@ pub fn draw_logo(
         );
 
         thick_line(
-            buffer,
-            width,
-            height,
+            s,
             cx + ax * radius,
             cy + ay * radius,
             cx + ex * radius,
@@ -125,11 +121,11 @@ pub fn draw_logo(
     // Drawn over the body — covers the join so the ring looks seamless.
     {
         let tail_color = palette::dim(GREEN_500, brightness);
-        let tail_w = (10.0 * s).max(2.0);
+        let tail_w = (10.0 * sc).max(2.0);
         let tx = cx + VERTS[0].0 * radius;
         let ty0 = cy + VERTS[0].1 * radius;
-        let ty1 = ty0 + 15.0 * s;
-        thick_line(buffer, width, height, tx, ty0, tx, ty1, tail_w, tail_color);
+        let ty1 = ty0 + 15.0 * sc;
+        thick_line(s, tx, ty0, tx, ty1, tail_w, tail_color);
     }
 
     // ── 3. Snake head at v0 (top vertex) ────────────────────────
@@ -139,7 +135,7 @@ pub fn draw_logo(
         let hx = cx + VERTS[0].0 * radius;
         let hy = cy + VERTS[0].1 * radius;
 
-        let lp = |lx: f32, ly: f32| -> (i32, i32) { ((hx + lx * s) as i32, (hy + ly * s) as i32) };
+        let lp = |lx: f32, ly: f32| -> (i32, i32) { ((hx + lx * sc) as i32, (hy + ly * sc) as i32) };
         let p0 = lp(0.0, 0.0);
         let p1 = lp(-10.0, -12.0);
         let p2 = lp(-5.0, -6.0);
@@ -149,17 +145,17 @@ pub fn draw_logo(
 
         let hc = palette::dim(GREEN_500, brightness);
         // Fill the fork as 4 triangles
-        fill_tri(buffer, width, height, p0, p1, p2, hc);
-        fill_tri(buffer, width, height, p0, p2, p3, hc);
-        fill_tri(buffer, width, height, p0, p3, p4, hc);
-        fill_tri(buffer, width, height, p0, p4, p5, hc);
+        fill_tri(s, p0, p1, p2, hc);
+        fill_tri(s, p0, p2, p3, hc);
+        fill_tri(s, p0, p3, p4, hc);
+        fill_tri(s, p0, p4, p5, hc);
 
         // Two eyes at cx=±3, cy=-8 (SVG local), r=1.5
-        let er = ((1.5 * s).round() as i32).max(1);
+        let er = ((1.5 * sc).round() as i32).max(1);
         let (elx, ely) = lp(-3.0, -8.0);
         let (erx, _) = lp(3.0, -8.0);
-        fill_circle(buffer, width, height, elx, ely, er, 0x000000);
-        fill_circle(buffer, width, height, erx, ely, er, 0x000000);
+        fill_circle(s, elx, ely, er, 0x000000);
+        fill_circle(s, erx, ely, er, 0x000000);
     }
 
     if progress < 0.5 {
@@ -171,14 +167,12 @@ pub fn draw_logo(
     // ── 4. Inner polygon ring (stroke-width=2, opacity=0.4) ─────
     {
         let ic = palette::dim(EMERALD_500, brightness * 0.4 * inner_p);
-        let isw = (2.0 * s).max(1.0);
+        let isw = (2.0 * sc).max(1.0);
         for seg in 0..8usize {
             let (ax, ay) = INNER_VERTS[seg];
             let (bx, by) = INNER_VERTS[(seg + 1) % 8];
             thick_line(
-                buffer,
-                width,
-                height,
+                s,
                 cx + ax * radius,
                 cy + ay * radius,
                 cx + bx * radius,
@@ -191,13 +185,11 @@ pub fn draw_logo(
 
     // ── 5. Accent circles at all 8 outer vertices (r=5, op=0.3) ─
     {
-        let vr = ((5.0 * s).round() as i32).max(1);
+        let vr = ((5.0 * sc).round() as i32).max(1);
         let vc = palette::dim(EMERALD_500, brightness * 0.3 * inner_p);
         for &(vx, vy) in &VERTS {
             fill_circle(
-                buffer,
-                width,
-                height,
+                s,
                 (cx + vx * radius) as i32,
                 (cy + vy * radius) as i32,
                 vr,
@@ -218,15 +210,13 @@ pub fn draw_logo(
 
     // Crosshair arms: gap 8..20 SVG units, stroke-width=2.5, black
     {
-        let arm_out = (20.0 * s * center_p) as i32;
-        let arm_in = (8.0 * s) as i32;
-        let cw = (2.5 * s).max(1.0);
+        let arm_out = (20.0 * sc * center_p) as i32;
+        let arm_in = (8.0 * sc) as i32;
+        let cw = (2.5 * sc).max(1.0);
         let cc = palette::dim(0x111111, brightness * center_p);
         if arm_out > arm_in {
             thick_line(
-                buffer,
-                width,
-                height,
+                s,
                 cx - arm_out as f32,
                 cy,
                 cx - arm_in as f32,
@@ -235,9 +225,7 @@ pub fn draw_logo(
                 cc,
             );
             thick_line(
-                buffer,
-                width,
-                height,
+                s,
                 cx + arm_in as f32,
                 cy,
                 cx + arm_out as f32,
@@ -246,9 +234,7 @@ pub fn draw_logo(
                 cc,
             );
             thick_line(
-                buffer,
-                width,
-                height,
+                s,
                 cx,
                 cy - arm_out as f32,
                 cx,
@@ -257,9 +243,7 @@ pub fn draw_logo(
                 cc,
             );
             thick_line(
-                buffer,
-                width,
-                height,
+                s,
                 cx,
                 cy + arm_in as f32,
                 cx,
@@ -272,12 +256,10 @@ pub fn draw_logo(
 
     // Ring r=6, stroke-width=2.5, fill=none, stroke=black
     {
-        let cr = ((6.0 * s).round() as i32).max(2);
-        let cw = ((2.5 * s).round() as i32).max(1);
+        let cr = ((6.0 * sc).round() as i32).max(2);
+        let cw = ((2.5 * sc).round() as i32).max(1);
         ring_circle(
-            buffer,
-            width,
-            height,
+            s,
             cxi,
             cyi,
             cr,
@@ -289,20 +271,16 @@ pub fn draw_logo(
     // Center dot r=3, fill=emerald, with time pulse
     {
         let pulse = ((time * 3.0).sin() as f32 * 0.25 + 0.75).abs();
-        let dr = ((3.0 * s).round() as i32).max(1);
+        let dr = ((3.0 * sc).round() as i32).max(1);
         fill_circle(
-            buffer,
-            width,
-            height,
+            s,
             cxi,
             cyi,
             dr,
             palette::dim(EMERALD_400, brightness * center_p * pulse),
         );
         fill_circle(
-            buffer,
-            width,
-            height,
+            s,
             cxi,
             cyi,
             (dr / 2).max(1),
@@ -313,24 +291,24 @@ pub fn draw_logo(
     // Corner brackets: "M-12 -12 L-15 -12 L-15 -15" × 4 corners
     // stroke-width=2, stroke=emerald
     {
-        let b12 = (12.0 * s) as i32;
-        let b15 = (15.0 * s) as i32;
-        let bw = (2.0 * s).max(1.0);
+        let b12 = (12.0 * sc) as i32;
+        let b15 = (15.0 * sc) as i32;
+        let bw = (2.0 * sc).max(1.0);
         let bc = palette::dim(EMERALD_500, brightness * 0.9 * center_p);
         for &(sx, sy) in &[(-1i32, -1i32), (1, -1), (1, 1), (-1, 1)] {
             let x12 = cx + (sx * b12) as f32;
             let y12 = cy + (sy * b12) as f32;
             let x15 = cx + (sx * b15) as f32;
             let y15 = cy + (sy * b15) as f32;
-            thick_line(buffer, width, height, x12, y12, x15, y12, bw, bc);
-            thick_line(buffer, width, height, x15, y12, x15, y15, bw, bc);
+            thick_line(s, x12, y12, x15, y12, bw, bc);
+            thick_line(s, x15, y12, x15, y15, bw, bc);
         }
     }
 
-    // ── 7. Six midpoint squares (4×4 SVG px → 4*s screen px) ────
+    // ── 7. Six midpoint squares (4×4 SVG px → 4*sc screen px) ────
     if progress > 0.85 {
         let sq_p = ((progress - 0.85) / 0.15).clamp(0.0, 1.0);
-        let sq_r = ((2.0 * s).round() as i32).max(1);
+        let sq_r = ((2.0 * sc).round() as i32).max(1);
         let sq_c = palette::dim(0x111111, brightness * 0.6 * sq_p);
         for &(mx, my) in &MIDPOINT_SQUARES {
             let px = (cx + mx * radius) as i32;
@@ -339,8 +317,8 @@ pub fn draw_logo(
                 for dx in -sq_r..=sq_r {
                     let x = px + dx;
                     let y = py + dy;
-                    if x >= 0 && y >= 0 && x < width as i32 && y < height as i32 {
-                        buffer[y as usize * width + x as usize] = sq_c;
+                    if x >= 0 && y >= 0 && x < s.w as i32 && y < s.h as i32 {
+                        s.buf[y as usize * s.w + x as usize] = sq_c;
                     }
                 }
             }
@@ -350,39 +328,9 @@ pub fn draw_logo(
 
 // ── Primitive drawing helpers ─────────────────────────────────
 
-// Bresenham 1-pixel line.
-fn line(buf: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, col: u32) {
-    let dx = (x1 - x0).abs();
-    let dy = -(y1 - y0).abs();
-    let sx = if x0 < x1 { 1i32 } else { -1 };
-    let sy = if y0 < y1 { 1i32 } else { -1 };
-    let mut err = dx + dy;
-    let mut x = x0;
-    let mut y = y0;
-    loop {
-        if x >= 0 && y >= 0 && x < w as i32 && y < h as i32 {
-            buf[y as usize * w + x as usize] = col;
-        }
-        if x == x1 && y == y1 {
-            break;
-        }
-        let e2 = 2 * err;
-        if e2 >= dy {
-            err += dy;
-            x += sx;
-        }
-        if e2 <= dx {
-            err += dx;
-            y += sy;
-        }
-    }
-}
-
-// Thick line: offset parallel 1px lines along the perpendicular.
+/// Thick line: offset parallel 1px lines along the perpendicular.
 fn thick_line(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
+    s: &mut Surface,
     x0: f32,
     y0: f32,
     x1: f32,
@@ -401,10 +349,8 @@ fn thick_line(
         let t = -half + (i as f32 / steps as f32) * thickness;
         let ox = (nx * t).round() as i32;
         let oy = (ny * t).round() as i32;
-        line(
-            buf,
-            w,
-            h,
+        palette::bresenham(
+            s,
             x0 as i32 + ox,
             y0 as i32 + oy,
             x1 as i32 + ox,
@@ -414,11 +360,9 @@ fn thick_line(
     }
 }
 
-// Filled triangle by scanline rasterization.
+/// Filled triangle by scanline rasterization.
 fn fill_tri(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
+    s: &mut Surface,
     a: (i32, i32),
     b: (i32, i32),
     c: (i32, i32),
@@ -437,7 +381,7 @@ fn fill_tri(
         }
     };
     for y in y0..=y2 {
-        if y < 0 || y >= h as i32 {
+        if y < 0 || y >= s.h as i32 {
             continue;
         }
         let (mut xl, mut xr) = if y < y1 {
@@ -448,32 +392,30 @@ fn fill_tri(
         if xl > xr {
             std::mem::swap(&mut xl, &mut xr);
         }
-        for x in xl.max(0)..=xr.min(w as i32 - 1) {
-            buf[y as usize * w + x as usize] = col;
+        for x in xl.max(0)..=xr.min(s.w as i32 - 1) {
+            s.buf[y as usize * s.w + x as usize] = col;
         }
     }
 }
 
-// Filled circle.
-fn fill_circle(buf: &mut [u32], w: usize, h: usize, cx: i32, cy: i32, r: i32, col: u32) {
+/// Filled circle.
+fn fill_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, col: u32) {
     for dy in -r..=r {
         for dx in -r..=r {
             if dx * dx + dy * dy <= r * r {
                 let x = cx + dx;
                 let y = cy + dy;
-                if x >= 0 && y >= 0 && x < w as i32 && y < h as i32 {
-                    buf[y as usize * w + x as usize] = col;
+                if x >= 0 && y >= 0 && x < s.w as i32 && y < s.h as i32 {
+                    s.buf[y as usize * s.w + x as usize] = col;
                 }
             }
         }
     }
 }
 
-// Circle ring (outline) with pixel thickness.
+/// Circle ring (outline) with pixel thickness.
 fn ring_circle(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
+    s: &mut Surface,
     cx: i32,
     cy: i32,
     r: i32,
@@ -488,8 +430,8 @@ fn ring_circle(
             if d2 <= ro * ro && d2 >= ri * ri {
                 let x = cx + dx;
                 let y = cy + dy;
-                if x >= 0 && y >= 0 && x < w as i32 && y < h as i32 {
-                    buf[y as usize * w + x as usize] = col;
+                if x >= 0 && y >= 0 && x < s.w as i32 && y < s.h as i32 {
+                    s.buf[y as usize * s.w + x as usize] = col;
                 }
             }
         }

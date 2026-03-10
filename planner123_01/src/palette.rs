@@ -3,13 +3,13 @@
 // ═══════════════════════════════════════════════════════════════
 #![allow(dead_code)]
 
-/// Pack RGB into u32 ARGB (minifb format: 0x00RRGGBB)
+// Pack RGB into u32 ARGB (minifb format: 0x00RRGGBB)
 #[inline(always)]
 pub fn rgb(r: u8, g: u8, b: u8) -> u32 {
     ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }
 
-/// Blend two colors by factor t in [0.0, 1.0]
+// Blend two colors by factor t in [0.0, 1.0]
 #[inline(always)]
 pub fn lerp_color(a: u32, b: u32, t: f32) -> u32 {
     let t = t.clamp(0.0, 1.0);
@@ -25,7 +25,7 @@ pub fn lerp_color(a: u32, b: u32, t: f32) -> u32 {
     rgb(r, g, b)
 }
 
-/// Multiply a color by a scalar brightness [0.0, 1.0]
+// Multiply a color by a scalar brightness [0.0, 1.0]
 #[inline(always)]
 pub fn dim(color: u32, factor: f32) -> u32 {
     let r = (((color >> 16) & 0xFF) as f32 * factor) as u8;
@@ -34,7 +34,7 @@ pub fn dim(color: u32, factor: f32) -> u32 {
     rgb(r, g, b)
 }
 
-/// Add two colors with clamping
+// Add two colors with clamping
 #[inline(always)]
 pub fn add_color(a: u32, b: u32) -> u32 {
     let r = (((a >> 16) & 0xFF) + ((b >> 16) & 0xFF)).min(255) as u8;
@@ -123,7 +123,7 @@ pub fn plasma_color(v: f32) -> u32 {
     }
 }
 
-/// Alternate plasma palette -- deep purple / magenta for variety
+// Alternate plasma palette -- deep purple / magenta for variety
 pub fn plasma_color_alt(v: f32) -> u32 {
     let v = v.clamp(0.0, 1.0);
     if v < 0.2 {
@@ -141,9 +141,9 @@ pub fn plasma_color_alt(v: f32) -> u32 {
     }
 }
 
-/// Scrolltext gradient — cycles emerald → amber → rust → amber → emerald.
-/// Routes through amber so no murky olive midpoints appear.
-/// t in [0.0, 1.0) — wraps automatically.
+// Scrolltext gradient — cycles emerald → amber → rust → amber → emerald.
+// Routes through amber so no murky olive midpoints appear.
+// t in [0.0, 1.0) — wraps automatically.
 pub fn scroll_gradient(t: f32) -> u32 {
     let t = ((t % 1.0) + 1.0) % 1.0;
     if t < 0.25 {
@@ -157,7 +157,7 @@ pub fn scroll_gradient(t: f32) -> u32 {
     }
 }
 
-/// Starfield color with intensity
+// Starfield color with intensity
 pub fn star_color(brightness: f32) -> u32 {
     // Emerald-tinted stars
     let b = (brightness.clamp(0.0, 1.0) * 255.0) as u8;
@@ -172,7 +172,7 @@ pub fn star_color(brightness: f32) -> u32 {
     }
 }
 
-/// Fade a color to black (for fade in/out transitions)
+// Fade a color to black (for fade in/out transitions)
 pub fn fade(color: u32, alpha: f32) -> u32 {
     dim(color, alpha.clamp(0.0, 1.0))
 }

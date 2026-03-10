@@ -27,7 +27,7 @@ pub const SCROLL_TEXT: &str = "*** PLANNER123 *** YOUR WEEK, OPTIMIZED *** \
      ";
 
 pub struct ScrollText {
-    /// Horizontal scroll position in pixels (decreasing = scrolling left)
+    // Horizontal scroll position in pixels (decreasing = scrolling left)
     pub scroll_x: f32,
     scroll_speed: f32,
     text_scale: i32,
@@ -55,10 +55,10 @@ impl ScrollText {
         }
     }
 
-    /// Render the scrolltext with per-character gradient color cycling.
-    /// Colors slide through the brand gradient (emerald → amber → rust → amber → emerald)
-    /// as text scrolls, giving a smooth chromatic wave without any vertical bounce.
-    /// y_center: vertical center position for the text baseline
+    // Render the scrolltext with per-character gradient color cycling.
+    // Colors slide through the brand gradient (emerald → amber → rust → amber → emerald)
+    // as text scrolls, giving a smooth chromatic wave without any vertical bounce.
+    // y_center: vertical center position for the text baseline
     pub fn render(
         &self,
         buffer: &mut [u32],
@@ -143,7 +143,7 @@ impl ScrollText {
         }
     }
 
-    /// Render a simpler static-position line of text for titles
+    // Render a simpler static-position line of text for titles
     pub fn render_title(
         buffer: &mut [u32],
         width: usize,

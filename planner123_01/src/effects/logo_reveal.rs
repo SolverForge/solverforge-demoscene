@@ -15,7 +15,7 @@ struct Particle {
     y: f32,
     vx: f32,
     vy: f32,
-    life: f32, // 1.0 = alive, 0.0 = dead
+    life: f32,
     max_life: f32,
     color: u32,
     size: i32,
@@ -39,7 +39,7 @@ impl Particle {
 pub struct LogoReveal {
     particles: Vec<Particle>,
     scanline_y: f32,
-    pub phase: f32, // 0.0 = not started, 1.0 = fully revealed
+    pub phase: f32,
     spawn_timer: f32,
     particle_seed: usize,
 }
@@ -128,14 +128,7 @@ impl LogoReveal {
         }
     }
 
-    pub fn render(
-        &self,
-        buffer: &mut [u32],
-        width: usize,
-        height: usize,
-        time: f64,
-        global_fade: f32,
-    ) {
+    pub fn render(&self, buffer: &mut [u32], width: usize, height: usize, time: f64, global_fade: f32) {
         let cx = width as f32 / 2.0;
         let cy = height as f32 / 2.0;
         let logo_radius = height.min(width) as f32 * 0.22;

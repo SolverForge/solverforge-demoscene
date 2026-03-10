@@ -67,6 +67,7 @@ fn main() {
         );
         eprintln!("[render] Pipe to ffmpeg, e.g.:");
         eprintln!("[render]   cargo run -r -p planner123-demo -- --render | ffmpeg -f rawvideo -pixel_format bgr24 -video_size {}x{} -framerate 60 -i - -c:v libx264 -pix_fmt yuv420p demo.mp4", RENDER_W, RENDER_H);
+        render_audio_wav(render_duration, "demo_audio.wav");
         run_headless(render_duration);
         return;
     }

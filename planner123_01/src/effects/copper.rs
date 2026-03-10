@@ -6,9 +6,9 @@
 use crate::palette::{self, COPPER_BARS};
 
 pub struct CopperBars {
-    /// Number of bar groups
+    // Number of bar groups
     bar_count: usize,
-    /// Height of each bar group in pixels
+    // Height of each bar group in pixels
     bar_height: usize,
     #[allow(dead_code)]
     bar_gap: usize,
@@ -23,9 +23,9 @@ impl CopperBars {
         }
     }
 
-    /// Render copper bars onto the buffer.
-    /// bars_y: array of Y positions (center) for each bar
-    /// alpha: overall opacity
+    // Render copper bars onto the buffer.
+    // bars_y: array of Y positions (center) for each bar
+    // alpha: overall opacity
     pub fn render(
         &self,
         buffer: &mut [u32],

@@ -7,7 +7,7 @@
 use crate::palette::{self, EMERALD_300, EMERALD_400, EMERALD_600};
 use glam::{Mat4, Vec3, Vec4};
 
-/// A 3D wireframe object
+// A 3D wireframe object
 pub struct WireObject {
     pub vertices: Vec<Vec3>,
     pub edges: Vec<(usize, usize)>,
@@ -17,7 +17,7 @@ pub struct WireObject {
 }
 
 impl WireObject {
-    /// Create a cube
+    // Create a cube
     pub fn cube(scale: f32) -> Self {
         let v = vec![
             Vec3::new(-1.0, -1.0, -1.0),
@@ -55,7 +55,7 @@ impl WireObject {
         }
     }
 
-    /// Create an icosahedron
+    // Create an icosahedron
     pub fn icosahedron(scale: f32) -> Self {
         let phi = (1.0 + 5.0_f32.sqrt()) / 2.0; // golden ratio
         let v = vec![
@@ -114,7 +114,7 @@ impl WireObject {
         }
     }
 
-    /// Create a torus (approximated as rings of circles)
+    // Create a torus (approximated as rings of circles)
     pub fn torus(scale: f32, r_major: f32, r_minor: f32, segments: usize, rings: usize) -> Self {
         let mut vertices = Vec::new();
         let mut edges = Vec::new();
@@ -151,7 +151,7 @@ impl WireObject {
         }
     }
 
-    /// Create a Swiss-design grid (flat XZ grid with vertical pillars)
+    // Create a Swiss-design grid (flat XZ grid with vertical pillars)
     #[allow(dead_code)]
     pub fn grid_lattice(scale: f32, n: usize) -> Self {
         let mut vertices = Vec::new();
@@ -420,7 +420,7 @@ impl Wireframe {
     }
 }
 
-/// Bresenham line algorithm
+// Bresenham line algorithm
 fn bresenham<F: FnMut(usize, usize)>(
     x0: i32,
     y0: i32,

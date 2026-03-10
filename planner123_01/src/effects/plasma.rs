@@ -6,7 +6,7 @@
 use crate::palette;
 
 pub struct Plasma {
-    /// Precomputed sine LUT for speed
+    // Precomputed sine LUT for speed
     sin_lut: Vec<f32>,
 }
 
@@ -85,7 +85,7 @@ impl Plasma {
         }
     }
 
-    /// Render plasma with alpha-blend overlay on existing buffer
+    // Render plasma with alpha-blend overlay on existing buffer
     pub fn render_overlay(
         &self,
         buffer: &mut [u32],

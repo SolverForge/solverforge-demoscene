@@ -1,0 +1,21 @@
+[package]
+name = "serio-02-demo"
+version = "0.1.0"
+edition = "2021"
+description = "SolverForge Demoscene: SERIO_02 — Musica Universalis"
+
+[[bin]]
+name = "serio-02-demo"
+path = "src/main.rs"
+
+[dependencies]
+# Pixel framebuffer window
+minifb = "0.28"
+
+# Audio synthesis + output
+fundsp = "0.23"
+cpal = "0.17"
+
+# The star of the show: SERIO incremental scoring engine
+solverforge-scoring = "0.5.8"
+solverforge-core = "0.5.8"
