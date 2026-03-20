@@ -10,6 +10,9 @@ use std::time::Instant;
 const W: usize = 1280;
 const H: usize = 720;
 const FPS: f64 = 60.0;
+const GLYPH_SPACING: f32 = 18.0;
+const GRID_STEP: usize = 64;
+const GLITCH_ROWS: usize = 5;
 
 const PHRASES: &[&str] = &[
     "ZERO ERASURE // LIVE DELTAS // RUST IN THE VEINS",
@@ -21,6 +24,21 @@ const PHRASES: &[&str] = &[
 
 const GLYPHS: &[u8] = b"[]{}()<>:=+-*/\\|0123456789SFDS#";
 
+const SOLVER_STATE_LINES: &[&str] = &[
+    "hard feasibility..... LOCKED",
+    "soft score........... RISING",
+    "delta evals.......... 000128",
+    "temperature.......... COLD",
+];
+
+const WATCH_LIST_LINES: &[&str] = &[
+    "planner123",
+    "serio",
+    "solverforge-core",
+    "latency < intuition",
+    "amiga forever",
+];
+
 #[derive(Clone, Copy)]
 struct Drop {
     x: f32,
@@ -30,14 +48,27 @@ struct Drop {
     seed: u32,
 }
 
+struct State {
+    drops: Vec<Drop>,
+    phrase_idx: usize,
+    glitch_buffer: Vec<u32>,
+}
+
+#[derive(Clone, Copy)]
+struct Panel<'a> {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    t: f64,
+    title: &'a str,
+    lines: &'a [&'a str],
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let headless = args.iter().any(|a| a == "--render");
-    let render_duration: f64 = args
-        .windows(2)
-        .find(|w| w[0] == "--render")
-        .and_then(|w| w[1].parse().ok())
-        .unwrap_or(30.0);
+    let render_duration = parse_render_duration(&args).unwrap_or(30.0);
 
     if headless {
         run_headless(render_duration);
@@ -54,7 +85,7 @@ fn main() {
             ..WindowOptions::default()
         },
     )
-    .expect("window");
+    .expect("failed to create screensaver window");
     window.set_target_fps(60);
 
     let mut buffer = vec![0u32; W * H];
@@ -77,21 +108,23 @@ fn main() {
         space_was_down = space_down;
 
         state.update(dt, t as f32);
-        render_frame(&mut buffer, &state, t, overlay);
-        window.update_with_buffer(&buffer, W, H).expect("present");
+        render_frame(&mut buffer, &mut state, t, overlay);
+        window
+            .update_with_buffer(&buffer, W, H)
+            .expect("failed to present framebuffer");
     }
 }
 
-struct State {
-    drops: Vec<Drop>,
-    phrase_idx: usize,
+fn parse_render_duration(args: &[String]) -> Option<f64> {
+    args.windows(2)
+        .find(|window| window[0] == "--render")
+        .and_then(|window| window[1].parse().ok())
 }
 
 impl State {
     fn new() -> Self {
         let mut drops = Vec::new();
-        let step = 16usize;
-        for (i, x) in (0..W).step_by(step).enumerate() {
+        for (i, x) in (0..W).step_by(16).enumerate() {
             let fi = i as f32;
             drops.push(Drop {
                 x: x as f32 + 4.0,
@@ -101,9 +134,11 @@ impl State {
                 seed: 0x9E37_79B9u32.wrapping_mul(i as u32 + 1),
             });
         }
+
         Self {
             drops,
             phrase_idx: 0,
+            glitch_buffer: vec![palette::NEAR_BLACK; W * GLITCH_ROWS],
         }
     }
 
@@ -111,54 +146,62 @@ impl State {
         self.phrase_idx = ((t / 8.0) as usize) % PHRASES.len();
         for drop in &mut self.drops {
             drop.y += drop.speed * dt;
-            if drop.y - (drop.len as f32 * 18.0) > H as f32 + 60.0 {
-                drop.y = -((drop.seed % H as u32) as f32) - 80.0;
-                drop.seed = lcg(drop.seed ^ (t.to_bits()));
-                drop.speed = 80.0 + (drop.seed % 220) as f32;
-                drop.len = 8 + (drop.seed as usize % 20);
+            if drop.y - (drop.len as f32 * GLYPH_SPACING) > H as f32 + 60.0 {
+                respawn_drop(drop, t);
             }
             drop.seed = lcg(drop.seed);
         }
     }
 }
 
+fn respawn_drop(drop: &mut Drop, t: f32) {
+    drop.y = -((drop.seed % H as u32) as f32) - 80.0;
+    drop.seed = lcg(drop.seed ^ t.to_bits());
+    drop.speed = 80.0 + (drop.seed % 220) as f32;
+    drop.len = 8 + (drop.seed as usize % 20);
+}
+
 fn run_headless(duration: f64) {
-    let total = (duration * FPS) as usize;
+    let total_frames = (duration * FPS) as usize;
     let mut buffer = vec![0u32; W * H];
     let mut bgr = vec![0u8; W * H * 3];
     let mut out = std::io::BufWriter::new(std::io::stdout());
     let mut state = State::new();
 
-    for frame in 0..total {
+    for frame in 0..total_frames {
         let t = frame as f64 / FPS;
         state.update((1.0 / FPS) as f32, t as f32);
-        render_frame(&mut buffer, &state, t, true);
-        for (i, &px) in buffer.iter().enumerate() {
-            bgr[i * 3] = (px & 0xFF) as u8;
-            bgr[i * 3 + 1] = ((px >> 8) & 0xFF) as u8;
-            bgr[i * 3 + 2] = ((px >> 16) & 0xFF) as u8;
-        }
-        out.write_all(&bgr).expect("stdout write");
+        render_frame(&mut buffer, &mut state, t, true);
+        write_bgr_frame(&buffer, &mut bgr);
+        out.write_all(&bgr).expect("failed to write raw frame");
     }
 }
 
-fn render_frame(buffer: &mut [u32], state: &State, t: f64, overlay: bool) {
-    let mut s = Surface { buf: buffer, w: W, h: H };
-    clear_gradient(&mut s, t);
-    draw_grid(&mut s, t);
-    draw_glyph_rain(&mut s, state, t);
-    draw_glow_orb(&mut s, t);
-    draw_logo_cluster(&mut s, t);
-    draw_panels(&mut s, t);
+fn write_bgr_frame(buffer: &[u32], bgr: &mut [u8]) {
+    for (i, &px) in buffer.iter().enumerate() {
+        bgr[i * 3] = (px & 0xFF) as u8;
+        bgr[i * 3 + 1] = ((px >> 8) & 0xFF) as u8;
+        bgr[i * 3 + 2] = ((px >> 16) & 0xFF) as u8;
+    }
+}
+
+fn render_frame(buffer: &mut [u32], state: &mut State, t: f64, overlay: bool) {
+    let mut surface = Surface { buf: buffer, w: W, h: H };
+    clear_gradient(&mut surface, t);
+    draw_grid(&mut surface, t);
+    draw_glyph_rain(&mut surface, state, t);
+    draw_glow_orb(&mut surface, t);
+    draw_logo_cluster(&mut surface, t);
+    draw_panels(&mut surface, t);
     if overlay {
-        draw_overlay_copy(&mut s, t, state.phrase_idx);
+        draw_overlay_copy(&mut surface, t, state.phrase_idx);
     }
-    draw_crt_pass(&mut s, t);
+    draw_crt_pass(&mut surface, &mut state.glitch_buffer, t);
 }
 
-fn clear_gradient(s: &mut Surface, t: f64) {
-    for y in 0..s.h {
-        let fy = y as f32 / s.h as f32;
+fn clear_gradient(surface: &mut Surface, t: f64) {
+    for y in 0..surface.h {
+        let fy = y as f32 / surface.h as f32;
         let horizon = (1.0 - (fy - 0.58).abs() * 1.7).clamp(0.0, 1.0);
         let pulse = (t as f32 * 0.35).sin() * 0.5 + 0.5;
         let base = palette::lerp_color(palette::rgb(2, 4, 8), palette::MIDNIGHT, fy * 0.8);
@@ -168,54 +211,59 @@ fn clear_gradient(s: &mut Surface, t: f64) {
             horizon,
         );
         let row = palette::add_color(base, glow);
-        let off = y * s.w;
-        for x in 0..s.w {
-            s.buf[off + x] = row;
+        let offset = y * surface.w;
+        for x in 0..surface.w {
+            surface.buf[offset + x] = row;
         }
     }
 }
 
-fn draw_grid(s: &mut Surface, t: f64) {
-    let vcol = palette::dim(palette::EMERALD_700, 0.20);
-    for x in (0..s.w as i32).step_by(64) {
-        palette::bresenham(s, x, 0, x, s.h as i32 - 1, vcol);
+fn draw_grid(surface: &mut Surface, t: f64) {
+    let vertical_color = palette::dim(palette::EMERALD_700, 0.20);
+    for x in (0..surface.w as i32).step_by(GRID_STEP) {
+        palette::bresenham(surface, x, 0, x, surface.h as i32 - 1, vertical_color);
     }
+
     for i in 0..18 {
         let depth = i as f32 / 17.0;
-        let y = (s.h as f32 * (0.55 + depth * depth * 0.45)) as i32;
-        let spread = (s.w as f32 * (0.12 + depth * 0.38)) as i32;
+        let y = (surface.h as f32 * (0.55 + depth * depth * 0.45)) as i32;
+        let spread = (surface.w as f32 * (0.12 + depth * 0.38)) as i32;
         let shimmer = ((t * 0.7 + i as f64).sin() * 12.0) as i32;
         palette::bresenham(
-            s,
-            s.w as i32 / 2 - spread,
+            surface,
+            surface.w as i32 / 2 - spread,
             y,
-            s.w as i32 / 2 + spread,
+            surface.w as i32 / 2 + spread,
             y + shimmer / 6,
             palette::dim(palette::EMERALD_600, 0.10 + depth * 0.18),
         );
     }
 }
 
-fn draw_glyph_rain(s: &mut Surface, state: &State, t: f64) {
+fn draw_glyph_rain(surface: &mut Surface, state: &State, t: f64) {
     for (i, drop) in state.drops.iter().enumerate() {
         for j in 0..drop.len {
-            let y = drop.y - j as f32 * 18.0;
-            if y < -20.0 || y > s.h as f32 + 20.0 {
+            let y = drop.y - j as f32 * GLYPH_SPACING;
+            if y < -20.0 || y > surface.h as f32 + 20.0 {
                 continue;
             }
-            let idx = ((drop.seed as usize).wrapping_add(j * 13).wrapping_add((t * 30.0) as usize)) % GLYPHS.len();
+
+            let idx = ((drop.seed as usize)
+                .wrapping_add(j * 13)
+                .wrapping_add((t * 30.0) as usize))
+                % GLYPHS.len();
             let ch = GLYPHS[idx] as char;
-            let head = j == 0;
             let fade = 1.0 - j as f32 / drop.len as f32;
-            let color = if head {
+            let color = if j == 0 {
                 palette::lerp_color(palette::CHROME, palette::EMERALD_300, 0.65)
             } else {
                 palette::dim(palette::EMERALD_500, 0.10 + fade * 0.55)
             };
-            font::draw_char(s, ch, drop.x as i32, y as i32, 2, color);
-            if head && i % 5 == 0 {
+
+            font::draw_char(surface, ch, drop.x as i32, y as i32, 2, color);
+            if j == 0 && i % 5 == 0 {
                 font::draw_char(
-                    s,
+                    surface,
                     '.',
                     drop.x as i32 + 10,
                     y as i32,
@@ -227,36 +275,34 @@ fn draw_glyph_rain(s: &mut Surface, state: &State, t: f64) {
     }
 }
 
-fn draw_glow_orb(s: &mut Surface, t: f64) {
-    let cx = s.w as i32 / 2;
-    let cy = s.h as i32 / 2 - 10;
-    for r in [220, 170, 130, 90] {
-        let pulse = ((t * 0.8 + r as f64 * 0.03).sin() * 0.5 + 0.5) as f32;
-        ring(s, cx, cy, r, palette::dim(palette::EMERALD_600, 0.04 + pulse * 0.06));
+fn draw_glow_orb(surface: &mut Surface, t: f64) {
+    let cx = surface.w as i32 / 2;
+    let cy = surface.h as i32 / 2 - 10;
+    for radius in [220, 170, 130, 90] {
+        let pulse = ((t * 0.8 + radius as f64 * 0.03).sin() * 0.5 + 0.5) as f32;
+        ring(
+            surface,
+            cx,
+            cy,
+            radius,
+            palette::dim(palette::EMERALD_600, 0.04 + pulse * 0.06),
+        );
     }
 }
 
-fn draw_logo_cluster(s: &mut Surface, t: f64) {
-    let cx = s.w as f32 / 2.0 + (t * 0.43).sin() as f32 * 18.0;
-    let cy = s.h as f32 / 2.0 - 20.0 + (t * 0.61).cos() as f32 * 12.0;
+fn draw_logo_cluster(surface: &mut Surface, t: f64) {
+    let cx = surface.w as f32 / 2.0 + (t * 0.43).sin() as f32 * 18.0;
+    let cy = surface.h as f32 / 2.0 - 20.0 + (t * 0.61).cos() as f32 * 12.0;
     let pulse = ((t * 1.4).sin() * 0.5 + 0.5) as f32;
     let radius = 112.0 + pulse * 10.0;
 
-    for &(dx, dy, alpha) in &[(-10.0, 0.0, 0.08), (10.0, 0.0, 0.08), (0.0, 8.0, 0.06)] {
-        logo::draw_logo(
-            s,
-            cx + dx,
-            cy + dy,
-            radius,
-            1.0,
-            t,
-            alpha,
-        );
+    for &(dx, dy, brightness) in &[(-10.0, 0.0, 0.08), (10.0, 0.0, 0.08), (0.0, 8.0, 0.06)] {
+        logo::draw_logo(surface, cx + dx, cy + dy, radius, 1.0, t, brightness);
     }
-    logo::draw_logo(s, cx, cy, radius, 1.0, t, 1.0);
+    logo::draw_logo(surface, cx, cy, radius, 1.0, t, 1.0);
 
     font::draw_text_centered_glow(
-        s,
+        surface,
         "SOLVERFORGE",
         cx as i32,
         cy as i32 + 124,
@@ -265,7 +311,7 @@ fn draw_logo_cluster(s: &mut Surface, t: f64) {
         palette::dim(palette::EMERALD_500, 0.32 + pulse * 0.15),
     );
     font::draw_text_centered(
-        s,
+        surface,
         "zero-erasure optimization engine",
         cx as i32,
         cy as i32 + 168,
@@ -274,64 +320,112 @@ fn draw_logo_cluster(s: &mut Surface, t: f64) {
     );
 }
 
-fn draw_panels(s: &mut Surface, t: f64) {
+fn draw_panels(surface: &mut Surface, t: f64) {
     let drift = (t * 0.6).sin() as i32 * 10;
-    draw_panel(s, 72, 72 + drift, 320, 122, t, "solver state", &[
-        "hard feasibility..... LOCKED",
-        "soft score........... RISING",
-        "delta evals.......... 000128",
-        "temperature.......... COLD",
-    ]);
-    draw_panel(s, s.w as i32 - 390, 110 - drift, 308, 138, t + 2.1, "watch list", &[
-        "planner123",
-        "serio",
-        "solverforge-core",
-        "latency < intuition",
-        "amiga forever",
-    ]);
+    let panels = [
+        Panel {
+            x: 72,
+            y: 72 + drift,
+            w: 320,
+            h: 122,
+            t,
+            title: "solver state",
+            lines: SOLVER_STATE_LINES,
+        },
+        Panel {
+            x: surface.w as i32 - 390,
+            y: 110 - drift,
+            w: 308,
+            h: 138,
+            t: t + 2.1,
+            title: "watch list",
+            lines: WATCH_LIST_LINES,
+        },
+    ];
+
+    for panel in panels {
+        draw_panel(surface, panel);
+    }
 }
 
-fn draw_panel(s: &mut Surface, x: i32, y: i32, w: i32, h: i32, t: f64, title: &str, lines: &[&str]) {
-    rect_fill(s, x, y, w, h, palette::dim(palette::MIDNIGHT, 0.72));
-    rect_outline(s, x, y, w, h, palette::dim(palette::EMERALD_600, 0.55));
-    rect_outline(s, x + 2, y + 2, w - 4, h - 4, palette::dim(palette::EMERALD_800, 0.45));
-    font::draw_text(s, title, x + 12, y + 10, 1, palette::EMERALD_300);
-    let bar_w = (((t.sin() * 0.5 + 0.5) * (w - 24) as f64) as i32).max(20);
-    rect_fill(s, x + 12, y + 24, bar_w, 4, palette::dim(palette::EMERALD_500, 0.8));
-    for (i, line) in lines.iter().enumerate() {
-        let pulse = ((t * 1.2 + i as f64).sin() * 0.5 + 0.5) as f32;
+fn draw_panel(surface: &mut Surface, panel: Panel<'_>) {
+    rect_fill(
+        surface,
+        panel.x,
+        panel.y,
+        panel.w,
+        panel.h,
+        palette::dim(palette::MIDNIGHT, 0.72),
+    );
+    rect_outline(
+        surface,
+        panel.x,
+        panel.y,
+        panel.w,
+        panel.h,
+        palette::dim(palette::EMERALD_600, 0.55),
+    );
+    rect_outline(
+        surface,
+        panel.x + 2,
+        panel.y + 2,
+        panel.w - 4,
+        panel.h - 4,
+        palette::dim(palette::EMERALD_800, 0.45),
+    );
+    font::draw_text(
+        surface,
+        panel.title,
+        panel.x + 12,
+        panel.y + 10,
+        1,
+        palette::EMERALD_300,
+    );
+
+    let bar_width = (((panel.t.sin() * 0.5 + 0.5) * (panel.w - 24) as f64) as i32).max(20);
+    rect_fill(
+        surface,
+        panel.x + 12,
+        panel.y + 24,
+        bar_width,
+        4,
+        palette::dim(palette::EMERALD_500, 0.8),
+    );
+
+    for (i, line) in panel.lines.iter().enumerate() {
+        let pulse = ((panel.t * 1.2 + i as f64).sin() * 0.5 + 0.5) as f32;
         font::draw_text(
-            s,
+            surface,
             line,
-            x + 14,
-            y + 42 + i as i32 * 16,
+            panel.x + 14,
+            panel.y + 42 + i as i32 * 16,
             1,
             palette::dim(palette::CHROME, 0.65 + pulse * 0.25),
         );
     }
 }
 
-fn draw_overlay_copy(s: &mut Surface, t: f64, phrase_idx: usize) {
-    let phrase = PHRASES[phrase_idx];
+fn draw_overlay_copy(surface: &mut Surface, t: f64, phrase_idx: usize) {
     font::draw_text_centered(
-        s,
-        phrase,
-        s.w as i32 / 2,
-        s.h as i32 - 34,
+        surface,
+        PHRASES[phrase_idx],
+        surface.w as i32 / 2,
+        surface.h as i32 - 34,
         1,
         palette::dim(palette::EMERALD_400, 0.85),
     );
+
     let blink = ((t * 2.0).sin() * 0.5 + 0.5) as f32;
     font::draw_text(
-        s,
+        surface,
         "ESC TO EXIT // SPACE TO TOGGLE OVERLAY",
         28,
-        s.h as i32 - 28,
+        surface.h as i32 - 28,
         1,
         palette::dim(palette::EMERALD_700, 0.35 + blink * 0.2),
     );
     font::draw_text(
-        s,
+        surface,
         "CRT PHOSPHOR // SILENT MODE // SOLVERFORGE AFTER DARK",
         28,
         24,
@@ -340,69 +434,72 @@ fn draw_overlay_copy(s: &mut Surface, t: f64, phrase_idx: usize) {
     );
 }
 
-fn draw_crt_pass(s: &mut Surface, t: f64) {
-    for y in 0..s.h {
+fn draw_crt_pass(surface: &mut Surface, glitch_buffer: &mut [u32], t: f64) {
+    for y in 0..surface.h {
         let scan = if y % 2 == 0 { 0.96 } else { 0.86 };
-        let vignette_y = 1.0 - ((y as f32 / s.h as f32) - 0.5).abs() * 0.5;
-        let off = y * s.w;
-        for x in 0..s.w {
-            let vignette_x = 1.0 - ((x as f32 / s.w as f32) - 0.5).abs() * 0.9;
-            let v = (scan * vignette_x * vignette_y).clamp(0.0, 1.0);
-            s.buf[off + x] = palette::dim(s.buf[off + x], v);
+        let vignette_y = 1.0 - ((y as f32 / surface.h as f32) - 0.5).abs() * 0.5;
+        let offset = y * surface.w;
+        for x in 0..surface.w {
+            let vignette_x = 1.0 - ((x as f32 / surface.w as f32) - 0.5).abs() * 0.9;
+            let brightness = (scan * vignette_x * vignette_y).clamp(0.0, 1.0);
+            surface.buf[offset + x] = palette::dim(surface.buf[offset + x], brightness);
         }
     }
 
-    let glitch_center = ((t * 0.37).sin() * 0.5 + 0.5) * s.h as f64;
-    let gy = glitch_center as i32;
-    for row in -2..=2 {
-        let y = gy + row;
-        if !(0..s.h as i32).contains(&y) {
+    let glitch_center = ((t * 0.37).sin() * 0.5 + 0.5) * surface.h as f64;
+    let start_y = glitch_center as i32 - (GLITCH_ROWS as i32 / 2);
+
+    for row in 0..GLITCH_ROWS {
+        let y = start_y + row as i32;
+        if !(0..surface.h as i32).contains(&y) {
             continue;
         }
+
         let shift = ((t * 8.0 + row as f64).sin() * 18.0) as i32;
-        let start = y as usize * s.w;
-        let mut temp = vec![palette::NEAR_BLACK; s.w];
-        for x in 0..s.w as i32 {
-            let sx = (x - shift).clamp(0, s.w as i32 - 1) as usize;
-            temp[x as usize] = palette::add_color(
-                palette::dim(s.buf[start + sx], 0.8),
+        let src_start = y as usize * surface.w;
+        let row_slice = &mut glitch_buffer[row * surface.w..(row + 1) * surface.w];
+        for x in 0..surface.w as i32 {
+            let src_x = (x - shift).clamp(0, surface.w as i32 - 1) as usize;
+            row_slice[x as usize] = palette::add_color(
+                palette::dim(surface.buf[src_start + src_x], 0.8),
                 palette::dim(palette::EMERALD_500, 0.08),
             );
         }
-        s.buf[start..start + s.w].copy_from_slice(&temp);
+        surface.buf[src_start..src_start + surface.w].copy_from_slice(row_slice);
     }
 }
 
-fn rect_fill(s: &mut Surface, x: i32, y: i32, w: i32, h: i32, col: u32) {
-    for yy in y.max(0)..(y + h).min(s.h as i32) {
-        let off = yy as usize * s.w;
-        for xx in x.max(0)..(x + w).min(s.w as i32) {
-            s.buf[off + xx as usize] = palette::add_color(s.buf[off + xx as usize], col);
+fn rect_fill(surface: &mut Surface, x: i32, y: i32, w: i32, h: i32, color: u32) {
+    for yy in y.max(0)..(y + h).min(surface.h as i32) {
+        let offset = yy as usize * surface.w;
+        for xx in x.max(0)..(x + w).min(surface.w as i32) {
+            let idx = offset + xx as usize;
+            surface.buf[idx] = palette::add_color(surface.buf[idx], color);
         }
     }
 }
 
-fn rect_outline(s: &mut Surface, x: i32, y: i32, w: i32, h: i32, col: u32) {
-    palette::bresenham(s, x, y, x + w, y, col);
-    palette::bresenham(s, x, y + h, x + w, y + h, col);
-    palette::bresenham(s, x, y, x, y + h, col);
-    palette::bresenham(s, x + w, y, x + w, y + h, col);
+fn rect_outline(surface: &mut Surface, x: i32, y: i32, w: i32, h: i32, color: u32) {
+    palette::bresenham(surface, x, y, x + w, y, color);
+    palette::bresenham(surface, x, y + h, x + w, y + h, color);
+    palette::bresenham(surface, x, y, x, y + h, color);
+    palette::bresenham(surface, x + w, y, x + w, y + h, color);
 }
 
-fn ring(s: &mut Surface, cx: i32, cy: i32, r: i32, col: u32) {
-    let steps = ((r as f32 * 6.0) as i32).max(32);
+fn ring(surface: &mut Surface, cx: i32, cy: i32, radius: i32, color: u32) {
+    let steps = ((radius as f32 * 6.0) as i32).max(32);
     let mut prev = None;
     for i in 0..=steps {
-        let a = i as f32 / steps as f32 * std::f32::consts::TAU;
-        let x = cx + (a.cos() * r as f32) as i32;
-        let y = cy + (a.sin() * r as f32 * 0.65) as i32;
+        let angle = i as f32 / steps as f32 * std::f32::consts::TAU;
+        let x = cx + (angle.cos() * radius as f32) as i32;
+        let y = cy + (angle.sin() * radius as f32 * 0.65) as i32;
         if let Some((px, py)) = prev {
-            palette::bresenham(s, px, py, x, y, col);
+            palette::bresenham(surface, px, py, x, y, color);
         }
         prev = Some((x, y));
     }
 }
 
 fn lcg(x: u32) -> u32 {
-    x.wrapping_mul(1664525).wrapping_add(1013904223)
+    x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223)
 }

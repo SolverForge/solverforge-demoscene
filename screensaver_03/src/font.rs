@@ -307,7 +307,3 @@ pub fn draw_text_centered_glow(
     draw_text_glow(s, text, x, y, scale, color, glow_color);
 }
 
-/// Measure text pixel width
-pub fn text_width(text: &str, scale: i32) -> i32 {
-    text.len() as i32 * (8 * scale + scale)
-}

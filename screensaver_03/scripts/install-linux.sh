@@ -3,9 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_DIR=$(cd -- "$SCRIPT_DIR/.." && pwd)
-PREFIX="${HOME}/.local"
-BIN_DIR="$PREFIX/bin"
-APP_DIR="$PREFIX/share/applications"
+PREFIX="${PREFIX:-${HOME}/.local}"
+DESTDIR="${DESTDIR:-}"
+INSTALL_ROOT="${DESTDIR}${PREFIX}"
+BIN_DIR="$INSTALL_ROOT/bin"
+APP_DIR="$INSTALL_ROOT/share/applications"
+RUNTIME_BIN_DIR="$PREFIX/bin"
 
 mkdir -p "$BIN_DIR" "$APP_DIR"
 
@@ -22,7 +25,7 @@ cat > "$APP_DIR/solverforge-screensaver.desktop" <<DESKTOP
 Type=Application
 Name=SolverForge Screensaver
 Comment=Silent phosphor screensaver in Rust
-Exec=${BIN_DIR}/solverforge-screensaver-launch
+Exec=${RUNTIME_BIN_DIR}/solverforge-screensaver-launch
 Terminal=false
 Categories=Graphics;
 Keywords=screensaver;solverforge;rust;
@@ -36,7 +39,7 @@ echo "  ${BIN_DIR}/solverforge-screensaver-launch"
 echo "  ${BIN_DIR}/solverforge-screensaverctl"
 echo ""
 echo "Run now:"
-echo "  ${BIN_DIR}/solverforge-screensaverctl run"
+echo "  ${RUNTIME_BIN_DIR}/solverforge-screensaverctl run"
 echo ""
 echo "Set as idle screensaver on Linux:"
-echo "  ${BIN_DIR}/solverforge-screensaverctl set --timeout 300"
+echo "  ${RUNTIME_BIN_DIR}/solverforge-screensaverctl set --timeout 300"
