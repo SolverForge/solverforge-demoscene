@@ -43,6 +43,15 @@ make render       # render to MP4 via ffmpeg
 make help         # see all targets
 ```
 
+For the Linux screensaver:
+
+```bash
+cd screensaver_03
+make install-linux                # install into ~/.local/bin
+~/.local/bin/solverforge-screensaverctl run
+~/.local/bin/solverforge-screensaverctl set --timeout 300
+```
+
 ## System Requirements
 
 **Build:**

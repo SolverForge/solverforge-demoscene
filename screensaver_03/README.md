@@ -26,12 +26,54 @@ Think "Screensaver" through a SolverForge lens: black phosphor, emerald glyph ra
 make run
 ```
 
+## Linux Install
+
+```bash
+make install-linux
+```
+
+This installs:
+
+- `~/.local/bin/solverforge-screensaver`
+- `~/.local/bin/solverforge-screensaver-launch`
+- `~/.local/bin/solverforge-screensaverctl`
+- `~/.local/share/applications/solverforge-screensaver.desktop`
+
+Then you can run it from anywhere with:
+
+```bash
+solverforge-screensaverctl run
+```
+
 ### Controls
 
 | Key | Action |
 |---|---|
 | `ESC` | Quit |
 | `SPACE` | Toggle overlay copy |
+
+## Set as Your Linux Screensaver
+
+Once installed, configure idle launch with:
+
+```bash
+solverforge-screensaverctl set --timeout 300
+```
+
+Current auto-configuration support:
+
+- **Hyprland / hypridle** — writes a sourced `hypridle` listener config
+- **Wayland / swayidle** — installs a user `systemd` service around `swayidle`
+- **X11 / xautolock** — installs a user `systemd` service around `xautolock`
+
+Useful commands:
+
+```bash
+solverforge-screensaverctl status
+solverforge-screensaverctl unset
+```
+
+If no supported idle manager is detected, the screensaver still installs and runs fine manually.
 
 ## Rendering
 
