@@ -19,8 +19,8 @@ DEMO            := solverforge-screensaver
 CARGO_FLAGS     := --release
 
 # Render settings
-RENDER_W        := 1280
-RENDER_H        := 720
+RENDER_W        := 1920
+RENDER_H        := 1080
 RENDER_FPS      := 60
 RENDER_SECS     := 30
 RENDER_OUT      := screensaver_03.mp4
