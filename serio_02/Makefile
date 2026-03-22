@@ -89,10 +89,13 @@ render: ## Render headless to MP4 via ffmpeg (with audio)
 			-i - \
 			-i demo_audio.wav \
 			-c:v $(FFMPEG_VCODEC) \
+			-profile:v baseline -level 3.0 \
+			-r $(RENDER_FPS) \
 			-c:a aac -b:a 192k \
 			-crf $(FFMPEG_CRF) \
 			-preset $(FFMPEG_PRESET) \
 			-pix_fmt yuv420p \
+			-movflags +faststart \
 			-shortest \
 			$(RENDER_OUT)
 	@rm -f demo_audio.wav

@@ -1,21 +1,21 @@
 # ═══════════════════════════════════════════════════════════════
-#  ██████╗ ██╗      █████╗ ███╗   ██╗███╗   ██╗███████╗██████╗
-#  ██╔══██╗██║     ██╔══██╗████╗  ██║████╗  ██║██╔════╝██╔══██╗
-#  ██████╔╝██║     ███████║██╔██╗ ██║██╔██╗ ██║█████╗  ██████╔╝
-#  ██╔═══╝ ██║     ██╔══██║██║╚██╗██║██║╚██╗██║██╔══╝  ██╔══██╗
-#  ██║     ███████╗██║  ██║██║ ╚████║██║ ╚████║███████╗██║  ██║
-#  ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
-#           1 2 3  ── GREETINGS FROM THE RUST DEMOSCENE ──
+#   ██████╗ ███████╗██████╗ ██╗ ██████╗
+#  ██╔════╝ ██╔════╝██╔══██╗██║██╔═══██╗
+#  ╚█████╗  █████╗  ██████╔╝██║██║   ██║
+#   ╚═══██╗ ██╔══╝  ██╔══██╗██║██║   ██║
+#  ██████╔╝ ███████╗██║  ██║██║╚██████╔╝
+#  ╚═════╝  ╚══════╝╚═╝  ╚═╝╚═╝ ╚═════╝
 #
-#  SOLVERFORGE // THIS IS NOT A SCHEDULER // THIS IS A WEAPON.
-#  CODED IN RUST. AMIGA 1992 FOREVER
-#  (NO JAVASCRIPT WAS HARMED).
+#  MUSICA UNIVERSALIS -- SERIO INCREMENTAL SCORING ENGINE
+#  THE PLANETS SING. THE SOLVER LISTENS. PYTHAGORAS APPROVED.
+#
+#  CODED IN RUST. NO JAVASCRIPT WAS HARMED.
 # ═══════════════════════════════════════════════════════════════
 
 .PHONY: help build run render render-gif clean check clippy loc
 
 # ── Configuration ─────────────────────────────────────────────────────
-DEMO          := planner123-demo
+DEMO          := serio-demo
 CARGO_FLAGS   := --release
 
 # Render settings
@@ -23,8 +23,8 @@ RENDER_W      := 1280
 RENDER_H      := 720
 RENDER_FPS    := 60
 RENDER_SECS   := 84
-RENDER_OUT    := demo.mp4
-RENDER_GIF    := demo.gif
+RENDER_OUT    := serio_01.mp4
+RENDER_GIF    := serio_01.gif
 
 # ffmpeg encoding settings
 FFMPEG_VCODEC := libx264
@@ -34,15 +34,10 @@ FFMPEG_PRESET := slow
 # ── Default target ────────────────────────────────────────────────────
 help: ## Show this help
 	@echo ""
-	@echo " ██████╗ ██╗      █████╗ ███╗   ██╗███╗   ██╗███████╗██████╗"
-	@echo " ██╔══██╗██║     ██╔══██╗████╗  ██║████╗  ██║██╔════╝██╔══██╗"
-	@echo " ██████╔╝██║     ███████║██╔██╗ ██║██╔██╗ ██║█████╗  ██████╔╝"
-	@echo " ██╔═══╝ ██║     ██╔══██║██║╚██╗██║██║╚██╗██║██╔══╝  ██╔══██╗"
-	@echo " ██║     ███████╗██║  ██║██║ ╚████║██║ ╚████║███████╗██║  ██║"
-	@echo " ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝"
-	@echo "          1 2 3  ── GREETINGS FROM THE RUST DEMOSCENE ──"
-	@echo ""
-	@echo " SOLVERFORGE // THIS IS NOT A SCHEDULER // THIS IS A WEAPON."
+	@echo "  ╔═══════════════════════════════════════════════════════════╗"
+	@echo "  ║  SERIO_01 -- MUSICA UNIVERSALIS                          ║"
+	@echo "  ║  SERIO: SCORING ENGINE FOR REAL-TIME INCREMENTAL OPT.   ║"
+	@echo "  ╚═══════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "  ┌─────────────────────────────────────────────────────┐"
 	@echo "  │  TARGETS                                            │"
@@ -74,7 +69,7 @@ run: ## Build and run the demo in a window
 	cargo run $(CARGO_FLAGS)
 
 # ── Render to MP4 ────────────────────────────────────────────────────
-render: ## Render headless to MP4 via ffmpeg (with audio)
+render: ## Render headless to MP4 via ffmpeg
 	@echo "═══ RENDERING $(RENDER_SECS)s @ $(RENDER_W)x$(RENDER_H) $(RENDER_FPS)fps ═══"
 	@echo "    Output: $(RENDER_OUT)"
 	@echo ""
@@ -86,18 +81,14 @@ render: ## Render headless to MP4 via ffmpeg (with audio)
 			-video_size $(RENDER_W)x$(RENDER_H) \
 			-framerate $(RENDER_FPS) \
 			-i - \
-			-i demo_audio.wav \
 			-c:v $(FFMPEG_VCODEC) \
 			-profile:v baseline -level 3.0 \
 			-r $(RENDER_FPS) \
-			-c:a aac -b:a 192k \
 			-crf $(FFMPEG_CRF) \
 			-preset $(FFMPEG_PRESET) \
 			-pix_fmt yuv420p \
 			-movflags +faststart \
-			-shortest \
 			$(RENDER_OUT)
-	@rm -f demo_audio.wav
 	@echo ""
 	@echo "═══ RENDERED: $(RENDER_OUT) ═══"
 	@ls -lh $(RENDER_OUT)
@@ -125,7 +116,7 @@ render-gif: ## Render headless to GIF (lower fps, palette-quantized)
 clean: ## Remove build artifacts and rendered output
 	@echo "═══ CLEANING ═══"
 	cargo clean
-	@rm -f $(RENDER_OUT) $(RENDER_GIF) demo_audio.wav
+	@rm -f $(RENDER_OUT) $(RENDER_GIF)
 	@echo "═══ CLEAN ═══"
 
 # ── Check ─────────────────────────────────────────────────────────────

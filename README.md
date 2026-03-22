@@ -28,7 +28,7 @@ Audiovisual demos in the tradition of the Amiga/PC demoscene -- built to showcas
 |---|---|---|---|
 | [`planner123_01/`](planner123_01/) | [Planner123]() | 84s | Complete |
 | [`serio_02/`](serio_02/) | [SERIO](https://crates.io/crates/solverforge-scoring) | 114s | Complete |
-| [`screensaver_03/`](screensaver_03/) | SolverForge Screensaver | Endless / 30s render preset | Complete |
+| [`screensaver_03/`](screensaver_03/) | SolverForge Sway Screensaver | Endless / 30s render preset | Complete |
 
 Each demo is a standalone Rust crate. See the README inside each directory for details on scenes, architecture, controls, and rendering.
 
@@ -43,13 +43,12 @@ make render       # render to MP4 via ffmpeg
 make help         # see all targets
 ```
 
-For the Linux screensaver:
+For the sway screensaver:
 
 ```bash
 cd screensaver_03
-make install-linux                # install into ~/.local/bin
-~/.local/bin/solverforge-screensaverctl run
-~/.local/bin/solverforge-screensaverctl set --timeout 300
+cargo install --path .            # or cargo build --release
+solverforge-screensaver
 ```
 
 ## System Requirements

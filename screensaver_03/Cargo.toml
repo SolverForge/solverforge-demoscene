@@ -2,7 +2,7 @@
 name = "solverforge-screensaver"
 version = "0.1.0"
 edition = "2021"
-description = "SolverForge screensaver in Rust -- phosphor glyph rain and emerald CRT glow"
+description = "SolverForge sway screensaver in Rust -- phosphor glyph rain and emerald CRT glow"
 
 [[bin]]
 name = "solverforge-screensaver"

@@ -2,13 +2,13 @@ mod font;
 mod logo;
 mod palette;
 
-use minifb::{Key, Scale, Window, WindowOptions};
+use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 use palette::Surface;
 use std::io::Write;
 use std::time::Instant;
 
-const W: usize = 1280;
-const H: usize = 720;
+const W: usize = 1920;
+const H: usize = 1080;
 const FPS: f64 = 60.0;
 const GLYPH_SPACING: f32 = 18.0;
 const GRID_STEP: usize = 64;
@@ -18,7 +18,7 @@ const PHRASES: &[&str] = &[
     "ZERO ERASURE // LIVE DELTAS // RUST IN THE VEINS",
     "SERIO WATCHES THE DELTA. THE DELTA WATCHES BACK.",
     "CONSTRAINTS BEND. LATENCY DIES. THE SCORE REMEMBERS.",
-    "SOLVERFORGE // BERGAMO MMXXVI // NO JAVASCRIPT WAS HARMED",
+    "SOLVERFORGE // BERGAMO MMXXVI",
     "HARD FEASIBILITY. SOFT STYLE. SPIFFY OR NOTHING.",
 ];
 
@@ -80,8 +80,12 @@ fn main() {
         W,
         H,
         WindowOptions {
-            scale: Scale::X1,
-            resize: true,
+            borderless: true,
+            title: false,
+            resize: false,
+            scale: Scale::FitScreen,
+            scale_mode: ScaleMode::AspectRatioStretch,
+            topmost: true,
             ..WindowOptions::default()
         },
     )
@@ -186,7 +190,11 @@ fn write_bgr_frame(buffer: &[u32], bgr: &mut [u8]) {
 }
 
 fn render_frame(buffer: &mut [u32], state: &mut State, t: f64, overlay: bool) {
-    let mut surface = Surface { buf: buffer, w: W, h: H };
+    let mut surface = Surface {
+        buf: buffer,
+        w: W,
+        h: H,
+    };
     clear_gradient(&mut surface, t);
     draw_grid(&mut surface, t);
     draw_glyph_rain(&mut surface, state, t);
