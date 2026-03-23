@@ -1,6 +1,6 @@
 [package]
 name = "solverforge-screensaver"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "SolverForge sway screensaver in Rust -- phosphor glyph rain and emerald CRT glow"
 
@@ -9,4 +9,5 @@ name = "solverforge-screensaver"
 path = "src/main.rs"
 
 [dependencies]
-minifb = "0.28"
+pixels = "0.15"
+winit = "0.29"

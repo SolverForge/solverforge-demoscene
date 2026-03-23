@@ -2,14 +2,25 @@ mod font;
 mod logo;
 mod palette;
 
-use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 use palette::Surface;
+use pixels::{Pixels, SurfaceTexture};
+use std::collections::HashMap;
 use std::io::Write;
-use std::time::Instant;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use winit::dpi::LogicalSize;
+use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop, EventLoopBuilder};
+use winit::keyboard;
+use winit::monitor::MonitorHandle;
+#[cfg(target_os = "linux")]
+use winit::platform::wayland::{EventLoopBuilderExtWayland, WindowBuilderExtWayland};
+use winit::window::{Fullscreen, Window, WindowBuilder, WindowId};
 
 const W: usize = 1920;
 const H: usize = 1080;
 const FPS: f64 = 60.0;
+const INPUT_ARM_DELAY_MS: u64 = 750;
 const GLYPH_SPACING: f32 = 18.0;
 const GRID_STEP: usize = 64;
 const GLITCH_ROWS: usize = 5;
@@ -54,6 +65,11 @@ struct State {
     glitch_buffer: Vec<u32>,
 }
 
+struct SaverWindow {
+    window: Arc<Window>,
+    pixels: Pixels<'static>,
+}
+
 #[derive(Clone, Copy)]
 struct Panel<'a> {
     x: i32,
@@ -75,22 +91,33 @@ fn main() {
         return;
     }
 
-    let mut window = Window::new(
-        "SOLVERFORGE // SCREENSAVER_03",
-        W,
-        H,
-        WindowOptions {
-            borderless: true,
-            title: false,
-            resize: false,
-            scale: Scale::FitScreen,
-            scale_mode: ScaleMode::AspectRatioStretch,
-            topmost: true,
-            ..WindowOptions::default()
-        },
-    )
-    .expect("failed to create screensaver window");
-    window.set_target_fps(60);
+    run_screensaver();
+}
+
+fn run_screensaver() {
+    let mut event_loop_builder = EventLoopBuilder::new();
+    #[cfg(target_os = "linux")]
+    event_loop_builder.with_wayland();
+    let event_loop = event_loop_builder
+        .build()
+        .expect("failed to init event loop");
+
+    let monitor_targets: Vec<Option<MonitorHandle>> = {
+        let monitors: Vec<_> = event_loop.available_monitors().collect();
+        if monitors.is_empty() {
+            vec![None]
+        } else {
+            monitors.into_iter().map(Some).collect()
+        }
+    };
+
+    let mut windows: HashMap<WindowId, SaverWindow> = monitor_targets
+        .into_iter()
+        .map(|monitor| {
+            let saver_window = create_saver_window(&event_loop, monitor);
+            (saver_window.window.id(), saver_window)
+        })
+        .collect();
 
     let mut buffer = vec![0u32; W * H];
     let mut state = State::new();
@@ -98,25 +125,135 @@ fn main() {
     let mut last = start;
     let mut overlay = true;
     let mut space_was_down = false;
+    let mut next_frame = start + Duration::from_secs_f64(1.0 / FPS);
+    let frame_time = Duration::from_secs_f64(1.0 / FPS);
+    let input_armed_at = start + Duration::from_millis(INPUT_ARM_DELAY_MS);
 
-    while window.is_open() && !window.is_key_down(Key::Escape) {
-        let now = Instant::now();
-        let dt = now.duration_since(last).as_secs_f32().min(0.05);
-        last = now;
-        let t = now.duration_since(start).as_secs_f64();
+    let _ = event_loop.run(move |event, event_loop| {
+        event_loop.set_control_flow(ControlFlow::WaitUntil(next_frame));
+        match event {
+            Event::WindowEvent {
+                event:
+                    WindowEvent::CloseRequested
+                    | WindowEvent::MouseInput { .. }
+                    | WindowEvent::CursorMoved { .. }
+                    | WindowEvent::MouseWheel { .. }
+                    | WindowEvent::Touch(_),
+                ..
+            } => {
+                if Instant::now() >= input_armed_at {
+                    event_loop.exit();
+                }
+            }
 
-        let space_down = window.is_key_down(Key::Space);
-        if space_down && !space_was_down {
-            overlay = !overlay;
+            Event::WindowEvent {
+                event:
+                    WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                physical_key,
+                                state: input_state,
+                                ..
+                            },
+                        ..
+                    },
+                ..
+            } => {
+                if input_state == ElementState::Pressed {
+                    if let keyboard::PhysicalKey::Code(keycode) = physical_key {
+                        match keycode {
+                            keyboard::KeyCode::Escape => event_loop.exit(),
+                            keyboard::KeyCode::Space => {
+                                if !space_was_down {
+                                    overlay = !overlay;
+                                    space_was_down = true;
+                                }
+                            }
+                            _ => {
+                                if Instant::now() >= input_armed_at {
+                                    event_loop.exit();
+                                }
+                            }
+                        }
+                    }
+                } else if let keyboard::PhysicalKey::Code(keyboard::KeyCode::Space) = physical_key {
+                    space_was_down = false;
+                }
+            }
+
+            Event::WindowEvent {
+                window_id,
+                event: WindowEvent::Resized(size),
+            } => {
+                if size.width > 0 && size.height > 0 {
+                    if let Some(window) = windows.get_mut(&window_id) {
+                        if window
+                            .pixels
+                            .resize_surface(size.width, size.height)
+                            .is_err()
+                        {
+                            event_loop.exit();
+                        }
+                    }
+                }
+            }
+
+            Event::AboutToWait => {
+                if Instant::now() >= next_frame {
+                    let now = Instant::now();
+                    let t = now.duration_since(start).as_secs_f64();
+                    next_frame = now + frame_time;
+                    let dt = now.duration_since(last).as_secs_f32().min(0.05);
+                    last = now;
+
+                    state.update(dt, t as f32);
+                    render_frame(&mut buffer, &mut state, t, overlay);
+
+                    for window in windows.values_mut() {
+                        let frame = window.pixels.frame_mut();
+                        write_rgba_frame(&buffer, frame);
+                        if window.pixels.render().is_err() {
+                            event_loop.exit();
+                            break;
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
-        space_was_down = space_down;
+    });
+}
 
-        state.update(dt, t as f32);
-        render_frame(&mut buffer, &mut state, t, overlay);
-        window
-            .update_with_buffer(&buffer, W, H)
-            .expect("failed to present framebuffer");
+fn create_saver_window(event_loop: &EventLoop<()>, monitor: Option<MonitorHandle>) -> SaverWindow {
+    let size = monitor
+        .as_ref()
+        .map(|output| output.size())
+        .unwrap_or_else(|| winit::dpi::PhysicalSize::new(W as u32, H as u32));
+
+    let mut window_builder = WindowBuilder::new()
+        .with_title("SOLVERFORGE // SCREENSAVER_03")
+        .with_inner_size(LogicalSize::new(size.width as f64, size.height as f64))
+        .with_resizable(false)
+        .with_decorations(false)
+        .with_fullscreen(Some(Fullscreen::Borderless(monitor)));
+
+    #[cfg(target_os = "linux")]
+    {
+        window_builder =
+            window_builder.with_name("solverforge-screensaver", "solverforge-screensaver");
     }
+
+    let window = Arc::new(
+        window_builder
+            .build(event_loop)
+            .expect("failed to create screensaver window"),
+    );
+    window.set_cursor_visible(false);
+
+    let surface = SurfaceTexture::new(size.width.max(1), size.height.max(1), window.clone());
+    let pixels = Pixels::new(W as u32, H as u32, surface).expect("failed to create framebuffer");
+
+    SaverWindow { window, pixels }
 }
 
 fn parse_render_duration(args: &[String]) -> Option<f64> {
@@ -510,4 +647,14 @@ fn ring(surface: &mut Surface, cx: i32, cy: i32, radius: i32, color: u32) {
 
 fn lcg(x: u32) -> u32 {
     x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223)
+}
+
+fn write_rgba_frame(buffer: &[u32], frame: &mut [u8]) {
+    for (i, &px) in buffer.iter().enumerate() {
+        let idx = i * 4;
+        frame[idx] = ((px >> 16) & 0xFF) as u8;
+        frame[idx + 1] = ((px >> 8) & 0xFF) as u8;
+        frame[idx + 2] = (px & 0xFF) as u8;
+        frame[idx + 3] = 0xFF;
+    }
 }

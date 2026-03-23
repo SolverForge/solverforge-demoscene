@@ -10,9 +10,9 @@
 
 GREETINGS FROM THE RUST DEMOCENE!
 
-This is a silent SolverForge screensaver for Sway!
+This is a silent SolverForge screensaver for Sway.
 
-Pure Rust. Software-rendered. No GPU. Just phosphor glow, glyph rain, floating diagnostics and the SolverForge `ouroboros` burning through a CRT.
+Pure Rust rendering, presented as a real Wayland client. The art is still software-generated, but the windowing path is now native to Sway: fullscreen surfaces, stable app id, and direct `swayidle` launch.
 
 ---
 
@@ -30,7 +30,8 @@ The mood is deliberate: black phosphor, emerald telemetry, drifting watch panels
 - **CRT treatment.** Scanlines, vignette falloff, glow passes, and glitch-row displacement sell the tube.
 - **Silent by design.** No soundtrack, no assets, no runtime media pipeline.
 - **Headless renderer.** `--render` streams raw BGR24 frames to stdout for ffmpeg capture.
-- **Sway-first windowing.** Borderless, titleless, topmost-ish presentation aimed at `sway` idle launch.
+- **Wayland-native presentation.** Fullscreen Sway client with app id `solverforge-screensaver`.
+- **Multi-output aware.** Creates one fullscreen window per active output so the whole desktop is covered.
 
 ## Running
 
@@ -62,7 +63,7 @@ Or manually:
 ```bash
 cargo run --release -- --render 30 | \
   ffmpeg -f rawvideo -pixel_format bgr24 \
-    -video_size 1280x720 -framerate 60 -i - \
+    -video_size 1920x1080 -framerate 60 -i - \
     -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p \
     screensaver_03.mp4
 ```
@@ -125,7 +126,8 @@ Practical notes:
 
 - Launch the binary manually once before wiring it into `swayidle`, so you know the path and Wayland session are correct.
 - `ESC` exits the saver. `SPACE` toggles the overlay text.
-- This is just a Wayland client launched on idle; if you need tighter locker integration, compositor-specific rules, or multi-output behavior, that is the next layer of work.
+- The intended Sway rule should match `app_id="solverforge-screensaver"`, not the title.
+- SolverForge Linux should launch it directly from `swayidle`, not via `swaymsg exec` and not through a terminal wrapper.
 - If you want support beyond `sway`, open an issue or send a PR.
 
 ## Architecture
@@ -145,7 +147,7 @@ src/
 ### Design Principles
 
 - **Zero runtime assets.** The font is embedded, the logo is procedural, and every frame is synthesized from code.
-- **Pure software rendering.** Every pixel is written into a `Vec<u32>` framebuffer. No shaders, no wgpu, no GPU pipeline.
+- **Software scene generation.** Every frame is synthesized into a `Vec<u32>` framebuffer and then copied into the presentation surface.
 - **Deliberate restraint.** This entry is silent on purpose. The atmosphere comes from motion, pacing, contrast, and phosphor treatment.
 - **Series continuity.** The same SolverForge visual vocabulary carries through: emerald diagnostics, hard-edged geometry, and terminal menace.
 - **Sway-only support.** Other environments should be treated as unsupported until someone adds and verifies them.
@@ -154,7 +156,8 @@ src/
 
 | Crate | Version | Purpose |
 |---|---|---|
-| [minifb](https://crates.io/crates/minifb) | 0.28 | Pixel framebuffer windowing |
+| [pixels](https://crates.io/crates/pixels) | 0.15 | Pixel framebuffer presentation |
+| [winit](https://crates.io/crates/winit) | 0.29 | Wayland window/event loop integration |
 
 ## Makefile Targets
 
@@ -172,7 +175,7 @@ make loc           Count lines of Rust source
 
 ## Resolution
 
-Internal render resolution is 1280x720 at 60fps. The minifb window scales to fit. Headless render output stays at native resolution.
+Internal render resolution is `1920x1080` at 60fps. Each Wayland window scales that framebuffer onto its output surface. Headless render output uses the same internal resolution.
 
 ## License
 
