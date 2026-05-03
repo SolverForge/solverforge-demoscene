@@ -1,0 +1,14 @@
+[package]
+name = "route-splice-04-demo"
+version = "0.1.0"
+edition = "2021"
+description = "SolverForge demoscene intro for list-variable route splicing"
+
+[[bin]]
+name = "route-splice-04-demo"
+path = "src/main.rs"
+
+[dependencies]
+cpal = "0.17.3"
+fundsp = "0.23.0"
+minifb = "0.28.0"
