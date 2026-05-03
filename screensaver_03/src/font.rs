@@ -205,14 +205,7 @@ pub const FONT_8X8: [[u8; 8]; 96] = [
 
 /// Draw a single character at pixel position (x, y) with scale and color.
 /// scale=1 -> 8x8px, scale=2 -> 16x16px, etc.
-pub fn draw_char(
-    s: &mut Surface,
-    ch: char,
-    x: i32,
-    y: i32,
-    scale: i32,
-    color: u32,
-) {
+pub fn draw_char(s: &mut Surface, ch: char, x: i32, y: i32, scale: i32, color: u32) {
     let idx = ch as usize;
     if !(32..=127).contains(&idx) {
         return;
@@ -237,14 +230,7 @@ pub fn draw_char(
 }
 
 /// Draw a string. Returns x position after the last character.
-pub fn draw_text(
-    s: &mut Surface,
-    text: &str,
-    x: i32,
-    y: i32,
-    scale: i32,
-    color: u32,
-) -> i32 {
+pub fn draw_text(s: &mut Surface, text: &str, x: i32, y: i32, scale: i32, color: u32) -> i32 {
     let mut cx = x;
     for ch in text.chars() {
         draw_char(s, ch, cx, y, scale, color);
@@ -254,14 +240,7 @@ pub fn draw_text(
 }
 
 /// Draw text centered horizontally
-pub fn draw_text_centered(
-    s: &mut Surface,
-    text: &str,
-    cx: i32,
-    y: i32,
-    scale: i32,
-    color: u32,
-) {
+pub fn draw_text_centered(s: &mut Surface, text: &str, cx: i32, y: i32, scale: i32, color: u32) {
     let char_width = 8 * scale + scale;
     let text_width = text.len() as i32 * char_width;
     let x = cx - text_width / 2;
@@ -306,4 +285,3 @@ pub fn draw_text_centered_glow(
     let x = cx - text_width / 2;
     draw_text_glow(s, text, x, y, scale, color, glow_color);
 }
-

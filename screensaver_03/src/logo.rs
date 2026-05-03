@@ -21,7 +21,9 @@
 //   v6:( 35, 95)→(-0.867,-0.067)  v7:( 50, 50)→(-0.667,-0.667)
 // ═══════════════════════════════════════════════════════════════
 
-use crate::palette::{self, Surface, EMERALD_300, EMERALD_400, EMERALD_500, EMERALD_800, GREEN_500};
+use crate::palette::{
+    self, Surface, EMERALD_300, EMERALD_400, EMERALD_500, EMERALD_800, GREEN_500,
+};
 
 // ── Outer 8-point polygon vertices, normalized (÷75 from SVG) ──
 const VERTS: [(f32, f32); 8] = [
@@ -135,7 +137,8 @@ pub fn draw_logo(
         let hx = cx + VERTS[0].0 * radius;
         let hy = cy + VERTS[0].1 * radius;
 
-        let lp = |lx: f32, ly: f32| -> (i32, i32) { ((hx + lx * sc) as i32, (hy + ly * sc) as i32) };
+        let lp =
+            |lx: f32, ly: f32| -> (i32, i32) { ((hx + lx * sc) as i32, (hy + ly * sc) as i32) };
         let p0 = lp(0.0, 0.0);
         let p1 = lp(-10.0, -12.0);
         let p2 = lp(-5.0, -6.0);
@@ -215,42 +218,10 @@ pub fn draw_logo(
         let cw = (2.5 * sc).max(1.0);
         let cc = palette::dim(0x111111, brightness * center_p);
         if arm_out > arm_in {
-            thick_line(
-                s,
-                cx - arm_out as f32,
-                cy,
-                cx - arm_in as f32,
-                cy,
-                cw,
-                cc,
-            );
-            thick_line(
-                s,
-                cx + arm_in as f32,
-                cy,
-                cx + arm_out as f32,
-                cy,
-                cw,
-                cc,
-            );
-            thick_line(
-                s,
-                cx,
-                cy - arm_out as f32,
-                cx,
-                cy - arm_in as f32,
-                cw,
-                cc,
-            );
-            thick_line(
-                s,
-                cx,
-                cy + arm_in as f32,
-                cx,
-                cy + arm_out as f32,
-                cw,
-                cc,
-            );
+            thick_line(s, cx - arm_out as f32, cy, cx - arm_in as f32, cy, cw, cc);
+            thick_line(s, cx + arm_in as f32, cy, cx + arm_out as f32, cy, cw, cc);
+            thick_line(s, cx, cy - arm_out as f32, cx, cy - arm_in as f32, cw, cc);
+            thick_line(s, cx, cy + arm_in as f32, cx, cy + arm_out as f32, cw, cc);
         }
     }
 
@@ -329,15 +300,7 @@ pub fn draw_logo(
 // ── Primitive drawing helpers ─────────────────────────────────
 
 /// Thick line: offset parallel 1px lines along the perpendicular.
-fn thick_line(
-    s: &mut Surface,
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-    thickness: f32,
-    col: u32,
-) {
+fn thick_line(s: &mut Surface, x0: f32, y0: f32, x1: f32, y1: f32, thickness: f32, col: u32) {
     let dx = x1 - x0;
     let dy = y1 - y0;
     let len = (dx * dx + dy * dy).sqrt().max(0.001);
@@ -361,13 +324,7 @@ fn thick_line(
 }
 
 /// Filled triangle by scanline rasterization.
-fn fill_tri(
-    s: &mut Surface,
-    a: (i32, i32),
-    b: (i32, i32),
-    c: (i32, i32),
-    col: u32,
-) {
+fn fill_tri(s: &mut Surface, a: (i32, i32), b: (i32, i32), c: (i32, i32), col: u32) {
     let mut pts = [a, b, c];
     pts.sort_by_key(|p| p.1);
     let (x0, y0) = (pts[0].0, pts[0].1);
@@ -414,14 +371,7 @@ fn fill_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, col: u32) {
 }
 
 /// Circle ring (outline) with pixel thickness.
-fn ring_circle(
-    s: &mut Surface,
-    cx: i32,
-    cy: i32,
-    r: i32,
-    thickness: i32,
-    col: u32,
-) {
+fn ring_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, thickness: i32, col: u32) {
     let ro = r;
     let ri = (r - thickness).max(0);
     for dy in -ro..=ro {
