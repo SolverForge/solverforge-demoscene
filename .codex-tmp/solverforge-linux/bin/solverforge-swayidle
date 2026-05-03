@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+
+screensaver_timeout="${SOLVERFORGE_SCREENSAVER_TIMEOUT:-300}"
+lock_timeout="${SOLVERFORGE_LOCK_TIMEOUT:-360}"
+lock_config="${SWAYLOCK_CONFIG:-/etc/swaylock/openSUSEway.conf}"
+
+screensaver_cmd="solverforge-screensaver"
+resume_cmd="pkill -x solverforge-screensaver || true"
+lock_cmd="pkill -x solverforge-screensaver || true; swaylock --config \"${lock_config}\""
+
+exec swayidle -w \
+  timeout "${screensaver_timeout}" "${screensaver_cmd}" \
+  timeout "${lock_timeout}" "${lock_cmd}" \
+  resume "${resume_cmd}" \
+  before-sleep "${lock_cmd}"

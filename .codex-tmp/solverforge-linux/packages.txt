@@ -1,0 +1,30 @@
+# SolverForge Linux — required packages
+
+# Core desktop
+sway
+wofi
+kitty
+waybar
+swaylock
+swayidle
+wtype
+grim
+slurp
+wl-clipboard
+libnotify-tools
+
+# CLI tools
+fzf
+jq
+git
+curl
+bat
+eza
+git-delta
+
+# Theming
+qt5ct
+qt6ct
+
+# Fonts (Nerd Fonts — symbols-only available via zypper, FiraCode Nerd Font is manual)
+symbols-only-nerd-fonts

@@ -1,0 +1,20 @@
+#!/bin/bash
+set -euo pipefail
+
+resolved_bin=""
+
+if [[ -n "${SOLVERFORGE_SCREENSAVER_BIN:-}" && -x "${SOLVERFORGE_SCREENSAVER_BIN}" ]]; then
+  resolved_bin="${SOLVERFORGE_SCREENSAVER_BIN}"
+elif [[ -x "${HOME}/.cargo/bin/solverforge-screensaver" ]]; then
+  resolved_bin="${HOME}/.cargo/bin/solverforge-screensaver"
+elif [[ -x "/srv/lab/dev/solverforge/solverforge-demoscene/screensaver_03/target/release/solverforge-screensaver" ]]; then
+  resolved_bin="/srv/lab/dev/solverforge/solverforge-demoscene/screensaver_03/target/release/solverforge-screensaver"
+fi
+
+if [[ -z "${resolved_bin}" ]]; then
+  notify-send "SolverForge screensaver unavailable" \
+    "Install or build screensaver_03 so SolverForge can launch the idle saver."
+  exit 1
+fi
+
+exec "${resolved_bin}" "$@"
