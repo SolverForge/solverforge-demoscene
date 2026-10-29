@@ -1,0 +1,20 @@
+[package]
+name = "planner123-06-demo"
+version = "0.1.0"
+edition = "2021"
+description = "SolverForge demoscene: PLANNER123_06 -- the demo runs inside Planner123, in textmode"
+
+[[bin]]
+name = "planner123-06-demo"
+path = "src/main.rs"
+
+[dependencies]
+# The same TUI crate Planner123 is built on; its widgets draw into a Buffer
+# that the demo rasterises itself (no terminal backend).
+ratatui = { version = "0.29", default-features = false }
+
+# Pixel framebuffer window
+minifb = "0.28"
+
+# Audio output (the track itself is synthesized by hand in src/audio)
+cpal = "0.17"
