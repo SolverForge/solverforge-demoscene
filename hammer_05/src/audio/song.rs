@@ -364,6 +364,17 @@ impl Reverb {
     }
 }
 
+/// Keep an oscillator phase in [0, 2). Free-running f32 phases lose their
+/// fractional precision as they grow, which plays every note off pitch;
+/// 2 rather than 1 so `phase * 0.5` sub-octaves stay continuous.
+fn wrap(phase: f32) -> f32 {
+    if phase >= 2.0 {
+        phase - 2.0
+    } else {
+        phase
+    }
+}
+
 fn saw(phase: f32) -> f32 {
     2.0 * (phase - phase.floor()) - 1.0
 }
@@ -610,7 +621,7 @@ pub fn render() -> Vec<[f32; 2]> {
         for (v, note) in PAD_VOICINGS[pad_chord].iter().enumerate() {
             let f = hz(*note);
             for (side, det) in [0.996f32, 1.004].iter().enumerate() {
-                pad_phase[v][side] += f * det / sr;
+                pad_phase[v][side] = wrap(pad_phase[v][side] + f * det / sr);
                 pad[side] += saw(pad_phase[v][side]) * 0.12 + sine(pad_phase[v][side]) * 0.05;
             }
         }
@@ -634,7 +645,7 @@ pub fn render() -> Vec<[f32; 2]> {
         if arp_gain > 0.0 {
             let order = [1usize, 2, 3, 4, 3, 2, 1, 2];
             let f = hz(PAD_VOICINGS[ci][order[step % 8]] + 12.0);
-            arp_phase += f / sr;
+            arp_phase = wrap(arp_phase + f / sr);
             arp = pulse(arp_phase, 0.3) * (-step_age * 22.0).exp() * arp_gain * 0.16;
         }
 
@@ -645,7 +656,7 @@ pub fn render() -> Vec<[f32; 2]> {
             // Offbeat octave bass.
             let off = matches!(step, 2 | 6 | 10 | 14);
             let f = if off { root * 2.0 } else { root };
-            bass_phase += f / sr;
+            bass_phase = wrap(bass_phase + f / sr);
             let gate = if off || step.is_multiple_of(4) {
                 (-step_age * 9.0).exp()
             } else {
@@ -655,7 +666,7 @@ pub fn render() -> Vec<[f32; 2]> {
         } else if (24.0..36.0).contains(&bar) {
             // The Planner123 16th square bass, driven.
             let accent = if step.is_multiple_of(2) { 1.0 } else { 0.6 };
-            bass_phase += root * 2.0 / sr;
+            bass_phase = wrap(bass_phase + root * 2.0 / sr);
             let slide = (1.0 - step_age / STEP * 0.7).max(0.1);
             bass = (pulse(bass_phase, 0.5) * 0.55 + sine(bass_phase * 0.5) * 0.4)
                 * accent
