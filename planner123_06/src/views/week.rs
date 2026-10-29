@@ -1,7 +1,9 @@
-// Week view, laid out like Planner123's week_view.rs: a day header row (today
+// Week view, laid out like Planner123's time grid: a day header row (today
 // in a mint pill), hour labels down the left, faint hour rules, events as a
 // calendar-coloured ▌ rail with the title and start time, and the bold mint
-// "now" beam. Two text rows per hour from 08:00.
+// "now" beam. Two text rows per hour from 08:00, so a row is 30 minutes: an
+// event covers the rows its interval touches and at least one, and a
+// half-hour event is its title row alone, as in the app.
 use ratatui::buffer::Buffer;
 use ratatui::style::Style;
 
@@ -96,7 +98,7 @@ pub enum Kind {
 pub fn event(buf: &mut Buffer, e: &Event, kind: Kind) {
     let x = col_of(e.day);
     let y0 = row_of(e.start);
-    let rows = ((e.hours * 2.0).round() as u16).max(2);
+    let rows = ((e.hours * 2.0).ceil() as u16).max(1);
     let base = CALENDARS[e.calendar].color;
     let (rail, glyph, glow) = match kind {
         Kind::Solid => (base, '▌', 0.0),
@@ -118,5 +120,7 @@ pub fn event(buf: &mut Buffer, e: &Event, kind: Kind) {
         title
     };
     text(buf, x + 1, y0, &title, fg(FG));
-    text(buf, x + 1, y0 + 1, &hhmm(e.start), fg(DIM));
+    if rows >= 2 {
+        text(buf, x + 1, y0 + 1, &hhmm(e.start), fg(DIM));
+    }
 }
