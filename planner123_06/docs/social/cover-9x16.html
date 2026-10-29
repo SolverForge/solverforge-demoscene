@@ -1,0 +1,174 @@
+<!doctype html>
+<!-- PLANNER123_06 vertical cover (1080x1920). The demo's own language: a
+     Planner123 TUI drawn as character cells -- header, a portrait week with
+     copper bars behind it, tasks flying from the inbox into their slots with
+     trails and ripples, the status bar with `o` just pressed, and a strip of
+     the month plasma. Deterministic; render headless at 1080x1920. -->
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#0B0C16}
+canvas{display:block}
+</style></head><body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+const W=1080,H=1920,CW=12,CH=24,COLS=90,ROWS=80;
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const hex=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+const BG=hex('#0B0C16'),FG=hex('#DDF7FF'),ACC=hex('#82FB9C'),GREEN=hex('#50F872'),TEAL=hex('#50F7D4'),
+      BLUE=hex('#829DD4'),CYAN=hex('#7CF8F7'),DIM=hex('#6A6E95'),WHITE=hex('#EFFFF4');
+const mix=(a,b,t)=>{t=Math.max(0,Math.min(1,t));return a.map((v,i)=>v+(b[i]-v)*t);};
+const ramp=(s,t)=>{t=Math.max(0,Math.min(1,t))*(s.length-1);const i=Math.min(s.length-2,Math.floor(t));return mix(s[i],s[i+1],t-i);};
+const css=c=>`rgb(${c.map(Math.round).join(',')})`;
+function hash(x){x=(x^61)^(x>>>16);x=Math.imul(x,9);x^=x>>>4;x=Math.imul(x,0x27d4eb2d);x^=x>>>15;return (x>>>0)/4294967296;}
+const h2=(a,b)=>hash(Math.imul(a,73856093)^Math.imul(b,19349663)^0x5bd1e995);
+
+// ---- the cell grid ----
+const cells=[];for(let i=0;i<COLS*ROWS;i++)cells.push({ch:' ',fg:FG,bg:BG,bold:false});
+const at=(x,y)=>(x>=0&&y>=0&&x<COLS&&y<ROWS)?cells[y*COLS+x]:null;
+function put(x,y,ch,fg,bg){const c=at(x,y);if(!c)return;c.ch=ch;if(fg)c.fg=fg;if(bg)c.bg=bg;}
+function bgc(x,y,bg){const c=at(x,y);if(c)c.bg=bg;}
+function text(x,y,s,fg,bg,bold){[...s].forEach((ch,i)=>{const c=at(x+i,y);if(!c)return;c.ch=ch;c.fg=fg;if(bg)c.bg=bg;c.bold=!!bold;});}
+function box(x0,y0,w,h,col,title,tcol){
+  for(let x=x0;x<x0+w;x++){put(x,y0,'─',col);put(x,y0+h-1,'─',col);}
+  for(let y=y0;y<y0+h;y++){put(x0,y,'│',col);put(x0+w-1,y,'│',col);}
+  put(x0,y0,'┌',col);put(x0+w-1,y0,'┐',col);put(x0,y0+h-1,'└',col);put(x0+w-1,y0+h-1,'┘',col);
+  if(title)text(x0+2,y0,` ${title} `,tcol||col,null,true);
+}
+
+// Header row, as the app draws it.
+for(let x=0;x<COLS;x++)bgc(x,0,ACC);
+text(1,0,' ▦  Planner123     Sep 14 — Sep 20, 2026',BG,ACC);
+
+// ---- the banner ----
+const BANNER=[
+"██████╗ ██╗      █████╗ ███╗   ██╗███╗   ██╗███████╗██████╗ ",
+"██╔══██╗██║     ██╔══██╗████╗  ██║████╗  ██║██╔════╝██╔══██╗",
+"██████╔╝██║     ███████║██╔██╗ ██║██╔██╗ ██║█████╗  ██████╔╝",
+"██╔═══╝ ██║     ██╔══██║██║╚██╗██║██║╚██╗██║██╔══╝  ██╔══██╗",
+"██║     ███████╗██║  ██║██║ ╚████║██║ ╚████║███████╗██║  ██║",
+"╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝"];
+const NUM=[
+" ██╗██████╗ ██████╗ ",
+"███║╚════██╗╚════██╗",
+"╚██║ █████╔╝ █████╔╝",
+" ██║██╔═══╝  ╚═══██╗",
+" ██║███████╗██████╔╝",
+" ╚═╝╚══════╝╚═════╝ "];
+
+// ---- the week (portrait: Tue, Wed, Thu) ----
+const WX=2,WY=25,WW=86,WH=34;          // focused block
+const LABEL=7,DAYW=26,GX=WX+1+LABEL,GY=WY+3,HOUR0=8;
+const DAYS=['Tue 15','Wed 16','Thu 17'];
+const rowOf=h=>GY+Math.round((h-HOUR0)*3);   // three rows per hour on the cover
+const colOf=d=>GX+d*DAYW;
+// Copper bars behind the hour grid (backgrounds only).
+for(let y=WY+1;y<WY+WH-1;y++){
+  let v=0;for(let k=0;k<3;k++){const c=WY+4+[8,19,31][k];v=Math.max(v,1-Math.abs(y-c)/3.4);}
+  if(v>0){const col=mix(BG,ramp([BG,hex('#10324A'),TEAL,ACC,WHITE],v),.26);for(let x=WX+1;x<WX+WW-1;x++)bgc(x,y,col);}
+}
+box(WX,WY,WW,WH,ACC,'Week',ACC);
+DAYS.forEach((d,i)=>{const s=d.padStart(Math.floor((DAYW-2+d.length)/2)).padEnd(DAYW-2);
+  if(i===0)text(colOf(i)+1,WY+1,s,BG,ACC,true);else text(colOf(i)+1,WY+1,s,BLUE,null,true);});
+for(let h=HOUR0;h<=19;h++){const y=rowOf(h);if(y>=WY+WH-1)break;
+  text(WX+1,y,String(h).padStart(2,'0')+':00',DIM);
+  for(let x=GX;x<WX+WW-1;x++)if(at(x,y).ch===' ')put(x,y,'─',mix(BG,DIM,.28));}
+// Now line.
+const NY=rowOf(14.9);for(let x=WX+1;x<WX+WW-1;x++)put(x,NY,'━',ACC);text(WX+1,NY,'14:54',ACC,null,true);
+function event(day,start,hours,title,col,lit){
+  const x=colOf(day),y0=rowOf(start),n=Math.max(2,Math.round(hours*3));
+  for(let r=0;r<n;r++){put(x,y0+r,'▌',lit?mix(col,WHITE,.4*lit):col);
+    if(lit)for(let c=1;c<DAYW-1;c++)bgc(x+c,y0+r,mix(BG,ACC,.3*lit));}
+  text(x+1,y0,title.length>DAYW-2?title.slice(0,DAYW-3)+'…':title,FG);
+  const hh=Math.floor(start),mm=Math.round((start-hh)*60);
+  text(x+1,y0+1,String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0'),DIM);
+}
+// Busy events (Tue, Wed, Thu of the README week).
+[[0,9,.5,'Standup',TEAL],[0,11,1,'Design review',TEAL],[0,12.5,1,'Lunch with Sam',GREEN],[0,15,.5,'1:1 with Ana',TEAL],
+ [1,14,1.5,'Conference dry run',TEAL],[2,9.5,.5,'Dentist',GREEN]].forEach(e=>event(...e,0));
+// Landed: Draft Q4 roadmap (Wed 09:00), lit, with a ripple.
+event(1,9,2,'Draft Q4 roadmap',TEAL,1);
+const rip=(cx,cy,r,a)=>{for(let y=WY+1;y<WY+WH-1;y++)for(let x=WX+1;x<WX+WW-1;x++){
+  const d=Math.hypot((x-cx)*CW,(y-cy)*CH),ring=Math.max(0,1-Math.abs(d-r)/30);
+  if(ring>0){const c=at(x,y);c.bg=mix(c.bg,ACC,ring*a);}}};
+rip(colOf(1)+12,rowOf(9.5),150,.28);
+// Flying: Prepare conference demo -> Thu 10:00, and Book conference travel -> Tue 14:00.
+function flight(sx,sy,tx,ty,p,label,lift){
+  const pos=q=>{const e=q*q*(3-2*q);return [sx+(tx-sx)*e,sy+(ty-sy)*e-Math.sin(e*Math.PI)*lift];};
+  const sh=['█','▓','▒','░','·'];
+  for(let k=1;k<22;k++){const [x,y]=pos(Math.max(0,p-k*.022));const c=at(Math.round(x),Math.round(y));
+    if(c&&(c.ch===' '||c.ch==='─'))put(Math.round(x),Math.round(y),sh[Math.min(4,k>>2)],mix(BG,ACC,1-k/22));}
+  const [x,y]=pos(p);text(Math.round(x),Math.round(y),' '+label+' ',BG,ACC,true);
+}
+flight(4,WY+WH+2,colOf(2)+1,rowOf(10),.72,'Prepare conference demo',12);
+flight(4,WY+WH+3,colOf(0)+1,rowOf(14),.45,'Book conference travel',8);
+// The rest of the inbox, waiting: a small queue box below the week.
+box(WX,WY+WH+1,WW,6,DIM,'Planner Inbox',DIM);
+text(WX+2,WY+WH+2,'  Review solver benchmarks  90m  Normal  Medium',FG);
+text(WX+2,WY+WH+3,'  Write release notes  45m  Low  Low',FG);
+text(WX+2,WY+WH+5,'Planner proposal is ready for review; press A to apply.',ACC);
+
+// Status bar chips, `o` just pressed.
+const SBY=WY+WH+7;
+let sx=WX;
+[['j/k','inspect task'],['n','new task'],['o','optimize'],['A','apply'],['?','help']].forEach(([k,l])=>{
+  const lit=k==='o';text(sx,SBY,` ${k} `,BG,lit?ACC:BLUE,true);sx+=k.length+2;text(sx,SBY,` ${l}  `,DIM);sx+=l.length+3;});
+
+// Month plasma strip at the bottom: one week of day cells.
+const MY=SBY+2,MH=7;
+for(let d=0;d<7;d++){const x0=WX+d*12;
+  for(let y=1;y<MH;y++)for(let x=0;x<11;x++){
+    const px=x0+x,py=(MY+y)*1.9;
+    const v=((Math.sin(px*.11+1.7)+Math.sin(py*.11-2.2)+Math.sin((px+py)*.07+1.2)+Math.sin(Math.hypot(px,py*1.2)*.09-1.7))*.125+.5);
+    put(px,MY+y,' ░▒▓█'[Math.min(4,Math.floor(v*4.99))],mix(BG,ramp([BG,hex('#162A55'),BLUE,TEAL,ACC,WHITE],v),.7));}
+  const n=14+d;text(x0,MY,String(n).padStart(2),n===15?BG:FG,n===15?ACC:BG,n===15);
+  for(let x=0;x<12;x++)if(at(x0+x,MY+MH)&&at(x0+x,MY+MH).ch===' ')put(x0+x,MY+MH,'─',mix(BG,DIM,.3));
+}
+
+// ---- draw ----
+const ARMS={'─':[0,0,1,1],'━':[0,0,1,1],'│':[1,1,0,0],'┌':[0,1,0,1],'┐':[0,1,1,0],'└':[1,0,0,1],'┘':[1,0,1,0],
+ '═':[0,0,2,2],'║':[2,2,0,0],'╔':[0,2,0,2],'╗':[0,2,2,0],'╚':[2,0,0,2],'╝':[2,0,2,0]};
+function glyph(ch,x,y,w,h){
+  if(ch==='█'){ctx.fillRect(x,y,w+.5,h+.5);return;}
+  if(ch==='▌'){ctx.fillRect(x,y,w/2,h+.5);return;}
+  if('░▒▓'.includes(ch)){const k={'░':.25,'▒':.5,'▓':.75}[ch];ctx.globalAlpha=k;ctx.fillRect(x,y,w+.5,h+.5);ctx.globalAlpha=1;return;}
+  const a=ARMS[ch];
+  if(a){const t=Math.max(1.5,w/7),cx=x+w/2,cy=y+h/2,off=Math.round(w/5);
+    const vo=Math.max(a[0],a[1])===2?[-off,off]:[0],ho=Math.max(a[2],a[3])===2?[-off,off]:[0];
+    for(const o of vo){const y0=a[0]?y:cy+ho[0]-t/2,y1=a[1]?y+h:cy+ho[ho.length-1]+t/2;ctx.fillRect(cx+o-t/2,y0,t,y1-y0);}
+    for(const o of ho){const x0=a[2]?x:cx+vo[0]-t/2,x1=a[3]?x+w:cx+vo[vo.length-1]+t/2;ctx.fillRect(x0,cy+o-t/2,x1-x0,t);}
+    return;}
+  ctx.fillText(ch,x,y+h*.12);
+}
+function compose(){
+  ctx.textBaseline='top';
+  for(let i=0;i<cells.length;i++){const c=cells[i],x=(i%COLS)*CW,y=Math.floor(i/COLS)*CH;
+    ctx.fillStyle=css(c.bg);ctx.fillRect(x,y,CW+.5,CH+.5);}
+  for(let i=0;i<cells.length;i++){const c=cells[i];if(c.ch===' ')continue;
+    const x=(i%COLS)*CW,y=Math.floor(i/COLS)*CH;
+    ctx.font=`${c.bold?'bold ':''}20px "DejaVu Sans Mono"`;ctx.fillStyle=css(c.bold?mix(c.fg,WHITE,.18):c.fg);glyph(c.ch,x,y,CW,CH);}
+  // Banner: large block cells, each column on a sine, the mint-cyan ramp.
+  const bw=BANNER[0].length+NUM[0].length,bc=12.6,br=27,bx=(W-bw*bc)/2,by=250;
+  const plate=ctx.createLinearGradient(0,by-60,0,by+br*6+150);
+  plate.addColorStop(0,'rgba(11,12,22,0)');plate.addColorStop(.2,'rgba(11,12,22,.8)');plate.addColorStop(.8,'rgba(11,12,22,.8)');plate.addColorStop(1,'rgba(11,12,22,0)');
+  [...Array(6)].forEach((_,r)=>{const line=BANNER[r]+NUM[r];[...line].forEach((ch,i)=>{if(ch===' ')return;
+    const wob=Math.sin(i*.16+1.1)*10;ctx.fillStyle=css(ramp([ACC,CYAN,TEAL,ACC],(i/bw+.15)%1));
+    glyph(ch,bx+i*bc,by+r*br+wob,bc,br);});});
+  ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.font='bold 40px "DejaVu Sans Mono"';ctx.fillStyle=css(ACC);ctx.fillText('_06',W/2+bw*bc/2-10,by+br*6+18);
+  ctx.font='28px "DejaVu Sans Mono"';ctx.fillStyle=css(FG);
+  ctx.fillText('T H E   D E M O   R U N S   I N S I D E',W/2,by+br*6+80);
+  ctx.fillText('P L A N N E R 1 2 3',W/2,by+br*6+120);
+  ctx.font='bold 24px "DejaVu Sans Mono"';ctx.fillStyle=css(DIM);
+  ctx.fillText('A TEXTMODE DEMO IN RUST + RATATUI  ·  SOLVERFORGE',W/2,1876);
+  ctx.textAlign='left';
+}
+// Stars in the empty sky above the week.
+for(let i=0;i<160;i++){const x=Math.floor(h2(i,3)*COLS),y=2+Math.floor(h2(i,5)*22),z=h2(i,7);if(!at(x,y))continue;
+  if(at(x,y).ch===' ')put(x,y,z>.85?'*':z>.6?'+':'.',mix(BG,i%5?FG:CYAN,.3+.6*z));}
+document.fonts.load('20px "DejaVu Sans Mono"').then(()=>{
+  compose();
+  const snap=document.createElement('canvas');snap.width=W;snap.height=H;const s=snap.getContext('2d');s.filter='blur(8px) brightness(0.8)';s.drawImage(cv,0,0);
+  ctx.globalCompositeOperation='lighter';ctx.globalAlpha=.5;ctx.drawImage(snap,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle='rgba(0,0,0,0.24)';for(let y=2;y<H;y+=3)ctx.fillRect(0,y,W,1);
+  const v=ctx.createRadialGradient(W/2,H/2,H*.28,W/2,H/2,H*.78);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,0.5)');ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
+  document.body.dataset.done='1';
+});
+</script></body></html>
