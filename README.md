@@ -30,6 +30,7 @@ Audiovisual demos in the tradition of the Amiga/PC demoscene -- built to showcas
 | [`serio_02/`](serio_02/) | [SERIO](https://crates.io/crates/solverforge-scoring) | 114s | Complete |
 | [`screensaver_03/`](screensaver_03/) | SolverForge Sway Screensaver | Endless / 30s render preset | Complete |
 | [`splice_04/`](splice_04/) | Route Splice 04 | 116s planned | In development |
+| [`hammer_05/`](hammer_05/) | SolverForge -- the Serio and the forge, textmode on glyphfx | 107s | Complete |
 
 Each demo is a standalone Rust crate. See the README inside each directory for details on scenes, architecture, controls, and rendering.
 

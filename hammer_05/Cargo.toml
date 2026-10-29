@@ -1,0 +1,20 @@
+[package]
+name = "hammer-05-demo"
+version = "0.1.0"
+edition = "2021"
+description = "SolverForge demoscene: HAMMER_05 -- the Serio and the forge, in textmode"
+
+[[bin]]
+name = "hammer-05-demo"
+path = "src/main.rs"
+
+[dependencies]
+# Pixel framebuffer window
+minifb = "0.28"
+
+# Audio output (the track itself is synthesized by hand in src/audio)
+cpal = "0.17"
+
+[build-dependencies]
+# Compiles the vendored glyphfx C17 engine
+cc = "1"
