@@ -73,6 +73,8 @@ function compose(){
   const bg=ctx.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#04060e');bg.addColorStop(.5,'#060812');bg.addColorStop(1,'#0c1020');
   ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
   stars(260,0,H,11);
+  // The orrery, scaled into the band Instagram's 3:4 grid crop keeps.
+  ctx.save();ctx.translate(540,915);ctx.scale(.8,.8);ctx.translate(-540,-880);
   // Orbits: faint dotted rings.
   P.forEach(p=>{const r=p[3]*SC;const n=Math.round(r*0.55);for(let i=0;i<n;i++){const a=i/n*Math.PI*2;ctx.fillStyle='rgba(52,211,153,0.4)';ctx.fillRect(CX+Math.cos(a)*r-1.5,CY+Math.sin(a)*r-1.5,3,3);}});
   // Sun.
@@ -104,23 +106,24 @@ function compose(){
   });
   // Moved-note callout on Luna.
   const [lx,ly]=pos[0];ctx.strokeStyle=rgba(RED,.9);ctx.lineWidth=3;ctx.beginPath();ctx.arc(lx,ly,30,0,7);ctx.stroke();
-  // Title block.
-  plate(70,380,.75);
-  title('SERIO','_02',110,22);
-  spaced('MUSICA UNIVERSALIS',336,34,'#e6eef7');
-  spaced('SEVEN PLANETS · 21 PAIRS',392,24,rgb(GOLD,.85));
+  ctx.restore();
+  // Title block, inside the grid crop.
+  plate(230,330,.75);
+  title('SERIO','_02',262,17);
+  spaced('MUSICA UNIVERSALIS',418,32,'#e6eef7');
+  spaced('SEVEN PLANETS · 21 PAIRS',468,24,rgb(GOLD,.85));
   // The panel, as in the demo.
-  plate(1370,400,.9);
+  plate(1290,400,.9);
   const x0=150, px=3, lh=30;
-  ptext('PAIRS: HIGH / LOW PITCH',x0,1400,px,rgb(E500));
+  ptext('PAIRS: HIGH / LOW PITCH',x0,1316,px,rgb(E500));
   const rows=[
     ['>MER/LUN 1.224   6:5 X3 OFF',1],['>VEN/LUN 1.456   3:2 X2 OFF',1],['>MAR/LUN 1.091   9:8 X1 OFF',1],
     [' VEN/MER 1.189   6:5 X3 OK',0],[' EAR/MER 1.498   3:2 X2 OK',0],
   ];
-  rows.forEach(([t,off],i)=>ptext(t,x0,1442+i*lh,px,off?rgb(RED):rgb(GOLD,.85)));
-  ptext('0 HARD',x0,1606,5,rgb(E400));ptext('-7095 SOFT',x0+290,1606,5,rgb(AMBER));
-  ptext('15 OF 21 PAIRS IN TUNE',x0,1662,px,rgb(CHROME,.8));
-  ptext('SERIO RE-CHECKS 6, NOT 21',x0,1696,px,rgb([60,160,255]));
+  rows.forEach(([t,off],i)=>ptext(t,x0,1356+i*lh,px,off?rgb(RED):rgb(GOLD,.85)));
+  ptext('0 HARD',x0,1514,5,rgb(E400));ptext('-7095 SOFT',x0+290,1514,5,rgb(AMBER));
+  ptext('15 OF 21 PAIRS IN TUNE',x0,1570,px,rgb(CHROME,.8));
+  ptext('SERIO RE-CHECKS 6, NOT 21',x0,1604,px,rgb([60,160,255]));
   footer('A PIXEL DEMO IN RUST + GLYPHFX');
 }
 run(compose);
