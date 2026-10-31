@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 use crate::palette;
+use crate::palette::Surface;
 
 pub struct Plasma {
     /// Precomputed sine LUT for speed
@@ -28,14 +29,8 @@ impl Plasma {
     }
 
     /// Render plasma with alpha-blend overlay on existing buffer
-    pub fn render_overlay(
-        &self,
-        buffer: &mut [u32],
-        width: usize,
-        height: usize,
-        time: f64,
-        alpha: f32,
-    ) {
+    pub fn render_overlay(&self, s: &mut Surface, time: f64, alpha: f32) {
+        let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
         let t = time as f32;
         let w = width as f32;
         let h = height as f32;

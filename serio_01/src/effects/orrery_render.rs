@@ -12,6 +12,7 @@
 use crate::font;
 use crate::orrery::harmony::harmonic_deviation;
 use crate::orrery::model::{Orrery, Planet, ORBITAL_RADII, PLANET_COUNT};
+use crate::palette::Surface;
 use crate::palette::{self, harmonic_color};
 
 /// Rendering options for the orrery
@@ -70,9 +71,9 @@ impl TrailBuffer {
     /// Fade trail buffer toward black (phosphor decay)
     pub fn decay(&mut self, amount: u32) {
         for px in self.buf.iter_mut() {
-            let r = ((*px >> 16) & 0xFF).saturating_sub(amount) as u32;
-            let g = ((*px >> 8) & 0xFF).saturating_sub(amount) as u32;
-            let b = (*px & 0xFF).saturating_sub(amount) as u32;
+            let r = ((*px >> 16) & 0xFF).saturating_sub(amount);
+            let g = ((*px >> 8) & 0xFF).saturating_sub(amount);
+            let b = (*px & 0xFF).saturating_sub(amount);
             *px = (r << 16) | (g << 8) | b;
         }
     }
@@ -103,29 +104,59 @@ impl TrailBuffer {
 
 /// Main orrery renderer
 pub fn render(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     orrery: &Orrery,
     trail: &mut TrailBuffer,
     opts: &OrreryRenderOpts,
     time: f64,
 ) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let cx = opts.cx;
     let cy = opts.cy;
     let fade = opts.fade;
 
     // ── Sun ──────────────────────────────────────────────────
-    render_sun(buffer, width, height, cx, cy, fade, time);
+    render_sun(
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
+        cx,
+        cy,
+        fade,
+        time,
+    );
 
     // ── Orbital slot rings ───────────────────────────────────
     if opts.show_rings {
-        render_rings(buffer, width, height, cx, cy, fade);
+        render_rings(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            cx,
+            cy,
+            fade,
+        );
     }
 
     // ── Harmonic arcs ────────────────────────────────────────
     if opts.show_arcs {
-        render_arcs(buffer, width, height, orrery, cx, cy, fade, opts, time);
+        render_arcs(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            orrery,
+            cx,
+            cy,
+            fade,
+            opts,
+            time,
+        );
     }
 
     // ── Planet trails (phosphor) ─────────────────────────────
@@ -140,7 +171,18 @@ pub fn render(
     // ── Planets ───────────────────────────────────────────────
     for planet in &orrery.planets {
         let (px, py) = orrery.planet_screen_pos(planet, cx, cy);
-        render_planet(buffer, width, height, planet, px, py, fade, time);
+        render_planet(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            planet,
+            px,
+            py,
+            fade,
+            time,
+        );
     }
 
     // ── Planet name labels ───────────────────────────────────
@@ -149,13 +191,25 @@ pub fn render(
         let name_x = px as i32 + planet.visual_radius as i32 + 4;
         let name_y = py as i32 - 4;
         let c = palette::dim(planet.color, fade * 0.7);
-        font::draw_text(buffer, width, height, planet.name, name_x, name_y, 1, c);
+        font::draw_text(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            planet.name,
+            name_x,
+            name_y,
+            1,
+            c,
+        );
     }
 }
 
 // ── Sun ───────────────────────────────────────────────────────
 
-fn render_sun(buf: &mut [u32], w: usize, h: usize, cx: f64, cy: f64, fade: f32, time: f64) {
+fn render_sun(s: &mut Surface, cx: f64, cy: f64, fade: f32, time: f64) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let pulse = ((time * 1.2).sin() as f32 * 0.1 + 0.9).abs();
     let core_r = (18.0 * pulse) as i32;
     let cxi = cx as i32;
@@ -203,18 +257,22 @@ fn render_sun(buf: &mut [u32], w: usize, h: usize, cx: f64, cy: f64, fade: f32, 
 
     // Core — filled white-gold circle
     fill_circle(
-        buf,
-        w,
-        h,
+        &mut Surface {
+            buf: &mut *buf,
+            w,
+            h,
+        },
         cxi,
         cyi,
         core_r,
         palette::dim(palette::rgb(255, 245, 160), fade),
     );
     fill_circle(
-        buf,
-        w,
-        h,
+        &mut Surface {
+            buf: &mut *buf,
+            w,
+            h,
+        },
         cxi,
         cyi,
         (core_r * 2 / 3).max(1),
@@ -224,12 +282,15 @@ fn render_sun(buf: &mut [u32], w: usize, h: usize, cx: f64, cy: f64, fade: f32, 
 
 // ── Orbital rings ─────────────────────────────────────────────
 
-fn render_rings(buf: &mut [u32], w: usize, h: usize, cx: f64, cy: f64, fade: f32) {
+fn render_rings(s: &mut Surface, cx: f64, cy: f64, fade: f32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     for &r in &ORBITAL_RADII {
         draw_dashed_circle(
-            buf,
-            w,
-            h,
+            &mut Surface {
+                buf: &mut *buf,
+                w,
+                h,
+            },
             cx as i32,
             cy as i32,
             r as i32,
@@ -238,7 +299,8 @@ fn render_rings(buf: &mut [u32], w: usize, h: usize, cx: f64, cy: f64, fade: f32
     }
 }
 
-fn draw_dashed_circle(buf: &mut [u32], w: usize, h: usize, cx: i32, cy: i32, r: i32, col: u32) {
+fn draw_dashed_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let steps = (r as f32 * std::f32::consts::TAU) as usize + 64;
     for step in 0..steps {
         // Dashed: skip every other 4th segment
@@ -258,9 +320,7 @@ fn draw_dashed_circle(buf: &mut [u32], w: usize, h: usize, cx: i32, cy: i32, r: 
 // ── Harmonic arcs ─────────────────────────────────────────────
 
 fn render_arcs(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
+    s: &mut Surface,
     orrery: &Orrery,
     cx: f64,
     cy: f64,
@@ -268,6 +328,7 @@ fn render_arcs(
     opts: &OrreryRenderOpts,
     _time: f64,
 ) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let planets = &orrery.planets;
 
     for i in 0..PLANET_COUNT {
@@ -311,7 +372,15 @@ fn render_arcs(
             let (bx, by) = orrery.planet_screen_pos(pb, cx, cy);
 
             // Draw quadratic bezier arc (control point = center with offset)
-            draw_bezier_arc(buf, w, h, ax, ay, bx, by, cx, cy, arc_color);
+            draw_bezier_arc(
+                &mut Surface {
+                    buf: &mut *buf,
+                    w,
+                    h,
+                },
+                [(ax, ay), (bx, by), (cx, cy)],
+                arc_color,
+            );
 
             // Label near-perfect intervals
             if opts.show_labels && dev < 0.03 && cons > 0.7 {
@@ -319,9 +388,11 @@ fn render_arcs(
                 let mid_y = ((ay + by) / 2.0) as i32;
                 let label_col = palette::dim(palette::GOLD, effective_fade * 0.9);
                 font::draw_text(
-                    buf,
-                    w,
-                    h,
+                    &mut Surface {
+                        buf: &mut *buf,
+                        w,
+                        h,
+                    },
                     interval.name,
                     mid_x - 20,
                     mid_y - 8,
@@ -331,9 +402,11 @@ fn render_arcs(
                 // Draw ratio label
                 let ratio_str = format!("{}:{}", interval.num, interval.den);
                 font::draw_text(
-                    buf,
-                    w,
-                    h,
+                    &mut Surface {
+                        buf: &mut *buf,
+                        w,
+                        h,
+                    },
                     &ratio_str,
                     mid_x - 8,
                     mid_y + 2,
@@ -347,15 +420,12 @@ fn render_arcs(
                 let glow_alpha = ((cons - 0.85) / 0.15) as f32 * effective_fade * 0.5;
                 let glow_col = palette::dim(palette::GOLD, glow_alpha);
                 draw_bezier_arc(
-                    buf,
-                    w,
-                    h,
-                    ax + 1.0,
-                    ay + 1.0,
-                    bx + 1.0,
-                    by + 1.0,
-                    cx,
-                    cy,
+                    &mut Surface {
+                        buf: &mut *buf,
+                        w,
+                        h,
+                    },
+                    [(ax + 1.0, ay + 1.0), (bx + 1.0, by + 1.0), (cx, cy)],
                     glow_col,
                 );
             }
@@ -366,18 +436,9 @@ fn render_arcs(
 /// Draw a quadratic Bezier arc from (ax,ay) to (bx,by).
 /// Control point is 40% of the way from the midpoint toward the center,
 /// creating a gentle inward curve (toward the sun).
-fn draw_bezier_arc(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
-    ax: f64,
-    ay: f64,
-    bx: f64,
-    by: f64,
-    cx: f64,
-    cy: f64,
-    color: u32,
-) {
+fn draw_bezier_arc(s: &mut Surface, pts: [(f64, f64); 3], color: u32) {
+    let [(ax, ay), (bx, by), (cx, cy)] = pts;
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     if color == 0 {
         return;
     }
@@ -391,7 +452,7 @@ fn draw_bezier_arc(
     let steps = {
         let dx = bx - ax;
         let dy = by - ay;
-        ((dx * dx + dy * dy).sqrt() as usize / 3).max(32).min(256)
+        ((dx * dx + dy * dy).sqrt() as usize / 3).clamp(32, 256)
     };
 
     let mut last_x = ax as i32;
@@ -405,7 +466,18 @@ fn draw_bezier_arc(
         let px = px as i32;
         let py = py as i32;
 
-        bresenham(buf, w, h, last_x, last_y, px, py, color);
+        bresenham(
+            &mut Surface {
+                buf: &mut *buf,
+                w,
+                h,
+            },
+            last_x,
+            last_y,
+            px,
+            py,
+            color,
+        );
         last_x = px;
         last_y = py;
     }
@@ -413,16 +485,8 @@ fn draw_bezier_arc(
 
 // ── Planet rendering ──────────────────────────────────────────
 
-fn render_planet(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
-    planet: &Planet,
-    px: f64,
-    py: f64,
-    fade: f32,
-    time: f64,
-) {
+fn render_planet(s: &mut Surface, planet: &Planet, px: f64, py: f64, fade: f32, time: f64) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let _ = time;
     let xi = px as i32;
     let yi = py as i32;
@@ -451,14 +515,26 @@ fn render_planet(
     }
 
     // Planet body
-    fill_circle(buf, w, h, xi, yi, vr, palette::dim(planet.color, fade));
+    fill_circle(
+        &mut Surface {
+            buf: &mut *buf,
+            w,
+            h,
+        },
+        xi,
+        yi,
+        vr,
+        palette::dim(planet.color, fade),
+    );
 
     // Bright specular highlight
     let spec_r = (vr / 3).max(1);
     fill_circle(
-        buf,
-        w,
-        h,
+        &mut Surface {
+            buf: &mut *buf,
+            w,
+            h,
+        },
         xi - spec_r / 2,
         yi - spec_r / 2,
         spec_r,
@@ -468,7 +544,8 @@ fn render_planet(
 
 // ── Primitive drawing helpers ─────────────────────────────────
 
-pub fn fill_circle(buf: &mut [u32], w: usize, h: usize, cx: i32, cy: i32, r: i32, col: u32) {
+pub fn fill_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     for dy in -r..=r {
         for dx in -r..=r {
             if dx * dx + dy * dy <= r * r {
@@ -482,16 +559,8 @@ pub fn fill_circle(buf: &mut [u32], w: usize, h: usize, cx: i32, cy: i32, r: i32
     }
 }
 
-pub fn bresenham(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
-    x0: i32,
-    y0: i32,
-    x1: i32,
-    y1: i32,
-    col: u32,
-) {
+pub fn bresenham(s: &mut Surface, x0: i32, y0: i32, x1: i32, y1: i32, col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let dx = (x1 - x0).abs();
     let dy = -(y1 - y0).abs();
     let sx = if x0 < x1 { 1i32 } else { -1 };
@@ -520,16 +589,8 @@ pub fn bresenham(
 }
 
 /// Draw a circle ring (outline only)
-pub fn ring_circle(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
-    cx: i32,
-    cy: i32,
-    r: i32,
-    thickness: i32,
-    col: u32,
-) {
+pub fn ring_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, thickness: i32, col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let ro = r;
     let ri = (r - thickness).max(0);
     for dy in -ro..=ro {

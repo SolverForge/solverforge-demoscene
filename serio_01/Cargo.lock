@@ -192,6 +192,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
+name = "demofx"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "dispatch2"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -317,7 +324,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30f658de1fbeca3b70faf090e33d1ecf32b0efd1805bede4a8fd6ef562b7ab83"
 dependencies = [
  "dyn-clone",
- "glam 0.28.0",
+ "glam",
  "hashbrown 0.14.5",
  "libm",
 ]
@@ -441,12 +448,6 @@ checksum = "779ae4bf7e8421cf91c0b3b64e7e8b40b862fba4d393f59150042de7c4965a94"
 dependencies = [
  "libm",
 ]
-
-[[package]]
-name = "glam"
-version = "0.29.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8babf46d4c1c9d92deac9f7be466f76dfc4482b6452fc5024b5e8daf6ffeb3ee"
 
 [[package]]
 name = "hashbrown"
@@ -1188,8 +1189,8 @@ name = "serio-demo"
 version = "0.1.0"
 dependencies = [
  "cpal",
+ "demofx",
  "fundsp",
- "glam 0.29.3",
  "minifb",
  "solverforge-core",
  "solverforge-scoring",
@@ -1216,6 +1217,8 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "solverforge-core"
 version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5271e0c2175f2b121443376e61293055ad654509c9e5baa08d6e20efbc7e172d"
 dependencies = [
  "thiserror 2.0.18",
 ]
@@ -1223,6 +1226,8 @@ dependencies = [
 [[package]]
 name = "solverforge-scoring"
 version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30bd66bfa8ed30478edc16cf6c4a0ca82913e872d7fbaf32e673fbff9e65de07"
 dependencies = [
  "solverforge-core",
  "thiserror 2.0.18",

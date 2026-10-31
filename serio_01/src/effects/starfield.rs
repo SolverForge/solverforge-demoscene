@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 use crate::palette;
+use crate::palette::Surface;
 
 const NUM_STARS: usize = 800;
 const MAX_DEPTH: f32 = 512.0;
@@ -26,7 +27,7 @@ impl Starfield {
         // Simple deterministic init -- no rand dependency
         for i in 0..NUM_STARS {
             stars.push(Star {
-                x: Self::pseudo_rand(i * 3 + 0),
+                x: Self::pseudo_rand(i * 3),
                 y: Self::pseudo_rand(i * 3 + 1),
                 z: Self::pseudo_rand(i * 3 + 2) * MAX_DEPTH,
             });
@@ -62,7 +63,8 @@ impl Starfield {
         }
     }
 
-    pub fn render(&self, buffer: &mut [u32], width: usize, height: usize, fade: f32, time: f64) {
+    pub fn render(&self, s: &mut Surface, fade: f32, time: f64) {
+        let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
         let w2 = width as f32 / 2.0;
         let h2 = height as f32 / 2.0;
         let fov = w2 * 1.2; // field of view
@@ -96,8 +98,8 @@ impl Starfield {
             let color = palette::star_color(brightness);
 
             // Draw star pixel(s)
-            for dy in -(star_size as i32)..=star_size as i32 {
-                for dx in -(star_size as i32)..=star_size as i32 {
+            for dy in -star_size..=star_size {
+                for dx in -star_size..=star_size {
                     if dx * dx + dy * dy <= star_size * star_size {
                         let px = sx + dx;
                         let py = sy + dy;
@@ -134,18 +136,20 @@ impl Starfield {
         // Tunnel rings during heavy warp
         if self.warp_factor > 0.6 {
             let ring_alpha = (self.warp_factor - 0.6) * 2.5 * fade;
-            self.render_tunnel_rings(buffer, width, height, time, ring_alpha);
+            self.render_tunnel_rings(
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
+                time,
+                ring_alpha,
+            );
         }
     }
 
-    fn render_tunnel_rings(
-        &self,
-        buffer: &mut [u32],
-        width: usize,
-        height: usize,
-        time: f64,
-        alpha: f32,
-    ) {
+    fn render_tunnel_rings(&self, s: &mut Surface, time: f64, alpha: f32) {
+        let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
         let cx = width as f32 / 2.0;
         let cy = height as f32 / 2.0;
         let num_rings = 12;

@@ -4,25 +4,15 @@
 
 use crate::font;
 use crate::palette;
+use crate::palette::Surface;
 
 pub const SCROLL_TEXT: &str = "*** MUSICA UNIVERSALIS *** \
-     THE PLANETS SING. THE SOLVER LISTENS. *** \
-     SERIO: SCORING ENGINE FOR REAL-TIME INCREMENTAL OPTIMIZATION *** \
-     WHEN A PLANET MOVES, ONLY ITS ARCS ARE RE-EVALUATED. *** \
-     NOT ALL 21 PAIRS. JUST THE 6 THAT CHANGED. *** \
-     THAT IS THE SERIO DIFFERENCE. *** \
-     PYTHAGORAS HEARD THE MUSIC OF THE SPHERES IN 530 BCE. *** \
-     KEPLER WROTE IT DOWN IN HARMONICES MUNDI IN 1619. *** \
-     WE OPTIMIZED IT WITH RUST IN 2026. *** \
-     ZERO-ERASURE ARCHITECTURE. NO BOX DYN TRAIT. NO HEAP ALLOC IN HOT PATH. *** \
-     FULLY MONOMORPHIZED. THE COMPILER KNOWS EVERYTHING. *** \
-     SOLVERFORGE -- OPEN SOURCE. TRULY OPEN SOURCE. *** \
-     NO SUBSCRIPTIONS. NO SEAT LICENSES. NO ENTERPRISE NEGOTIATIONS. *** \
-     GREETS TO ALL OPTIMIZATION HACKERS *** \
-     GREETS TO THE RUST DEMOSCENE *** \
-     GREETS TO TIMEFOLD AND THE OPTAPLANNER LINEAGE *** \
-     BUILT IN ITALY *** PYTHAGORAS APPROVED *** \
-     CODED IN RUST. NO JAVASCRIPT WAS HARMED. *** \
+     SEVEN PLANETS, 21 ORBITS, ONE SOLVER. *** \
+     WHEN A PLANET MOVES, ONLY THE 6 PAIRS IT BELONGS TO ARE RE-SCORED, NOT ALL 21. *** \
+     THAT IS SERIO, THE SCORING ENGINE INSIDE SOLVERFORGE. *** \
+     PYTHAGORAS HEARD MUSIC IN NUMBER RATIOS. KEPLER LOOKED FOR IT IN THE PLANETS. *** \
+     SOLVERFORGE: OPEN SOURCE, CODED IN RUST, BERGAMO MMXXVI. *** \
+     GREETINGS TO THE RUST DEMOSCENE AND EVERY OPTIMIZATION HACKER. *** \
      ";
 
 pub struct ScrollText {
@@ -50,15 +40,8 @@ impl ScrollText {
         }
     }
 
-    pub fn render(
-        &self,
-        buffer: &mut [u32],
-        width: usize,
-        height: usize,
-        time: f64,
-        y_center: i32,
-        fade: f32,
-    ) {
+    pub fn render(&self, s: &mut Surface, time: f64, y_center: i32, fade: f32) {
+        let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
         if !self.active {
             return;
         }
@@ -93,9 +76,11 @@ impl ScrollText {
                         let gf = 0.22 / (1.0 + (gdx * gdx + gdy * gdy) as f32 * 0.5) * glow_bright;
                         let gc2 = palette::dim(gc, gf);
                         font::draw_char(
-                            buffer,
-                            width,
-                            height,
+                            &mut Surface {
+                                buf: &mut *buffer,
+                                w: width,
+                                h: height,
+                            },
                             ch,
                             char_x as i32 + gdx,
                             char_y + gdy,
@@ -109,9 +94,11 @@ impl ScrollText {
             let brightness = ((i as f32 * 0.25 + t * 0.9).sin() * 0.1 + 0.9).abs();
             let c = palette::dim(char_color, fade * brightness);
             font::draw_char(
-                buffer,
-                width,
-                height,
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
                 ch,
                 char_x as i32,
                 char_y,

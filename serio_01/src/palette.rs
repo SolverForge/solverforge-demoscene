@@ -2,6 +2,13 @@
 // SERIO_01 PALETTE -- Musica Universalis color system
 // Brand emerald + celestial gold + cosmic deep space
 // ═══════════════════════════════════════════════════════════════
+
+/// A 0x00RRGGBB framebuffer and its size.
+pub struct Surface<'a> {
+    pub buf: &'a mut [u32],
+    pub w: usize,
+    pub h: usize,
+}
 /// Pack RGB into u32 (minifb format: 0x00RRGGBB)
 #[inline(always)]
 pub fn rgb(r: u8, g: u8, b: u8) -> u32 {

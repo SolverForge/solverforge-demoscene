@@ -14,6 +14,7 @@ use crate::effects::score_display;
 use crate::font;
 use crate::orrery::model::{Orrery, PLANET_COUNT};
 use crate::palette;
+use crate::palette::Surface;
 
 pub struct DualPanel {
     /// Separate trail buffers for each panel
@@ -86,15 +87,8 @@ impl DualPanel {
     }
 
     /// Render both panels into the full 1280x720 buffer.
-    pub fn render(
-        &mut self,
-        buffer: &mut [u32],
-        width: usize,
-        height: usize,
-        orrery: &Orrery,
-        time: f64,
-        fade: f32,
-    ) {
+    pub fn render(&mut self, s: &mut Surface, orrery: &Orrery, time: f64, fade: f32) {
+        let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
         // ── Left panel: CLASSICAL ─────────────────────────────
         let left_opts = OrreryRenderOpts {
             cx: LEFT_CX,
@@ -108,9 +102,11 @@ impl DualPanel {
             show_rings: true,
         };
         orrery_render::render(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             orrery,
             &mut self.trail_left,
             &left_opts,
@@ -135,9 +131,11 @@ impl DualPanel {
             show_rings: true,
         };
         orrery_render::render(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             orrery,
             &mut self.trail_right,
             &right_opts,
@@ -145,16 +143,33 @@ impl DualPanel {
         );
 
         // ── Central divider ───────────────────────────────────
-        render_divider(buffer, width, height, fade);
+        render_divider(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            fade,
+        );
 
         // ── Panel labels ──────────────────────────────────────
-        render_panel_labels(buffer, width, height, fade, time);
+        render_panel_labels(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            fade,
+            time,
+        );
 
         // ── Eval comparison ───────────────────────────────────
         score_display::render_eval_comparison(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             self.classical_evals,
             self.serio_evals,
             fade,
@@ -164,7 +179,8 @@ impl DualPanel {
     }
 }
 
-fn render_divider(buffer: &mut [u32], width: usize, height: usize, fade: f32) {
+fn render_divider(s: &mut Surface, fade: f32) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let x = DIVIDER_X;
     let col = palette::dim(palette::EMERALD_700, fade * 0.8);
     for y in 0..height {
@@ -180,13 +196,16 @@ fn render_divider(buffer: &mut [u32], width: usize, height: usize, fade: f32) {
     }
 }
 
-fn render_panel_labels(buf: &mut [u32], width: usize, height: usize, fade: f32, time: f64) {
+fn render_panel_labels(s: &mut Surface, fade: f32, time: f64) {
+    let (buf, width, height) = (&mut *s.buf, s.w, s.h);
     // LEFT: "CLASSICAL"
     let pulse = ((time * 1.5).sin() as f32 * 0.1 + 0.9).abs();
     font::draw_text_centered_glow(
-        buf,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buf,
+            w: width,
+            h: height,
+        },
         "CLASSICAL",
         LEFT_CX as i32,
         30,
@@ -196,9 +215,11 @@ fn render_panel_labels(buf: &mut [u32], width: usize, height: usize, fade: f32, 
     );
 
     font::draw_text_centered(
-        buf,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buf,
+            w: width,
+            h: height,
+        },
         "ALL PAIRS FLASH",
         LEFT_CX as i32,
         52,
@@ -207,10 +228,12 @@ fn render_panel_labels(buf: &mut [u32], width: usize, height: usize, fade: f32, 
     );
 
     font::draw_text_centered(
-        buf,
-        width,
-        height,
-        "O(n^2) PER MOVE",
+        &mut Surface {
+            buf: &mut *buf,
+            w: width,
+            h: height,
+        },
+        "21 PAIRS PER MOVE",
         LEFT_CX as i32,
         64,
         1,
@@ -219,9 +242,11 @@ fn render_panel_labels(buf: &mut [u32], width: usize, height: usize, fade: f32, 
 
     // RIGHT: "SERIO"
     font::draw_text_centered_glow(
-        buf,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buf,
+            w: width,
+            h: height,
+        },
         "SERIO",
         RIGHT_CX as i32,
         30,
@@ -231,9 +256,11 @@ fn render_panel_labels(buf: &mut [u32], width: usize, height: usize, fade: f32, 
     );
 
     font::draw_text_centered(
-        buf,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buf,
+            w: width,
+            h: height,
+        },
         "ONLY AFFECTED ARCS",
         RIGHT_CX as i32,
         52,
@@ -242,9 +269,11 @@ fn render_panel_labels(buf: &mut [u32], width: usize, height: usize, fade: f32, 
     );
 
     font::draw_text_centered(
-        buf,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buf,
+            w: width,
+            h: height,
+        },
         "O(k) PER MOVE",
         RIGHT_CX as i32,
         64,
@@ -254,9 +283,11 @@ fn render_panel_labels(buf: &mut [u32], width: usize, height: usize, fade: f32, 
 
     // "SAME RESULT" across the center
     font::draw_text_centered(
-        buf,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buf,
+            w: width,
+            h: height,
+        },
         "=  SAME SCORE  =",
         DIVIDER_X as i32,
         height as i32 - 110,

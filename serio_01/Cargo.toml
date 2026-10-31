@@ -16,9 +16,10 @@ minifb = "0.28"
 fundsp = "0.23"
 cpal = "0.17"
 
-# Fast SIMD vector/matrix math
-glam = "0.29"
 
 # The star of the show: SERIO incremental scoring engine
-solverforge-scoring = { path = "../../solverforge-rs/crates/solverforge-scoring" }
-solverforge-core = { path = "../../solverforge-rs/crates/solverforge-core" }
+solverforge-scoring = "=0.5.2"
+solverforge-core = "=0.5.2"
+
+# glyphfx (vendored once for every demo) and the story cards
+demofx = { path = "../vendor/demofx" }

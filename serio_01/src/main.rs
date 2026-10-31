@@ -22,7 +22,9 @@ mod font;
 mod logo;
 mod orrery;
 mod palette;
+mod story;
 
+use crate::palette::Surface;
 use effects::dual_panel::DualPanel;
 use effects::genesis;
 use effects::orrery_render::{OrreryRenderOpts, TrailBuffer};
@@ -35,6 +37,8 @@ use effects::starfield::Starfield;
 use orrery::model::Orrery;
 use orrery::solver::SolverState;
 
+use demofx::RgbBuffer;
+
 use minifb::{Key, Scale, Window, WindowOptions};
 use std::io::Write;
 use std::time::Instant;
@@ -46,13 +50,14 @@ const RENDER_W: usize = 1280;
 const RENDER_H: usize = 720;
 
 // ── Demo timeline ─────────────────────────────────────────────
-const SCENE_GENESIS: f64 = 0.0; // 0s  – 12s : sun ignition, planets materialize
-const SCENE_FULL_EVAL: f64 = 12.0; // 12s – 27s : "classical" full re-evaluation chaos
-const SCENE_DUAL: f64 = 27.0; // 27s – 52s : split screen, SERIO vs classical
-const SCENE_HARMONY: f64 = 52.0; // 52s – 68s : SERIO full speed, arcs converge
-const SCENE_SOLUTION: f64 = 68.0; // 68s – 78s : Musica Universalis achieved
-const SCENE_OUTRO: f64 = 78.0; // 78s – 84s : greetings, credits
-const DEMO_END: f64 = 84.0;
+// Scene lengths fit the story cards (story.rs), each held long enough to read.
+const SCENE_GENESIS: f64 = 0.0; // 0s – 15.5s: sun ignition, planets materialize
+const SCENE_FULL_EVAL: f64 = 15.5; // 15.5s – 37s: classical full re-evaluation
+const SCENE_DUAL: f64 = 37.0; // 37s – 65s: split screen, SERIO vs classical
+const SCENE_HARMONY: f64 = 65.0; // 65s – 88.5s: SERIO full speed, arcs converge
+const SCENE_SOLUTION: f64 = 88.5; // 88.5s – 104s: the best layout found
+const SCENE_OUTRO: f64 = 104.0; // 104s – 112s: greetings, credits
+const DEMO_END: f64 = 112.0;
 
 const CROSSFADE: f64 = 2.0; // seconds crossfade between scenes
 
@@ -138,6 +143,8 @@ fn main() {
     let mut time_offset: f64 = 0.0;
     let mut space_was_down = false;
     let mut prev_history_len = 0usize;
+    let mut best_restored = false;
+    let mut story = story::cards();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
@@ -173,6 +180,15 @@ fn main() {
 
         if moves_per_frame > 0 {
             solver.step(moves_per_frame);
+        }
+        // The solution scene shows the best layout the solver found.
+        if scene == 4 {
+            if !best_restored {
+                solver.restore_best();
+                best_restored = true;
+            }
+        } else {
+            best_restored = false;
         }
 
         // ── Process new moves for visualization ───────────────
@@ -242,11 +258,21 @@ fn main() {
         match scene {
             0 => {
                 // GENESIS: space background + planet materialization
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.3, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.3,
+                    demo_time,
+                );
                 genesis::render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     &mut trail,
                     scene_t,
@@ -257,7 +283,15 @@ fn main() {
 
             1 => {
                 // FULL EVAL: single panel, classical all-flash
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.15, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.15,
+                    demo_time,
+                );
 
                 // Force full flash on all arcs
                 let flash = if solver.history.len() > prev_history_len.saturating_sub(3) {
@@ -277,9 +311,11 @@ fn main() {
                     show_rings: true,
                 };
                 effects::orrery_render::render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     &mut trail,
                     &opts,
@@ -290,9 +326,11 @@ fn main() {
 
                 // Labels
                 font::draw_text_centered_glow(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "CLASSICAL FULL EVALUATION",
                     640,
                     30,
@@ -301,10 +339,12 @@ fn main() {
                     palette::dim(palette::CLASSICAL_RED, fade * 0.4),
                 );
                 font::draw_text_centered(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
-                    "O(n^2) PER MOVE -- ALL 21 PAIR ARCS FLASH",
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    "ALL 21 PAIRS RE-SCORED AFTER EVERY MOVE",
                     640,
                     54,
                     1,
@@ -312,9 +352,11 @@ fn main() {
                 );
 
                 score_display::render_score_hud(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     current_score,
                     solver.total_moves,
                     mps,
@@ -324,30 +366,39 @@ fn main() {
 
             2 => {
                 // DUAL PANEL: split screen comparison
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.12, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.12,
+                    demo_time,
+                );
                 dual.render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     demo_time,
                     fade,
                 );
                 particles.render(&mut buffer, RENDER_W, RENDER_H);
-                score_display::render_score_hud(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
-                    current_score,
-                    solver.total_moves,
-                    mps,
-                    fade * 0.7,
-                );
             }
 
             3 => {
                 // HARMONY: full speed SERIO, arcs converge
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.15, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.15,
+                    demo_time,
+                );
 
                 let opts = OrreryRenderOpts {
                     cx: 580.0,
@@ -361,9 +412,11 @@ fn main() {
                     show_rings: false,
                 };
                 effects::orrery_render::render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     &mut trail,
                     &opts,
@@ -374,18 +427,22 @@ fn main() {
 
                 // Score graph in bottom-right
                 score_graph.render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     (RENDER_W - 420) as i32,
                     (RENDER_H - 100) as i32,
                     fade * 0.9,
                 );
 
                 score_display::render_score_hud(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     current_score,
                     solver.total_moves,
                     mps,
@@ -393,9 +450,11 @@ fn main() {
                 );
 
                 score_display::render_constraint_bars(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     current_score,
                     worst_soft.abs(),
                     fade,
@@ -407,9 +466,11 @@ fn main() {
                 if scene_t > 8.0 {
                     let h_alpha = ((scene_t - 8.0) / 4.0).clamp(0.0, 1.0) as f32 * fade;
                     font::draw_text_centered_glow(
-                        &mut buffer,
-                        RENDER_W,
-                        RENDER_H,
+                        &mut Surface {
+                            buf: &mut buffer,
+                            w: RENDER_W,
+                            h: RENDER_H,
+                        },
                         "HARMONY EMERGES",
                         640,
                         RENDER_H as i32 / 2 - 200,
@@ -422,7 +483,15 @@ fn main() {
 
             4 => {
                 // SOLUTION: Musica Universalis achieved
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.2, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.2,
+                    demo_time,
+                );
 
                 let opts = OrreryRenderOpts {
                     cx: 580.0,
@@ -436,9 +505,11 @@ fn main() {
                     show_rings: false,
                 };
                 effects::orrery_render::render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     &mut trail,
                     &opts,
@@ -448,9 +519,11 @@ fn main() {
                 // "MUSICA UNIVERSALIS" title
                 let pulse = (demo_time as f32 * 1.5).sin() * 0.1 + 0.9;
                 font::draw_text_centered_glow(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "MUSICA UNIVERSALIS",
                     640,
                     40,
@@ -460,9 +533,11 @@ fn main() {
                 );
 
                 font::draw_text_centered(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "Harmony of the Cosmos -- Pythagoras, 530 BCE",
                     640,
                     72,
@@ -472,9 +547,11 @@ fn main() {
 
                 // Final score
                 score_display::render_score_hud(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     current_score,
                     solver.total_moves,
                     mps,
@@ -491,9 +568,11 @@ fn main() {
                     palette::RUST
                 };
                 font::draw_text_centered(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     status,
                     640,
                     RENDER_H as i32 - 60,
@@ -504,16 +583,34 @@ fn main() {
 
             _ => {
                 // OUTRO: greetings + credits
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.25, demo_time);
-                plasma.render_overlay(&mut buffer, RENDER_W, RENDER_H, demo_time, fade * 0.12);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.25,
+                    demo_time,
+                );
+                plasma.render_overlay(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    demo_time,
+                    fade * 0.12,
+                );
 
                 // Large logo centered
                 let logo_r = 120.0f32;
                 let pulse = (scene_t as f32 * 1.2).sin() * 0.1 + 0.9;
                 logo::draw_logo(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     RENDER_W as f32 / 2.0,
                     RENDER_H as f32 / 2.0 - 60.0,
                     logo_r,
@@ -523,9 +620,11 @@ fn main() {
                 );
 
                 font::draw_text_centered_glow(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "SOLVERFORGE",
                     RENDER_W as i32 / 2,
                     RENDER_H as i32 / 2 + 80,
@@ -535,9 +634,11 @@ fn main() {
                 );
 
                 font::draw_text_centered(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "SERIO -- SCORING ENGINE FOR REAL-TIME INCREMENTAL OPTIMIZATION",
                     RENDER_W as i32 / 2,
                     RENDER_H as i32 / 2 + 115,
@@ -546,9 +647,11 @@ fn main() {
                 );
 
                 font::draw_text_centered(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "github.com/solverforge",
                     RENDER_W as i32 / 2,
                     RENDER_H as i32 / 2 + 132,
@@ -558,18 +661,22 @@ fn main() {
 
                 // Scrolltext at bottom
                 scroller.render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     demo_time,
                     RENDER_H as i32 - 50,
                     fade,
                 );
 
                 font::draw_text_centered(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "CODED IN RUST // PYTHAGORAS APPROVED // NO JAVASCRIPT WAS HARMED",
                     RENDER_W as i32 / 2,
                     RENDER_H as i32 - 20,
@@ -579,12 +686,24 @@ fn main() {
             }
         }
 
+        story.draw(
+            &mut RgbBuffer {
+                buf: &mut buffer,
+                w: RENDER_W,
+                h: RENDER_H,
+            },
+            demo_time as f32,
+            1.0,
+        );
+
         // ── "PRESS SPACE" blink ───────────────────────────────
         let blink = ((demo_time * 2.0).sin() as f32 * 0.5 + 0.5).abs();
         font::draw_text_centered(
-            &mut buffer,
-            RENDER_W,
-            RENDER_H,
+            &mut Surface {
+                buf: &mut buffer,
+                w: RENDER_W,
+                h: RENDER_H,
+            },
             "PRESS SPACE TO ADVANCE",
             RENDER_W as i32 / 2,
             RENDER_H as i32 - 8,
@@ -619,6 +738,8 @@ fn run_headless(duration_secs: f64) {
     let mut starfield = Starfield::new();
     let mut worst_soft: i64 = 1;
     let mut prev_history_len = 0usize;
+    let mut best_restored = false;
+    let mut story = story::cards();
 
     let dt = 1.0 / fps;
 
@@ -637,6 +758,15 @@ fn run_headless(duration_secs: f64) {
         };
         if moves_per_frame > 0 {
             solver.step(moves_per_frame);
+        }
+        // The solution scene shows the best layout the solver found.
+        if scene == 4 {
+            if !best_restored {
+                solver.restore_best();
+                best_restored = true;
+            }
+        } else {
+            best_restored = false;
         }
 
         // Process new moves
@@ -676,11 +806,21 @@ fn run_headless(duration_secs: f64) {
 
         match scene {
             0 => {
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.3, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.3,
+                    demo_time,
+                );
                 genesis::render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     &mut trail,
                     scene_t,
@@ -689,7 +829,15 @@ fn run_headless(duration_secs: f64) {
                 );
             }
             1 => {
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.15, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.15,
+                    demo_time,
+                );
                 let opts = OrreryRenderOpts {
                     cx: 640.0,
                     cy: 360.0,
@@ -702,9 +850,11 @@ fn run_headless(duration_secs: f64) {
                     show_rings: true,
                 };
                 effects::orrery_render::render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     &mut trail,
                     &opts,
@@ -712,9 +862,11 @@ fn run_headless(duration_secs: f64) {
                 );
                 particles.render(&mut buffer, RENDER_W, RENDER_H);
                 font::draw_text_centered_glow(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "CLASSICAL FULL EVALUATION",
                     640,
                     30,
@@ -723,9 +875,11 @@ fn run_headless(duration_secs: f64) {
                     palette::dim(palette::CLASSICAL_RED, fade * 0.4),
                 );
                 score_display::render_score_hud(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     current_score,
                     solver.total_moves,
                     mps,
@@ -733,28 +887,37 @@ fn run_headless(duration_secs: f64) {
                 );
             }
             2 => {
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.12, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.12,
+                    demo_time,
+                );
                 dual.render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     demo_time,
                     fade,
                 );
                 particles.render(&mut buffer, RENDER_W, RENDER_H);
-                score_display::render_score_hud(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
-                    current_score,
-                    solver.total_moves,
-                    mps,
-                    fade * 0.7,
-                );
             }
             3 => {
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.15, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.15,
+                    demo_time,
+                );
                 let opts = OrreryRenderOpts {
                     cx: 580.0,
                     cy: 360.0,
@@ -767,9 +930,11 @@ fn run_headless(duration_secs: f64) {
                     show_rings: false,
                 };
                 effects::orrery_render::render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     &mut trail,
                     &opts,
@@ -777,26 +942,32 @@ fn run_headless(duration_secs: f64) {
                 );
                 particles.render(&mut buffer, RENDER_W, RENDER_H);
                 score_graph.render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     (RENDER_W - 420) as i32,
                     (RENDER_H - 100) as i32,
                     fade * 0.9,
                 );
                 score_display::render_score_hud(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     current_score,
                     solver.total_moves,
                     mps,
                     fade,
                 );
                 score_display::render_constraint_bars(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     current_score,
                     worst_soft.abs(),
                     fade,
@@ -805,7 +976,15 @@ fn run_headless(duration_secs: f64) {
                 );
             }
             4 => {
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.2, demo_time);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.2,
+                    demo_time,
+                );
                 let opts = OrreryRenderOpts {
                     cx: 580.0,
                     cy: 370.0,
@@ -818,9 +997,11 @@ fn run_headless(duration_secs: f64) {
                     show_rings: false,
                 };
                 effects::orrery_render::render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     solver.solution(),
                     &mut trail,
                     &opts,
@@ -828,9 +1009,11 @@ fn run_headless(duration_secs: f64) {
                 );
                 let pulse = (demo_time as f32 * 1.5).sin() * 0.1 + 0.9;
                 font::draw_text_centered_glow(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "MUSICA UNIVERSALIS",
                     640,
                     40,
@@ -839,9 +1022,11 @@ fn run_headless(duration_secs: f64) {
                     palette::dim(palette::AMBER_400, fade * 0.5),
                 );
                 score_display::render_score_hud(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     current_score,
                     solver.total_moves,
                     mps,
@@ -849,14 +1034,32 @@ fn run_headless(duration_secs: f64) {
                 );
             }
             _ => {
-                starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.25, demo_time);
-                plasma.render_overlay(&mut buffer, RENDER_W, RENDER_H, demo_time, fade * 0.12);
+                starfield.render(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    fade * 0.25,
+                    demo_time,
+                );
+                plasma.render_overlay(
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    demo_time,
+                    fade * 0.12,
+                );
                 let logo_r = 120.0f32;
                 let pulse = (scene_t as f32 * 1.2).sin() * 0.1 + 0.9;
                 logo::draw_logo(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     RENDER_W as f32 / 2.0,
                     RENDER_H as f32 / 2.0 - 60.0,
                     logo_r,
@@ -865,9 +1068,11 @@ fn run_headless(duration_secs: f64) {
                     fade * pulse,
                 );
                 font::draw_text_centered_glow(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     "SOLVERFORGE",
                     RENDER_W as i32 / 2,
                     RENDER_H as i32 / 2 + 80,
@@ -876,15 +1081,27 @@ fn run_headless(duration_secs: f64) {
                     palette::dim(palette::EMERALD_400, fade * 0.5),
                 );
                 scroller.render(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
+                    &mut Surface {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
                     demo_time,
                     RENDER_H as i32 - 50,
                     fade,
                 );
             }
         }
+
+        story.draw(
+            &mut RgbBuffer {
+                buf: &mut buffer,
+                w: RENDER_W,
+                h: RENDER_H,
+            },
+            demo_time as f32,
+            1.0,
+        );
 
         // BGR24 output
         for (i, &px) in buffer.iter().enumerate() {

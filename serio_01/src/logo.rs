@@ -21,6 +21,7 @@
 //   v6:( 35, 95)→(-0.867,-0.067)  v7:( 50, 50)→(-0.667,-0.667)
 // ═══════════════════════════════════════════════════════════════
 
+use crate::palette::Surface;
 use crate::palette::{self, EMERALD_300, EMERALD_400, EMERALD_500, EMERALD_800, GREEN_500};
 
 // ── Outer 8-point polygon vertices, normalized (÷75 from SVG) ──
@@ -63,9 +64,7 @@ const MIDPOINT_SQUARES: [(f32, f32); 6] = [
 // Draw the SolverForge ouroboros logo centered at (cx,cy) with given radius.
 // progress: 0.0→nothing, 1.0→fully drawn. time for pulse. brightness for fade.
 pub fn draw_logo(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     cx: f32,
     cy: f32,
     radius: f32,
@@ -73,6 +72,7 @@ pub fn draw_logo(
     time: f64,
     brightness: f32,
 ) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let progress = progress.clamp(0.0, 1.0);
     // px-per-SVG-unit: SVG uses 75px max extent = 1.0 normalized
     let s = radius / 75.0;
@@ -105,9 +105,11 @@ pub fn draw_logo(
         );
 
         thick_line(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             cx + ax * radius,
             cy + ay * radius,
             cx + ex * radius,
@@ -129,7 +131,19 @@ pub fn draw_logo(
         let tx = cx + VERTS[0].0 * radius;
         let ty0 = cy + VERTS[0].1 * radius;
         let ty1 = ty0 + 15.0 * s;
-        thick_line(buffer, width, height, tx, ty0, tx, ty1, tail_w, tail_color);
+        thick_line(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            tx,
+            ty0,
+            tx,
+            ty1,
+            tail_w,
+            tail_color,
+        );
     }
 
     // ── 3. Snake head at v0 (top vertex) ────────────────────────
@@ -149,17 +163,77 @@ pub fn draw_logo(
 
         let hc = palette::dim(GREEN_500, brightness);
         // Fill the fork as 4 triangles
-        fill_tri(buffer, width, height, p0, p1, p2, hc);
-        fill_tri(buffer, width, height, p0, p2, p3, hc);
-        fill_tri(buffer, width, height, p0, p3, p4, hc);
-        fill_tri(buffer, width, height, p0, p4, p5, hc);
+        fill_tri(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            p0,
+            p1,
+            p2,
+            hc,
+        );
+        fill_tri(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            p0,
+            p2,
+            p3,
+            hc,
+        );
+        fill_tri(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            p0,
+            p3,
+            p4,
+            hc,
+        );
+        fill_tri(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            p0,
+            p4,
+            p5,
+            hc,
+        );
 
         // Two eyes at cx=±3, cy=-8 (SVG local), r=1.5
         let er = ((1.5 * s).round() as i32).max(1);
         let (elx, ely) = lp(-3.0, -8.0);
         let (erx, _) = lp(3.0, -8.0);
-        fill_circle(buffer, width, height, elx, ely, er, 0x000000);
-        fill_circle(buffer, width, height, erx, ely, er, 0x000000);
+        fill_circle(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            elx,
+            ely,
+            er,
+            0x000000,
+        );
+        fill_circle(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            erx,
+            ely,
+            er,
+            0x000000,
+        );
     }
 
     if progress < 0.5 {
@@ -176,9 +250,11 @@ pub fn draw_logo(
             let (ax, ay) = INNER_VERTS[seg];
             let (bx, by) = INNER_VERTS[(seg + 1) % 8];
             thick_line(
-                buffer,
-                width,
-                height,
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
                 cx + ax * radius,
                 cy + ay * radius,
                 cx + bx * radius,
@@ -195,9 +271,11 @@ pub fn draw_logo(
         let vc = palette::dim(EMERALD_500, brightness * 0.3 * inner_p);
         for &(vx, vy) in &VERTS {
             fill_circle(
-                buffer,
-                width,
-                height,
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
                 (cx + vx * radius) as i32,
                 (cy + vy * radius) as i32,
                 vr,
@@ -224,9 +302,11 @@ pub fn draw_logo(
         let cc = palette::dim(0x111111, brightness * center_p);
         if arm_out > arm_in {
             thick_line(
-                buffer,
-                width,
-                height,
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
                 cx - arm_out as f32,
                 cy,
                 cx - arm_in as f32,
@@ -235,9 +315,11 @@ pub fn draw_logo(
                 cc,
             );
             thick_line(
-                buffer,
-                width,
-                height,
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
                 cx + arm_in as f32,
                 cy,
                 cx + arm_out as f32,
@@ -246,9 +328,11 @@ pub fn draw_logo(
                 cc,
             );
             thick_line(
-                buffer,
-                width,
-                height,
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
                 cx,
                 cy - arm_out as f32,
                 cx,
@@ -257,9 +341,11 @@ pub fn draw_logo(
                 cc,
             );
             thick_line(
-                buffer,
-                width,
-                height,
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
                 cx,
                 cy + arm_in as f32,
                 cx,
@@ -275,9 +361,11 @@ pub fn draw_logo(
         let cr = ((6.0 * s).round() as i32).max(2);
         let cw = ((2.5 * s).round() as i32).max(1);
         ring_circle(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             cxi,
             cyi,
             cr,
@@ -291,18 +379,22 @@ pub fn draw_logo(
         let pulse = ((time * 3.0).sin() as f32 * 0.25 + 0.75).abs();
         let dr = ((3.0 * s).round() as i32).max(1);
         fill_circle(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             cxi,
             cyi,
             dr,
             palette::dim(EMERALD_400, brightness * center_p * pulse),
         );
         fill_circle(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             cxi,
             cyi,
             (dr / 2).max(1),
@@ -322,8 +414,32 @@ pub fn draw_logo(
             let y12 = cy + (sy * b12) as f32;
             let x15 = cx + (sx * b15) as f32;
             let y15 = cy + (sy * b15) as f32;
-            thick_line(buffer, width, height, x12, y12, x15, y12, bw, bc);
-            thick_line(buffer, width, height, x15, y12, x15, y15, bw, bc);
+            thick_line(
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
+                x12,
+                y12,
+                x15,
+                y12,
+                bw,
+                bc,
+            );
+            thick_line(
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
+                x15,
+                y12,
+                x15,
+                y15,
+                bw,
+                bc,
+            );
         }
     }
 
@@ -351,7 +467,8 @@ pub fn draw_logo(
 // ── Primitive drawing helpers ─────────────────────────────────
 
 // Bresenham 1-pixel line.
-fn line(buf: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, col: u32) {
+fn line(s: &mut Surface, x0: i32, y0: i32, x1: i32, y1: i32, col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let dx = (x1 - x0).abs();
     let dy = -(y1 - y0).abs();
     let sx = if x0 < x1 { 1i32 } else { -1 };
@@ -379,17 +496,8 @@ fn line(buf: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32,
 }
 
 // Thick line: offset parallel 1px lines along the perpendicular.
-fn thick_line(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-    thickness: f32,
-    col: u32,
-) {
+fn thick_line(s: &mut Surface, x0: f32, y0: f32, x1: f32, y1: f32, thickness: f32, col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let dx = x1 - x0;
     let dy = y1 - y0;
     let len = (dx * dx + dy * dy).sqrt().max(0.001);
@@ -402,9 +510,11 @@ fn thick_line(
         let ox = (nx * t).round() as i32;
         let oy = (ny * t).round() as i32;
         line(
-            buf,
-            w,
-            h,
+            &mut Surface {
+                buf: &mut *buf,
+                w,
+                h,
+            },
             x0 as i32 + ox,
             y0 as i32 + oy,
             x1 as i32 + ox,
@@ -415,15 +525,8 @@ fn thick_line(
 }
 
 // Filled triangle by scanline rasterization.
-fn fill_tri(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
-    a: (i32, i32),
-    b: (i32, i32),
-    c: (i32, i32),
-    col: u32,
-) {
+fn fill_tri(s: &mut Surface, a: (i32, i32), b: (i32, i32), c: (i32, i32), col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let mut pts = [a, b, c];
     pts.sort_by_key(|p| p.1);
     let (x0, y0) = (pts[0].0, pts[0].1);
@@ -455,7 +558,8 @@ fn fill_tri(
 }
 
 // Filled circle.
-fn fill_circle(buf: &mut [u32], w: usize, h: usize, cx: i32, cy: i32, r: i32, col: u32) {
+fn fill_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     for dy in -r..=r {
         for dx in -r..=r {
             if dx * dx + dy * dy <= r * r {
@@ -470,16 +574,8 @@ fn fill_circle(buf: &mut [u32], w: usize, h: usize, cx: i32, cy: i32, r: i32, co
 }
 
 // Circle ring (outline) with pixel thickness.
-fn ring_circle(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
-    cx: i32,
-    cy: i32,
-    r: i32,
-    thickness: i32,
-    col: u32,
-) {
+fn ring_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, thickness: i32, col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let ro = r;
     let ri = (r - thickness).max(0);
     for dy in -ro..=ro {

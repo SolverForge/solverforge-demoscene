@@ -11,6 +11,7 @@
 use crate::font;
 use crate::orrery::model::Orrery;
 use crate::palette;
+use crate::palette::Surface;
 
 const MAX_PARTICLES: usize = 512;
 const PARTICLE_LIFETIME: f32 = 0.4; // seconds
@@ -195,13 +196,11 @@ impl ParticleSystem {
                 buffer[py as usize * width + px as usize] =
                     palette::add_color(buffer[py as usize * width + px as usize], col);
                 // 2x2 for brighter particles
-                if alpha > 0.5 {
-                    if px + 1 < width as i32 {
-                        buffer[py as usize * width + (px + 1) as usize] = palette::add_color(
-                            buffer[py as usize * width + (px + 1) as usize],
-                            palette::dim(col, 0.5),
-                        );
-                    }
+                if alpha > 0.5 && px + 1 < width as i32 {
+                    buffer[py as usize * width + (px + 1) as usize] = palette::add_color(
+                        buffer[py as usize * width + (px + 1) as usize],
+                        palette::dim(col, 0.5),
+                    );
                 }
             }
         }
@@ -213,9 +212,11 @@ impl ParticleSystem {
             let alpha = f.life * f.life;
             let col = palette::dim(f.color, alpha);
             font::draw_text(
-                buffer,
-                width,
-                height,
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
                 &f.text,
                 f.x as i32 - (f.text.len() as i32 * 5 / 2),
                 f.y as i32,

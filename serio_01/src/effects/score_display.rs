@@ -9,6 +9,7 @@
 //   - Evaluation counter comparison
 // ═══════════════════════════════════════════════════════════════
 
+use crate::palette::Surface;
 use solverforge_core::score::HardSoftScore;
 
 use crate::font;
@@ -46,15 +47,8 @@ impl ScoreGraph {
         self.max_score = self.max_score.max(s);
     }
 
-    pub fn render(
-        &self,
-        buffer: &mut [u32],
-        width: usize,
-        height: usize,
-        x: i32,
-        y: i32,
-        fade: f32,
-    ) {
+    pub fn render(&self, s: &mut Surface, x: i32, y: i32, fade: f32) {
+        let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
         if self.scores.len() < 2 {
             return;
         }
@@ -92,7 +86,18 @@ impl ScoreGraph {
             let col = palette::dim(col, fade);
 
             // Draw line segment
-            bresenham_buf(buffer, width, height, px0, py0, px1, py1, col);
+            bresenham_buf(
+                &mut Surface {
+                    buf: &mut *buffer,
+                    w: width,
+                    h: height,
+                },
+                px0,
+                py0,
+                px1,
+                py1,
+                col,
+            );
         }
 
         // Border
@@ -112,9 +117,11 @@ impl ScoreGraph {
 
         // Label
         font::draw_text(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             "SCORE",
             x,
             y - 12,
@@ -126,14 +133,13 @@ impl ScoreGraph {
 
 /// Render the score counter (top-right corner)
 pub fn render_score_hud(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     score: HardSoftScore,
     total_moves: u64,
     moves_per_sec: f64,
     fade: f32,
 ) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let x = width as i32 - 340;
     let y = 20i32;
 
@@ -149,9 +155,11 @@ pub fn render_score_hud(
 
     // Score label
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         "SCORE",
         x,
         y,
@@ -168,9 +176,11 @@ pub fn render_score_hud(
         palette::RUST
     };
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         &hard_str,
         x,
         y + 14,
@@ -187,9 +197,11 @@ pub fn render_score_hud(
         palette::AMBER_400
     };
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         &soft_str,
         x,
         y + 32,
@@ -200,9 +212,11 @@ pub fn render_score_hud(
     // Moves counter
     let moves_str = format!("{} moves", total_moves);
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         &moves_str,
         x,
         y + 54,
@@ -212,9 +226,11 @@ pub fn render_score_hud(
 
     let mps_str = format!("{:.0}/s", moves_per_sec);
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         &mps_str,
         x + 80,
         y + 54,
@@ -225,23 +241,24 @@ pub fn render_score_hud(
 
 /// Render constraint bars (hard + soft penalty visualization)
 pub fn render_constraint_bars(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     score: HardSoftScore,
     worst_soft: i64, // maximum soft penalty seen (for scaling)
     fade: f32,
     x: i32,
     y: i32,
 ) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let bar_w = 200i32;
     let bar_h = 10i32;
 
     // Hard constraint bar
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         "HARD: No Collision",
         x,
         y,
@@ -252,24 +269,24 @@ pub fn render_constraint_bars(
     let hard_violations = (-score.hard()).max(0) as f32;
     let hard_frac = (hard_violations / 10.0).min(1.0); // assume max 10 hard violations
     render_bar(
-        buffer,
-        width,
-        height,
-        x,
-        y + 12,
-        bar_w,
-        bar_h,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
+        [x, y + 12, bar_w, bar_h],
         hard_frac,
-        palette::RUST,
-        palette::dim(palette::MIDNIGHT, 0.8),
+        (palette::RUST, palette::dim(palette::MIDNIGHT, 0.8)),
         fade,
     );
 
     // Soft constraint bar
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         "SOFT: Harmonic Ratio",
         x,
         y + 32,
@@ -284,33 +301,22 @@ pub fn render_constraint_bars(
         0.0
     };
     render_bar(
-        buffer,
-        width,
-        height,
-        x,
-        y + 44,
-        bar_w,
-        bar_h,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
+        [x, y + 44, bar_w, bar_h],
         soft_frac,
-        palette::AMBER_600,
-        palette::dim(palette::MIDNIGHT, 0.8),
+        (palette::AMBER_600, palette::dim(palette::MIDNIGHT, 0.8)),
         fade,
     );
 }
 
-fn render_bar(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
-    x: i32,
-    y: i32,
-    bar_w: i32,
-    bar_h: i32,
-    frac: f32,
-    fill_color: u32,
-    bg_color: u32,
-    fade: f32,
-) {
+fn render_bar(s: &mut Surface, rect: [i32; 4], frac: f32, colors: (u32, u32), fade: f32) {
+    let [x, y, bar_w, bar_h] = rect;
+    let (fill_color, bg_color) = colors;
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let filled = (bar_w as f32 * frac.clamp(0.0, 1.0)) as i32;
 
     for py in y..(y + bar_h) {
@@ -345,19 +351,20 @@ fn py_safe(y: i32, h: usize) -> bool {
 
 /// Render the "evaluations per move" counter comparison
 pub fn render_eval_comparison(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     classical_evals: usize,
     serio_evals: usize,
     fade: f32,
     x: i32,
     y: i32,
 ) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         "EVALS PER MOVE:",
         x,
         y,
@@ -367,9 +374,11 @@ pub fn render_eval_comparison(
 
     let classical_str = format!("CLASSICAL: {}", classical_evals);
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         &classical_str,
         x,
         y + 14,
@@ -379,9 +388,11 @@ pub fn render_eval_comparison(
 
     let serio_str = format!("SERIO: {}", serio_evals);
     font::draw_text(
-        buffer,
-        width,
-        height,
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
         &serio_str,
         x,
         y + 32,
@@ -394,9 +405,11 @@ pub fn render_eval_comparison(
         let ratio = classical_evals as f32 / serio_evals as f32;
         let speedup_str = format!("{:.1}x FASTER", ratio);
         font::draw_text(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             &speedup_str,
             x,
             y + 52,
@@ -407,16 +420,8 @@ pub fn render_eval_comparison(
 }
 
 // Minimal Bresenham for the score graph
-fn bresenham_buf(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
-    x0: i32,
-    y0: i32,
-    x1: i32,
-    y1: i32,
-    col: u32,
-) {
+fn bresenham_buf(s: &mut Surface, x0: i32, y0: i32, x1: i32, y1: i32, col: u32) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let dx = (x1 - x0).abs();
     let dy = -(y1 - y0).abs();
     let sx = if x0 < x1 { 1i32 } else { -1 };

@@ -15,17 +15,17 @@ use crate::font;
 use crate::logo;
 use crate::orrery::model::{Orrery, PLANET_COUNT};
 use crate::palette;
+use crate::palette::Surface;
 
 pub fn render(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     orrery: &Orrery,
     trail: &mut TrailBuffer,
     scene_t: f64, // seconds since scene start [0, 10]
     fade: f32,
     time: f64,
 ) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let cx = 640.0f64;
     let cy = 360.0f64;
 
@@ -35,7 +35,18 @@ pub fn render(
     // Render partial sun glow
     if sun_alpha > 0.01 {
         let glow_scale = (scene_t / 1.5).min(1.0) as f32;
-        render_sun_birth(buffer, width, height, cx, cy, sun_alpha, glow_scale, time);
+        render_sun_birth(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            cx,
+            cy,
+            sun_alpha,
+            glow_scale,
+            time,
+        );
     }
 
     // ── Planets materialize one by one (3.0 - 8.0s) ─────────
@@ -59,7 +70,17 @@ pub fn render(
         };
 
         // Render full orrery with scaled fade
-        orrery_render::render(buffer, width, height, orrery, trail, &full_opts, time);
+        orrery_render::render(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            orrery,
+            trail,
+            &full_opts,
+            time,
+        );
 
         // Overlay individual planet materialization effect
         for (i, planet) in orrery.planets.iter().enumerate().take(planets_visible) {
@@ -78,7 +99,16 @@ pub fn render(
                 let ring_alpha = (1.0 - planet_t as f32 / 0.3) * planet_alpha * 0.7;
                 let ring_col = palette::dim(planet.color, ring_alpha);
                 orrery_render::ring_circle(
-                    buffer, width, height, px as i32, py as i32, ring_r, 2, ring_col,
+                    &mut Surface {
+                        buf: &mut *buffer,
+                        w: width,
+                        h: height,
+                    },
+                    px as i32,
+                    py as i32,
+                    ring_r,
+                    2,
+                    ring_col,
                 );
             }
         }
@@ -89,9 +119,11 @@ pub fn render(
         let logo_alpha = smoothstep(1.0, 3.0, scene_t) as f32 * fade;
         let logo_progress = smoothstep(1.0, 3.0, scene_t) as f32;
         logo::draw_logo(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             80.0,
             55.0,
             45.0,
@@ -107,9 +139,11 @@ pub fn render(
         let greek_alpha = smoothstep(1.5, 3.5, scene_t) as f32 * fade;
         // Use Latin transliteration since we only have ASCII font
         font::draw_text_centered_glow(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             "HARMONIA KOSMOU",
             640,
             80,
@@ -118,9 +152,11 @@ pub fn render(
             palette::dim(palette::AMBER_400, greek_alpha * 0.5),
         );
         font::draw_text_centered(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             "Harmony of the Cosmos",
             640,
             110,
@@ -133,9 +169,11 @@ pub fn render(
     if scene_t > 8.0 {
         let title_alpha = smoothstep(8.0, 9.0, scene_t) as f32 * fade;
         font::draw_text_centered_glow(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             "MUSICA UNIVERSALIS",
             640,
             height as i32 - 100,
@@ -149,9 +187,11 @@ pub fn render(
     if scene_t > 9.0 {
         let sub_alpha = smoothstep(9.0, 10.0, scene_t) as f32 * fade;
         font::draw_text_centered(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             "SERIO INCREMENTAL SCORING ENGINE",
             640,
             height as i32 - 72,
@@ -159,9 +199,11 @@ pub fn render(
             palette::dim(palette::EMERALD_500, sub_alpha),
         );
         font::draw_text_centered(
-            buffer,
-            width,
-            height,
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
             "SCORING ENGINE FOR REAL-TIME INCREMENTAL OPTIMIZATION",
             640,
             height as i32 - 58,
@@ -171,16 +213,8 @@ pub fn render(
     }
 }
 
-fn render_sun_birth(
-    buf: &mut [u32],
-    w: usize,
-    h: usize,
-    cx: f64,
-    cy: f64,
-    alpha: f32,
-    glow_scale: f32,
-    time: f64,
-) {
+fn render_sun_birth(s: &mut Surface, cx: f64, cy: f64, alpha: f32, glow_scale: f32, time: f64) {
+    let (buf, w, h) = (&mut *s.buf, s.w, s.h);
     let pulse = ((time * 3.0).sin() as f32 * 0.15 + 0.85).abs();
     let core_r = (12.0 * glow_scale * pulse) as i32;
     let cxi = cx as i32;
@@ -192,9 +226,11 @@ fn render_sun_birth(
         let ring_alpha = (1.0 - glow_scale) * alpha * 0.5;
         if ring_alpha > 0.01 {
             orrery_render::ring_circle(
-                buf,
-                w,
-                h,
+                &mut Surface {
+                    buf: &mut *buf,
+                    w,
+                    h,
+                },
                 cxi,
                 cyi,
                 ring_r,
@@ -226,18 +262,22 @@ fn render_sun_birth(
     }
 
     fill_circle(
-        buf,
-        w,
-        h,
+        &mut Surface {
+            buf: &mut *buf,
+            w,
+            h,
+        },
         cxi,
         cyi,
         core_r,
         palette::dim(palette::rgb(255, 245, 160), alpha),
     );
     fill_circle(
-        buf,
-        w,
-        h,
+        &mut Surface {
+            buf: &mut *buf,
+            w,
+            h,
+        },
         cxi,
         cyi,
         (core_r * 2 / 3).max(1),

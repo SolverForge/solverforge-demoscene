@@ -15,7 +15,6 @@
 // ═══════════════════════════════════════════════════════════════
 
 use solverforge_core::score::HardSoftScore;
-use solverforge_core::PlanningSolution;
 use solverforge_scoring::TypedScoreDirector;
 
 use crate::orrery::constraints::{build_constraints, OrreryConstraints};
@@ -70,6 +69,8 @@ pub struct SolverState {
     pub history: Vec<SolverMove>,
     /// Current best score
     pub best_score: HardSoftScore,
+    /// The orbit slots of the best layout found so far.
+    best_slots: Vec<usize>,
     /// Total moves evaluated
     pub total_moves: u64,
     /// Accepted moves
@@ -90,11 +91,13 @@ impl SolverState {
         let initial_score = director.calculate_score();
 
         let late_queue = vec![initial_score; LATE_SIZE];
+        let best_slots = director_slots(&director);
 
         SolverState {
             director,
             history: Vec::with_capacity(16384),
             best_score: initial_score,
+            best_slots,
             total_moves: 0,
             accepted_moves: 0,
             rng: Rng::new(0x6A09E667F3BCC908), // fixed seed — SHA-256 first constant
@@ -130,11 +133,7 @@ impl SolverState {
             return;
         }
 
-        let score_before = self
-            .director
-            .working_solution()
-            .score()
-            .unwrap_or(HardSoftScore::ZERO);
+        let score_before = self.director.get_score();
 
         // SERIO incremental move: retract → mutate → insert
         let score_after = self.director.do_change(0, planet_idx, |orrery| {
@@ -163,6 +162,7 @@ impl SolverState {
             self.accepted_moves += 1;
             if score_after > self.best_score {
                 self.best_score = score_after;
+                self.best_slots = director_slots(&self.director);
             }
             // Update late-acceptance queue with accepted score
             self.late_queue[self.late_head] = score_after;
@@ -188,11 +188,23 @@ impl SolverState {
     }
 
     /// Current score from the director
+    /// Put the best layout found back on the orrery, one scored move per
+    /// planet that differs.
+    pub fn restore_best(&mut self) {
+        use crate::orrery::model::{ORBITAL_RADII, R_MAX};
+        for (idx, &slot) in self.best_slots.clone().iter().enumerate() {
+            if self.director.working_solution().planets[idx].slot != slot {
+                self.director.do_change(0, idx, |orrery| {
+                    orrery.planets[idx].slot = slot;
+                    orrery.planets[idx].angular_speed =
+                        R_MAX.powf(1.5) / ORBITAL_RADII[slot].powf(1.5);
+                });
+            }
+        }
+    }
+
     pub fn current_score(&self) -> HardSoftScore {
-        self.director
-            .working_solution()
-            .score()
-            .unwrap_or(HardSoftScore::ZERO)
+        self.director.get_score()
     }
 
     /// Get the solution for rendering
@@ -208,4 +220,13 @@ impl SolverState {
             0.0
         }
     }
+}
+
+fn director_slots(director: &TypedScoreDirector<Orrery, OrreryConstraints>) -> Vec<usize> {
+    director
+        .working_solution()
+        .planets
+        .iter()
+        .map(|p| p.slot)
+        .collect()
 }

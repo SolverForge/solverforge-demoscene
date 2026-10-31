@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 use crate::palette;
+use crate::palette::Surface;
 
 /// 8x8 pixel font data.
 // Each char is 8 rows of 8 bits (MSB left).
@@ -205,18 +206,10 @@ pub const FONT_8X8: [[u8; 8]; 96] = [
 
 // Draw a single character at pixel position (x, y) with scale and color.
 // scale=1 -> 8x8px, scale=2 -> 16x16px, etc.
-pub fn draw_char(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
-    ch: char,
-    x: i32,
-    y: i32,
-    scale: i32,
-    color: u32,
-) {
+pub fn draw_char(s: &mut Surface, ch: char, x: i32, y: i32, scale: i32, color: u32) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let idx = ch as usize;
-    if idx < 32 || idx > 127 {
+    if !(32..=127).contains(&idx) {
         return;
     }
     let glyph = &FONT_8X8[idx - 32];
@@ -239,46 +232,50 @@ pub fn draw_char(
 }
 
 // Draw a string. Returns x position after the last character.
-pub fn draw_text(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
-    text: &str,
-    x: i32,
-    y: i32,
-    scale: i32,
-    color: u32,
-) -> i32 {
+pub fn draw_text(s: &mut Surface, text: &str, x: i32, y: i32, scale: i32, color: u32) -> i32 {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let mut cx = x;
     for ch in text.chars() {
-        draw_char(buffer, width, height, ch, cx, y, scale, color);
+        draw_char(
+            &mut Surface {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            ch,
+            cx,
+            y,
+            scale,
+            color,
+        );
         cx += 8 * scale + scale; // character advance with 1px spacing scaled
     }
     cx
 }
 
 // Draw text centered horizontally
-pub fn draw_text_centered(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
-    text: &str,
-    cx: i32,
-    y: i32,
-    scale: i32,
-    color: u32,
-) {
+pub fn draw_text_centered(s: &mut Surface, text: &str, cx: i32, y: i32, scale: i32, color: u32) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let char_width = 8 * scale + scale;
     let text_width = text.len() as i32 * char_width;
     let x = cx - text_width / 2;
-    draw_text(buffer, width, height, text, x, y, scale, color);
+    draw_text(
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
+        text,
+        x,
+        y,
+        scale,
+        color,
+    );
 }
 
 // Draw text with a glow effect (render glow in dimmed color first, then sharp on top)
 pub fn draw_text_glow(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     text: &str,
     x: i32,
     y: i32,
@@ -286,24 +283,45 @@ pub fn draw_text_glow(
     color: u32,
     glow_color: u32,
 ) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     // Glow passes: offset by 1-2 pixels in each direction
     for dy in -2i32..=2 {
         for dx in -2i32..=2 {
             if dx != 0 || dy != 0 {
                 let glow = palette::dim(glow_color, 0.3 / ((dx * dx + dy * dy) as f32).sqrt());
-                draw_text(buffer, width, height, text, x + dx, y + dy, scale, glow);
+                draw_text(
+                    &mut Surface {
+                        buf: &mut *buffer,
+                        w: width,
+                        h: height,
+                    },
+                    text,
+                    x + dx,
+                    y + dy,
+                    scale,
+                    glow,
+                );
             }
         }
     }
     // Sharp text on top
-    draw_text(buffer, width, height, text, x, y, scale, color);
+    draw_text(
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
+        text,
+        x,
+        y,
+        scale,
+        color,
+    );
 }
 
 // Draw text centered with glow
 pub fn draw_text_centered_glow(
-    buffer: &mut [u32],
-    width: usize,
-    height: usize,
+    s: &mut Surface,
     text: &str,
     cx: i32,
     y: i32,
@@ -311,10 +329,23 @@ pub fn draw_text_centered_glow(
     color: u32,
     glow_color: u32,
 ) {
+    let (buffer, width, height) = (&mut *s.buf, s.w, s.h);
     let char_width = 8 * scale + scale;
     let text_width = text.len() as i32 * char_width;
     let x = cx - text_width / 2;
-    draw_text_glow(buffer, width, height, text, x, y, scale, color, glow_color);
+    draw_text_glow(
+        &mut Surface {
+            buf: &mut *buffer,
+            w: width,
+            h: height,
+        },
+        text,
+        x,
+        y,
+        scale,
+        color,
+        glow_color,
+    );
 }
 
 // Measure text pixel width
