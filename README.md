@@ -27,13 +27,16 @@ Audiovisual demos in the tradition of the Amiga/PC demoscene -- built to showcas
 | Directory | Product | Duration | Status |
 |---|---|---|---|
 | [`planner123_01/`](planner123_01/) | [Planner123]() | 84s | Complete |
-| [`serio_02/`](serio_02/) | [SERIO](https://crates.io/crates/solverforge-scoring) | 114s | Complete |
+| [`serio_01/`](serio_01/) | [SERIO](https://crates.io/crates/solverforge-scoring) -- planets on orbits | 112s | Complete |
+| [`serio_02/`](serio_02/) | [SERIO](https://crates.io/crates/solverforge-scoring) -- planets that sing | 166s | Complete |
 | [`screensaver_03/`](screensaver_03/) | SolverForge Sway Screensaver | Endless / 30s render preset | Complete |
-| [`splice_04/`](splice_04/) | Route Splice 04 | 116s planned | In development |
+| [`splice_04/`](splice_04/) | Route Splice 04 -- list variables | 148s | Complete |
 | [`hammer_05/`](hammer_05/) | SolverForge -- the Serio and the forge, textmode on glyphfx | 107s | Complete |
 | [`planner123_06/`](planner123_06/) | [Planner123](https://github.com/blackopsrepl/Planner123) -- the demo runs inside the app, textmode on ratatui | 107s | Complete |
 
 Each demo is a standalone Rust crate. See the README inside each directory for details on scenes, architecture, controls, and rendering.
+
+Text effects come from one vendored copy of [glyphfx](https://github.com/blackopsrepl/glyphfx) in `vendor/glyphfx`, built and wrapped for every demo by `vendor/demofx` (glyphfx clips as text cells, the 8x8 font, timed story cards). Demos that use it need a C compiler.
 
 ## Quick Start
 
