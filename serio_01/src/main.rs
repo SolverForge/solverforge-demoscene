@@ -740,6 +740,9 @@ fn run_headless(duration_secs: f64) {
     let mut prev_history_len = 0usize;
     let mut best_restored = false;
     let mut story = story::cards();
+    let freq_state = audio::synth::initial_freq_state();
+    let mut recorder =
+        audio::wav::Recorder::new(audio::synth::build_audio(freq_state.clone()), fps as u64);
 
     let dt = 1.0 / fps;
 
@@ -795,6 +798,12 @@ fn run_headless(duration_secs: f64) {
         particles.update(dt);
         scroller.update(dt);
         starfield.update(dt, 0.1);
+
+        // The soundtrack follows the orrery, as the live audio does.
+        let radii: [f64; 7] =
+            std::array::from_fn(|i| solver.solution().planets[i].orbital_radius());
+        audio::synth::update_frequencies(&freq_state, &radii);
+        recorder.frame();
 
         // Clear
         for px in buffer.iter_mut() {
@@ -1121,6 +1130,7 @@ fn run_headless(duration_secs: f64) {
     }
 
     eprintln!("[render] Done. {} frames written.", total_frames);
+    recorder.write("demo_audio.wav");
 }
 
 // ── Scene routing ─────────────────────────────────────────────

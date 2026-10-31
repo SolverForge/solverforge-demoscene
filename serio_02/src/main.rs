@@ -84,7 +84,6 @@ fn main() {
             "[render] Headless mode: {}x{} @ 60fps, {:.0}s -> stdout (BGR24)",
             RENDER_W, RENDER_H, render_duration
         );
-        render_audio_wav(render_duration, "demo_audio.wav");
         run_headless(render_duration);
         return;
     }
@@ -672,6 +671,9 @@ fn run_headless(duration_secs: f64) {
     let orrery = Orrery::initial();
     let mut solver = SolverState::new(orrery);
     let mut genesis_orrery = Orrery::consonant();
+    let freq_state = audio::synth::initial_freq_state();
+    let mut recorder =
+        audio::wav::Recorder::new(audio::synth::build_audio(freq_state.clone()), fps as u64);
     let mut trail = TrailBuffer::new(RENDER_W, RENDER_H);
     let mut dual = DualPanel::new();
     let mut particles = ParticleSystem::new();
@@ -778,6 +780,16 @@ fn run_headless(duration_secs: f64) {
             sol.update_angles(dt, 1.0);
         }
         genesis_orrery.update_angles(dt, 1.0);
+
+        // The soundtrack sings the orrery on screen, as the live audio does.
+        let shown = if scene < 3 {
+            &genesis_orrery
+        } else {
+            solver.solution()
+        };
+        let planet_freqs: [f64; 7] = std::array::from_fn(|i| shown.planets[i].frequency());
+        audio::synth::update_frequencies(&freq_state, &planet_freqs);
+        recorder.frame();
 
         for px in buffer.iter_mut() {
             *px = palette::NEAR_BLACK;
@@ -1101,6 +1113,7 @@ fn run_headless(duration_secs: f64) {
     }
 
     eprintln!("[render] Done. {} frames written.", total_frames);
+    recorder.write("demo_audio.wav");
 }
 
 // ── Scene routing ─────────────────────────────────────────────
@@ -1194,56 +1207,4 @@ fn start_audio(freq_state: audio::synth::FreqState) -> Option<cpal::Stream> {
             None
         }
     }
-}
-
-fn render_audio_wav(duration: f64, path: &str) {
-    const SAMPLE_RATE: u32 = 44100;
-    let total_samples = (duration * SAMPLE_RATE as f64).ceil() as u64;
-
-    eprintln!("[render] Rendering audio: {total_samples} samples @ {SAMPLE_RATE}Hz → {path}");
-
-    let freq_state = audio::synth::initial_freq_state();
-    let mut synth = audio::synth::build_audio(freq_state);
-    synth.reset();
-    synth.set_sample_rate(SAMPLE_RATE as f64);
-
-    let mut pcm = Vec::with_capacity(total_samples as usize * 2);
-    for _ in 0..total_samples {
-        let (l, r) = synth.get_stereo();
-        let l = (l.clamp(-1.0, 1.0) * 32767.0) as i16;
-        let r = (r.clamp(-1.0, 1.0) * 32767.0) as i16;
-        pcm.push(l);
-        pcm.push(r);
-    }
-
-    let num_channels: u16 = 2;
-    let bits_per_sample: u16 = 16;
-    let byte_rate = SAMPLE_RATE * num_channels as u32 * bits_per_sample as u32 / 8;
-    let block_align = num_channels * bits_per_sample / 8;
-    let data_size = pcm.len() as u32 * 2;
-    let file_size = 36 + data_size;
-
-    let mut wav = Vec::with_capacity(44 + data_size as usize);
-    wav.extend_from_slice(b"RIFF");
-    wav.extend_from_slice(&file_size.to_le_bytes());
-    wav.extend_from_slice(b"WAVE");
-    wav.extend_from_slice(b"fmt ");
-    wav.extend_from_slice(&16u32.to_le_bytes());
-    wav.extend_from_slice(&1u16.to_le_bytes());
-    wav.extend_from_slice(&num_channels.to_le_bytes());
-    wav.extend_from_slice(&SAMPLE_RATE.to_le_bytes());
-    wav.extend_from_slice(&byte_rate.to_le_bytes());
-    wav.extend_from_slice(&block_align.to_le_bytes());
-    wav.extend_from_slice(&bits_per_sample.to_le_bytes());
-    wav.extend_from_slice(b"data");
-    wav.extend_from_slice(&data_size.to_le_bytes());
-    for sample in &pcm {
-        wav.extend_from_slice(&sample.to_le_bytes());
-    }
-
-    std::fs::write(path, &wav).expect("Failed to write audio WAV");
-    eprintln!(
-        "[render] Audio written: {path} ({:.1} MB)",
-        wav.len() as f64 / 1_048_576.0
-    );
 }

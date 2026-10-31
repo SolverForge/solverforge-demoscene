@@ -69,11 +69,13 @@ run: ## Build and run the demo in a window
 	cargo run $(CARGO_FLAGS)
 
 # ── Render to MP4 ────────────────────────────────────────────────────
-render: ## Render headless to MP4 via ffmpeg
+render: ## Render headless to MP4 via ffmpeg (with audio)
 	@echo "═══ RENDERING $(RENDER_SECS)s @ $(RENDER_W)x$(RENDER_H) $(RENDER_FPS)fps ═══"
 	@echo "    Output: $(RENDER_OUT)"
 	@echo ""
 	@command -v ffmpeg >/dev/null 2>&1 || { echo "ERROR: ffmpeg not found. Install it first."; exit 1; }
+	@# The soundtrack is synthesized alongside the frames and written when
+	@# they are done, so the picture is encoded first and the audio muxed after.
 	cargo run $(CARGO_FLAGS) -- --render $(RENDER_SECS) | \
 		ffmpeg -y \
 			-f rawvideo \
@@ -87,8 +89,11 @@ render: ## Render headless to MP4 via ffmpeg
 			-crf $(FFMPEG_CRF) \
 			-preset $(FFMPEG_PRESET) \
 			-pix_fmt yuv420p \
-			-movflags +faststart \
-			$(RENDER_OUT)
+			video_only.mp4
+	ffmpeg -y -i video_only.mp4 -i demo_audio.wav \
+		-c:v copy -c:a aac -b:a 192k -shortest -movflags +faststart \
+		$(RENDER_OUT)
+	@rm -f video_only.mp4 demo_audio.wav
 	@echo ""
 	@echo "═══ RENDERED: $(RENDER_OUT) ═══"
 	@ls -lh $(RENDER_OUT)
