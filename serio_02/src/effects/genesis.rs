@@ -85,9 +85,7 @@ pub fn render(
                 let ring_r = (planet_t / 0.3 * 30.0) as i32 + planet.visual_radius as i32;
                 let ring_alpha = (1.0 - planet_t as f32 / 0.3) * planet_alpha * 0.7;
                 let ring_col = palette::dim(planet.color, ring_alpha);
-                orrery_render::ring_circle(
-                    s, px as i32, py as i32, ring_r, 2, ring_col,
-                );
+                orrery_render::ring_circle(s, px as i32, py as i32, ring_r, 2, ring_col);
             }
         }
     }
@@ -96,15 +94,7 @@ pub fn render(
     if scene_t > 1.0 {
         let logo_alpha = palette::smoothstep(1.0, 3.0, scene_t) as f32 * fade;
         let logo_progress = palette::smoothstep(1.0, 3.0, scene_t) as f32;
-        logo::draw_logo(
-            s,
-            80.0,
-            55.0,
-            45.0,
-            logo_progress,
-            time,
-            logo_alpha * 0.8,
-        );
+        logo::draw_logo(s, 80.0, 55.0, 45.0, logo_progress, time, logo_alpha * 0.8);
     }
 
     // ── Greek title ───────────────────────────────────────────
@@ -165,14 +155,7 @@ pub fn render(
     }
 }
 
-fn render_sun_birth(
-    s: &mut Surface,
-    cx: f64,
-    cy: f64,
-    alpha: f32,
-    glow_scale: f32,
-    time: f64,
-) {
+fn render_sun_birth(s: &mut Surface, cx: f64, cy: f64, alpha: f32, glow_scale: f32, time: f64) {
     let pulse = ((time * 3.0).sin() as f32 * 0.15 + 0.85).abs();
     let core_r = (12.0 * glow_scale * pulse) as i32;
     let cxi = cx as i32;
@@ -230,4 +213,3 @@ fn render_sun_birth(
         palette::dim(palette::WHITE, alpha),
     );
 }
-

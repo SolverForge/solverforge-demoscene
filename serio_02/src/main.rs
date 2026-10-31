@@ -22,17 +22,20 @@ mod font;
 mod logo;
 mod orrery;
 mod palette;
+mod story;
 
-use effects::commentary;
+use effects::commentary::{self, Panel};
 use effects::dual_panel::DualPanel;
 use effects::genesis;
 use effects::orrery_render::{OrreryRenderOpts, TrailBuffer};
 use effects::particles::ParticleSystem;
 use effects::plasma::Plasma;
 use effects::score_display::ScoreGraph;
-use effects::scroll::{self, ScrollText};
+use effects::scroll::ScrollText;
 use effects::starfield::Starfield;
 use palette::Surface;
+
+use demofx::RgbBuffer;
 
 use orrery::model::Orrery;
 use orrery::solver::SolverState;
@@ -48,16 +51,25 @@ const RENDER_W: usize = 1280;
 const RENDER_H: usize = 720;
 
 // ── Demo timeline ─────────────────────────────────────────────
-// All scenes fixed duration.
-const SCENE_GENESIS: f64 = 0.0; // 0s  – 14s: sun ignition, planets materialize
-const SCENE_FULL_EVAL: f64 = 14.0; // 14s – 30s: "classical" full re-evaluation
-const SCENE_DUAL: f64 = 30.0; // 30s – 55s: split screen, SERIO vs classical
-const SCENE_HARMONY: f64 = 55.0; // 55s – 90s: SERIO full speed, 35 seconds
-const SCENE_SOLUTION: f64 = 90.0; // 90s – 100s: admire the result
-const SOLUTION_DURATION: f64 = 10.0;
+// Scene lengths fit the story cards (story.rs), each held long enough to read.
+const SCENE_GENESIS: f64 = 0.0; // 0s – 26s: sun ignition, planets, what a ratio is
+const SCENE_FULL_EVAL: f64 = 26.0; // 26s – 66s: the puzzle, "classical" full re-evaluation
+const SCENE_DUAL: f64 = 66.0; // 66s – 95s: split screen, SERIO vs classical
+const SCENE_HARMONY: f64 = 95.0; // 95s – 137s: SolverForge solves it, slow then full speed
+const SCENE_SOLUTION: f64 = 137.0; // 137s – 152s: the best tuning found
+const SOLUTION_DURATION: f64 = 15.0;
 const OUTRO_DURATION: f64 = 14.0;
 
 const CROSSFADE: f64 = 2.0;
+
+// The solver scene opens in slow motion before the search runs at full
+// speed: the clashing start holds for SLOW_HOLD seconds, then one change
+// every 0.75 s so each one can be followed, then one every 8 frames.
+const SLOW_MOTION: f64 = 17.0;
+const SLOW_HOLD: f64 = 3.0;
+const SLOW_START: f64 = 10.0;
+const SLOW_STEP_FIRST: f64 = 0.75;
+const SLOW_STEP: f64 = 8.0 / 60.0;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -66,7 +78,7 @@ fn main() {
         .windows(2)
         .find(|w| w[0] == "--render")
         .and_then(|w| w[1].parse().ok())
-        .unwrap_or(120.0); // generous upper bound; demo ends when solver solves
+        .unwrap_or(170.0); // the demo's length plus a margin
 
     if headless {
         eprintln!(
@@ -140,6 +152,9 @@ fn main() {
     let mut slow_move_timer: f64 = 0.0;
     let mut last_move_time: f64 = -10.0;
     let mut last_moved_planet: Option<usize> = None;
+    let mut best_restored = false;
+    let mut display_changes: u64 = 0;
+    let mut story = story::cards();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let now = Instant::now();
@@ -173,15 +188,36 @@ fn main() {
             if slow_move_timer >= interval {
                 slow_move_timer -= interval;
                 let fake_planet = ((demo_time / interval) as usize) % 7;
+                // A real note change on the orrery on screen: the planet
+                // moves a quarter tone off its in-tune note, or back.
+                genesis_orrery.retune(fake_planet);
+                display_changes += 1;
                 last_move_time = demo_time;
                 last_moved_planet = Some(fake_planet);
                 if scene == 2 {
                     dual.on_move(fake_planet);
                 }
             }
-        } else if scene == 3 || scene == 4 {
+        } else if scene == 3 && scene_t < SLOW_MOTION {
+            // The start of the search, slowed down: one change at a time.
+            let step = if scene_t < SLOW_START {
+                SLOW_STEP_FIRST
+            } else {
+                SLOW_STEP
+            };
+            if scene_t >= SLOW_HOLD {
+                slow_move_timer += dt;
+            }
+            while slow_move_timer >= step {
+                slow_move_timer -= step;
+                solver.step(1);
+            }
+        } else if scene == 3 {
             solver.step_timed(14.0);
             slow_move_timer = 0.0;
+        } else if scene == 4 && !best_restored {
+            solver.restore_best();
+            best_restored = true;
         } else {
             slow_move_timer = 0.0;
         }
@@ -210,7 +246,6 @@ fn main() {
                     );
                 }
 
-                score_graph.push(mv.score_after);
                 let soft = mv.score_after.soft();
                 if soft < worst_soft {
                     worst_soft = soft;
@@ -237,7 +272,13 @@ fn main() {
 
         // ── Update audio frequencies ──────────────────────────
         let planet_freqs: [f64; 7] = {
-            let planets = &solver.solution().planets;
+            // The audio sings the orrery on screen.
+            let shown = if scene < 3 {
+                &genesis_orrery
+            } else {
+                solver.solution()
+            };
+            let planets = &shown.planets;
             [
                 planets[0].frequency(),
                 planets[1].frequency(),
@@ -258,16 +299,10 @@ fn main() {
         // ── Render scene ──────────────────────────────────────
         let current_score = solver.current_score();
 
-        // One score sample per frame during scene 3 → smooth real-time graph animation
+        // One score sample per frame of the solver scene: the graph is a timeline
         if scene == 3 {
             score_graph.push(current_score);
         }
-
-        // Narration progress: ~3 seconds per line
-        let narration_progress = |lines: usize, scene_duration: f64| -> f32 {
-            let needed = lines as f64 * 3.5; // 3s per line
-            (scene_t / needed.min(scene_duration)).clamp(0.0, 1.0) as f32
-        };
 
         // Orrery center X for non-dual scenes: left of center to leave room for right panel
         let orrery_cx = 440.0;
@@ -275,7 +310,11 @@ fn main() {
         // Narration center X: centered in the orrery area
         let narr_cx = orrery_cx as i32;
 
-        let mut s = Surface { buf: &mut buffer, w: RENDER_W, h: RENDER_H };
+        let mut s = Surface {
+            buf: &mut buffer,
+            w: RENDER_W,
+            h: RENDER_H,
+        };
 
         match scene {
             0 => {
@@ -290,23 +329,19 @@ fn main() {
                     demo_time,
                 );
 
-                // Big centered narration — placed above the bottom title area
-                let np = narration_progress(scroll::NARRATION_GENESIS.len(), 14.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_GENESIS,
-                    narr_cx,
-                    RENDER_H as i32 / 2 + 100,
-                    np,
-                    fade,
-                );
-
                 // Commentary: right side
                 commentary::render_commentary(
                     &mut s,
-                    &solver,
-                    scene,
-                    fade,
+                    &Panel {
+                        orrery: &genesis_orrery,
+                        solver: &solver,
+                        scene,
+                        slow: false,
+                        moved: None,
+                        sweep: None,
+                        changes: display_changes,
+                        fade,
+                    },
                 );
             }
 
@@ -336,7 +371,11 @@ fn main() {
                     flash_all: false,
                     flash_alpha: 0.0,
                     show_rings: true,
-                    moved_planet: if ring_flash > 0.01 { last_moved_planet } else { None },
+                    moved_planet: if ring_flash > 0.01 {
+                        last_moved_planet
+                    } else {
+                        None
+                    },
                     move_ring_alpha: ring_flash,
                     sweep_frontier: sweep,
                 };
@@ -352,7 +391,7 @@ fn main() {
                 // Arc counter: shows "N / 21" during sweep
                 if sweep >= 0.0 {
                     let count = (sweep as usize + 1).min(21);
-                    let counter_text = format!("{} / 21 arcs checked", count);
+                    let counter_text = format!("{} / 21 pairs checked", count);
                     font::draw_text_centered(
                         &mut s,
                         &counter_text,
@@ -366,7 +405,7 @@ fn main() {
                 // Title above orrery
                 font::draw_text_centered_glow(
                     &mut s,
-                    "THE WEIGHT OF KNOWING",
+                    "RE-CHECK EVERYTHING",
                     narr_cx,
                     20,
                     2,
@@ -374,48 +413,31 @@ fn main() {
                     palette::dim(palette::CLASSICAL_RED, fade * 0.4),
                 );
 
-                // Big centered narration below orrery
-                let np = narration_progress(scroll::NARRATION_FULL_EVAL.len(), 16.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_FULL_EVAL,
-                    narr_cx,
-                    RENDER_H as i32 - 140,
-                    np,
-                    fade,
-                );
-
                 // Commentary: right side
                 commentary::render_commentary(
                     &mut s,
-                    &solver,
-                    scene,
-                    fade,
+                    &Panel {
+                        orrery: &genesis_orrery,
+                        solver: &solver,
+                        scene,
+                        slow: false,
+                        moved: if ring_flash > 0.01 {
+                            last_moved_planet
+                        } else {
+                            None
+                        },
+                        sweep: (sweep >= 0.0).then_some(sweep),
+                        changes: display_changes,
+                        fade,
+                    },
                 );
             }
 
             2 => {
                 // DUAL PANEL: split screen comparison
                 starfield.render(&mut s, fade * 0.12, demo_time);
-                dual.render(
-                    &mut s,
-                    &genesis_orrery,
-                    demo_time,
-                    fade,
-                    scene_t,
-                );
+                dual.render(&mut s, &genesis_orrery, demo_time, fade, scene_t);
                 particles.render(&mut s);
-
-                // Narration: top center, between panel labels and orreries
-                let np = narration_progress(scroll::NARRATION_DUAL.len(), 25.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_DUAL,
-                    RENDER_W as i32 / 2,
-                    85,
-                    np,
-                    fade * 0.95,
-                );
             }
 
             3 => {
@@ -448,7 +470,7 @@ fn main() {
                 // Title
                 font::draw_text_centered_glow(
                     &mut s,
-                    "UNLEASHED",
+                    "SOLVERFORGE, SCORED BY SERIO",
                     narr_cx,
                     20,
                     2,
@@ -457,30 +479,26 @@ fn main() {
                 );
 
                 // Score graph: left side, below orrery center
-                score_graph.render(
-                    &mut s,
-                    40,
-                    RENDER_H as i32 - 210,
-                    fade * 0.9,
-                );
-
-                // Narration below score graph
-                let np = narration_progress(scroll::NARRATION_CONVERGENCE.len(), 24.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_CONVERGENCE,
-                    narr_cx,
-                    RENDER_H as i32 - 120,
-                    np,
-                    fade * 0.9,
-                );
+                score_graph.render(&mut s, 40, RENDER_H as i32 - 210, fade * 0.9);
 
                 // Commentary: right side
+                let slow = scene_t < SLOW_MOTION;
                 commentary::render_commentary(
                     &mut s,
-                    &solver,
-                    scene,
-                    fade,
+                    &Panel {
+                        orrery: solver.solution(),
+                        solver: &solver,
+                        scene,
+                        slow,
+                        moved: if slow {
+                            solver.history.last().map(|m| m.planet_idx)
+                        } else {
+                            None
+                        },
+                        sweep: None,
+                        changes: display_changes,
+                        fade,
+                    },
                 );
             }
 
@@ -539,23 +557,19 @@ fn main() {
                     palette::dim(status_col, fade),
                 );
 
-                // Big centered narration
-                let np = narration_progress(scroll::NARRATION_SOLUTION.len(), 10.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_SOLUTION,
-                    narr_cx,
-                    RENDER_H as i32 - 120,
-                    np,
-                    fade * 0.9,
-                );
-
                 // Commentary: right side (final stats)
                 commentary::render_commentary(
                     &mut s,
-                    &solver,
-                    scene,
-                    fade,
+                    &Panel {
+                        orrery: solver.solution(),
+                        solver: &solver,
+                        scene,
+                        slow: false,
+                        moved: None,
+                        sweep: None,
+                        changes: display_changes,
+                        fade,
+                    },
                 );
             }
 
@@ -604,24 +618,8 @@ fn main() {
                     palette::dim(palette::EMERALD_600, fade * 0.6),
                 );
 
-                // Narration: left side
-                let np = narration_progress(scroll::NARRATION_OUTRO.len(), 14.0);
-                scroll::render_narration(
-                    &mut s,
-                    scroll::NARRATION_OUTRO,
-                    60,
-                    80,
-                    np,
-                    fade * 0.8,
-                );
-
                 // Scrolltext at bottom
-                scroller.render(
-                    &mut s,
-                    demo_time,
-                    RENDER_H as i32 - 50,
-                    fade,
-                );
+                scroller.render(&mut s, demo_time, RENDER_H as i32 - 50, fade);
 
                 font::draw_text_centered(
                     &mut s,
@@ -634,6 +632,16 @@ fn main() {
             }
         }
 
+        story.draw(
+            &mut RgbBuffer {
+                buf: s.buf,
+                w: RENDER_W,
+                h: RENDER_H,
+            },
+            demo_time as f32,
+            1.0,
+        );
+
         // ── "PRESS SPACE" blink ───────────────────────────────
         let blink = ((demo_time * 2.0).sin() as f32 * 0.5 + 0.5).abs();
         font::draw_text_centered(
@@ -644,7 +652,6 @@ fn main() {
             1,
             palette::dim(palette::EMERALD_800, fade * blink * 0.5),
         );
-
 
         window
             .update_with_buffer(&buffer, RENDER_W, RENDER_H)
@@ -677,6 +684,9 @@ fn run_headless(duration_secs: f64) {
     let mut slow_move_timer: f64 = 0.0;
     let mut last_move_time: f64 = -10.0;
     let mut last_moved_planet: Option<usize> = None;
+    let mut best_restored = false;
+    let mut display_changes: u64 = 0;
+    let mut story = story::cards();
     let dt = 1.0 / fps;
 
     for frame in 0..total_frames {
@@ -697,15 +707,36 @@ fn run_headless(duration_secs: f64) {
             if slow_move_timer >= interval {
                 slow_move_timer -= interval;
                 let fake_planet = ((demo_time / interval) as usize) % 7;
+                // A real note change on the orrery on screen: the planet
+                // moves a quarter tone off its in-tune note, or back.
+                genesis_orrery.retune(fake_planet);
+                display_changes += 1;
                 last_move_time = demo_time;
                 last_moved_planet = Some(fake_planet);
                 if scene == 2 {
                     dual.on_move(fake_planet);
                 }
             }
-        } else if scene == 3 || scene == 4 {
+        } else if scene == 3 && scene_t < SLOW_MOTION {
+            // The start of the search, slowed down: one change at a time.
+            let step = if scene_t < SLOW_START {
+                SLOW_STEP_FIRST
+            } else {
+                SLOW_STEP
+            };
+            if scene_t >= SLOW_HOLD {
+                slow_move_timer += dt;
+            }
+            while slow_move_timer >= step {
+                slow_move_timer -= step;
+                solver.step(1);
+            }
+        } else if scene == 3 {
             solver.step_timed(14.0);
             slow_move_timer = 0.0;
+        } else if scene == 4 && !best_restored {
+            solver.restore_best();
+            best_restored = true;
         } else {
             slow_move_timer = 0.0;
         }
@@ -728,7 +759,6 @@ fn run_headless(duration_secs: f64) {
                         mv.accepted,
                     );
                 }
-                score_graph.push(mv.score_after);
                 let sc = mv.score_after.soft();
                 if sc < worst_soft {
                     worst_soft = sc;
@@ -759,16 +789,15 @@ fn run_headless(duration_secs: f64) {
             score_graph.push(current_score);
         }
 
-        let narration_progress = |lines: usize, scene_duration: f64| -> f32 {
-            let needed = lines as f64 * 3.5;
-            (scene_t / needed.min(scene_duration)).clamp(0.0, 1.0) as f32
-        };
-
         let orrery_cx = 440.0;
         let orrery_cy = 280.0;
         let narr_cx = orrery_cx as i32;
 
-        let mut s = Surface { buf: &mut buffer, w: RENDER_W, h: RENDER_H };
+        let mut s = Surface {
+            buf: &mut buffer,
+            w: RENDER_W,
+            h: RENDER_H,
+        };
 
         match scene {
             0 => {
@@ -781,20 +810,18 @@ fn run_headless(duration_secs: f64) {
                     fade,
                     demo_time,
                 );
-                let np = narration_progress(scroll::NARRATION_GENESIS.len(), 14.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_GENESIS,
-                    narr_cx,
-                    RENDER_H as i32 / 2 + 100,
-                    np,
-                    fade,
-                );
                 commentary::render_commentary(
                     &mut s,
-                    &solver,
-                    scene,
-                    fade,
+                    &Panel {
+                        orrery: &genesis_orrery,
+                        solver: &solver,
+                        scene,
+                        slow: false,
+                        moved: None,
+                        sweep: None,
+                        changes: display_changes,
+                        fade,
+                    },
                 );
             }
             1 => {
@@ -820,7 +847,11 @@ fn run_headless(duration_secs: f64) {
                     flash_all: false,
                     flash_alpha: 0.0,
                     show_rings: true,
-                    moved_planet: if ring_flash > 0.01 { last_moved_planet } else { None },
+                    moved_planet: if ring_flash > 0.01 {
+                        last_moved_planet
+                    } else {
+                        None
+                    },
                     move_ring_alpha: ring_flash,
                     sweep_frontier: sweep,
                 };
@@ -834,7 +865,7 @@ fn run_headless(duration_secs: f64) {
                 particles.render(&mut s);
                 if sweep >= 0.0 {
                     let count = (sweep as usize + 1).min(21);
-                    let counter_text = format!("{} / 21 arcs checked", count);
+                    let counter_text = format!("{} / 21 pairs checked", count);
                     font::draw_text_centered(
                         &mut s,
                         &counter_text,
@@ -846,48 +877,35 @@ fn run_headless(duration_secs: f64) {
                 }
                 font::draw_text_centered_glow(
                     &mut s,
-                    "THE WEIGHT OF KNOWING",
+                    "RE-CHECK EVERYTHING",
                     narr_cx,
                     20,
                     2,
                     palette::dim(palette::CLASSICAL_RED, fade),
                     palette::dim(palette::CLASSICAL_RED, fade * 0.4),
                 );
-                let np = narration_progress(scroll::NARRATION_FULL_EVAL.len(), 16.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_FULL_EVAL,
-                    narr_cx,
-                    RENDER_H as i32 - 140,
-                    np,
-                    fade,
-                );
                 commentary::render_commentary(
                     &mut s,
-                    &solver,
-                    scene,
-                    fade,
+                    &Panel {
+                        orrery: &genesis_orrery,
+                        solver: &solver,
+                        scene,
+                        slow: false,
+                        moved: if ring_flash > 0.01 {
+                            last_moved_planet
+                        } else {
+                            None
+                        },
+                        sweep: (sweep >= 0.0).then_some(sweep),
+                        changes: display_changes,
+                        fade,
+                    },
                 );
             }
             2 => {
                 starfield.render(&mut s, fade * 0.12, demo_time);
-                dual.render(
-                    &mut s,
-                    &genesis_orrery,
-                    demo_time,
-                    fade,
-                    scene_t,
-                );
+                dual.render(&mut s, &genesis_orrery, demo_time, fade, scene_t);
                 particles.render(&mut s);
-                let np = narration_progress(scroll::NARRATION_DUAL.len(), 25.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_DUAL,
-                    RENDER_W as i32 / 2,
-                    85,
-                    np,
-                    fade * 0.95,
-                );
             }
             3 => {
                 starfield.render(&mut s, fade * 0.15, demo_time);
@@ -915,33 +933,31 @@ fn run_headless(duration_secs: f64) {
                 particles.render(&mut s);
                 font::draw_text_centered_glow(
                     &mut s,
-                    "UNLEASHED",
+                    "SOLVERFORGE, SCORED BY SERIO",
                     narr_cx,
                     20,
                     2,
                     palette::dim(palette::SERIO_BLUE, fade * 0.9),
                     palette::dim(palette::SERIO_BLUE, fade * 0.3),
                 );
-                score_graph.render(
-                    &mut s,
-                    40,
-                    RENDER_H as i32 - 210,
-                    fade * 0.9,
-                );
-                let np = narration_progress(scroll::NARRATION_CONVERGENCE.len(), 24.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_CONVERGENCE,
-                    narr_cx,
-                    RENDER_H as i32 - 120,
-                    np,
-                    fade * 0.9,
-                );
+                score_graph.render(&mut s, 40, RENDER_H as i32 - 210, fade * 0.9);
+                let slow = scene_t < SLOW_MOTION;
                 commentary::render_commentary(
                     &mut s,
-                    &solver,
-                    scene,
-                    fade,
+                    &Panel {
+                        orrery: solver.solution(),
+                        solver: &solver,
+                        scene,
+                        slow,
+                        moved: if slow {
+                            solver.history.last().map(|m| m.planet_idx)
+                        } else {
+                            None
+                        },
+                        sweep: None,
+                        changes: display_changes,
+                        fade,
+                    },
                 );
             }
             4 => {
@@ -992,20 +1008,18 @@ fn run_headless(duration_secs: f64) {
                     3,
                     palette::dim(status_col, fade),
                 );
-                let np = narration_progress(scroll::NARRATION_SOLUTION.len(), 10.0);
-                scroll::render_narration_centered(
-                    &mut s,
-                    scroll::NARRATION_SOLUTION,
-                    narr_cx,
-                    RENDER_H as i32 - 120,
-                    np,
-                    fade * 0.9,
-                );
                 commentary::render_commentary(
                     &mut s,
-                    &solver,
-                    scene,
-                    fade,
+                    &Panel {
+                        orrery: solver.solution(),
+                        solver: &solver,
+                        scene,
+                        slow: false,
+                        moved: None,
+                        sweep: None,
+                        changes: display_changes,
+                        fade,
+                    },
                 );
             }
             _ => {
@@ -1047,21 +1061,7 @@ fn run_headless(duration_secs: f64) {
                     1,
                     palette::dim(palette::EMERALD_600, fade * 0.6),
                 );
-                let np = narration_progress(scroll::NARRATION_OUTRO.len(), 14.0);
-                scroll::render_narration(
-                    &mut s,
-                    scroll::NARRATION_OUTRO,
-                    60,
-                    80,
-                    np,
-                    fade * 0.8,
-                );
-                scroller.render(
-                    &mut s,
-                    demo_time,
-                    RENDER_H as i32 - 50,
-                    fade,
-                );
+                scroller.render(&mut s, demo_time, RENDER_H as i32 - 50, fade);
                 font::draw_text_centered(
                     &mut s,
                     "CODED IN RUST // BERGAMO MMXXVI // PYTHAGORAS APPROVED",
@@ -1073,7 +1073,15 @@ fn run_headless(duration_secs: f64) {
             }
         }
 
-
+        story.draw(
+            &mut RgbBuffer {
+                buf: s.buf,
+                w: RENDER_W,
+                h: RENDER_H,
+            },
+            demo_time as f32,
+            1.0,
+        );
 
         // BGR24 output
         for (i, &px) in buffer.iter().enumerate() {
@@ -1233,5 +1241,8 @@ fn render_audio_wav(duration: f64, path: &str) {
     }
 
     std::fs::write(path, &wav).expect("Failed to write audio WAV");
-    eprintln!("[render] Audio written: {path} ({:.1} MB)", wav.len() as f64 / 1_048_576.0);
+    eprintln!(
+        "[render] Audio written: {path} ({:.1} MB)",
+        wav.len() as f64 / 1_048_576.0
+    );
 }

@@ -17,6 +17,10 @@ use solverforge_core::PlanningSolution;
 
 use crate::palette;
 
+/// A tuning where all 21 pairs are within TOLERANCE=0.015 of a Pythagorean
+/// interval: A2, C#3, E3, G#3, B3, D#4, F#4.
+const CONSONANT: [usize; PLANET_COUNT] = [0, 8, 14, 22, 28, 36, 42];
+
 /// Number of planets (the 7 classical bodies; the sun is fixed at center)
 pub const PLANET_COUNT: usize = 7;
 
@@ -199,8 +203,7 @@ impl Orrery {
     /// Frequencies chosen so ALL 21 pairwise ratios are Pythagorean consonant:
     /// A2, C#3, E3, G#3, B3, D#4, F#4 — augmented triad stack, zero red arcs.
     pub fn consonant() -> Self {
-        // All 21 pairs verified within TOLERANCE=0.015 of a Pythagorean interval.
-        let freqs = [0usize, 8, 14, 22, 28, 36, 42];
+        let freqs = CONSONANT;
 
         let defs: &[(&str, u32, f32)] = &[
             ("Luna", palette::LUNA, 4.0),
@@ -228,7 +231,18 @@ impl Orrery {
                 angle,
             });
         }
-        Orrery { planets, score: None }
+        Orrery {
+            planets,
+            score: None,
+        }
+    }
+
+    /// Move planet `idx` a quarter tone off its in-tune note, or back.
+    /// Used by the scenes that show one note change at a time.
+    pub fn retune(&mut self, idx: usize) {
+        let home = CONSONANT[idx];
+        let p = &mut self.planets[idx];
+        p.freq_idx = if p.freq_idx == home { home + 1 } else { home };
     }
 
     /// Update planet angles based on elapsed time.

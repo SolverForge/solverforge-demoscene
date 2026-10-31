@@ -22,7 +22,7 @@ CARGO_FLAGS   := --release
 RENDER_W      := 1280
 RENDER_H      := 720
 RENDER_FPS    := 60
-RENDER_SECS   := 120
+RENDER_SECS   := 167
 RENDER_OUT    := serio_02.mp4
 RENDER_GIF    := serio_02.gif
 

@@ -15,7 +15,6 @@ use crate::orrery::model::{Orrery, PLANET_COUNT};
 use crate::palette;
 use crate::palette::Surface;
 
-
 pub struct DualPanel {
     pub trail_left: TrailBuffer,
     pub trail_right: TrailBuffer,
@@ -121,14 +120,7 @@ impl DualPanel {
         }
     }
 
-    pub fn render(
-        &mut self,
-        s: &mut Surface,
-        orrery: &Orrery,
-        time: f64,
-        fade: f32,
-        scene_t: f64,
-    ) {
+    pub fn render(&mut self, s: &mut Surface, orrery: &Orrery, time: f64, fade: f32, scene_t: f64) {
         // Before first move: no arcs on either side
         let arcs_visible = if self.move_count == 0 { 0.0 } else { 1.0 };
 
@@ -147,13 +139,7 @@ impl DualPanel {
             move_ring_alpha: self.ring_alpha(),
             sweep_frontier: self.left_sweep_frontier(),
         };
-        orrery_render::render(
-            s,
-            orrery,
-            &mut self.trail_left,
-            &left_opts,
-            time,
-        );
+        orrery_render::render(s, orrery, &mut self.trail_left, &left_opts, time);
 
         // Right panel: SERIO (incremental)
         // After first move, always show highlighted pairs (6 bright, 15 dim).
@@ -184,13 +170,7 @@ impl DualPanel {
             move_ring_alpha: self.ring_alpha(),
             sweep_frontier: -1.0,
         };
-        orrery_render::render(
-            s,
-            orrery,
-            &mut self.trail_right,
-            &right_opts,
-            time,
-        );
+        orrery_render::render(s, orrery, &mut self.trail_right, &right_opts, time);
 
         // Central divider (animated: grows from center, flashes bright)
         render_divider(s, fade, scene_t);
@@ -409,4 +389,3 @@ fn render_cumulative_evals(
         );
     }
 }
-

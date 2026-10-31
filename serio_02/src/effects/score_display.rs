@@ -13,8 +13,8 @@ use crate::palette::Surface;
 
 const GRAPH_HEIGHT: usize = 80;
 const GRAPH_WIDTH: usize = 400;
-// One point per frame across the scene duration (35s * 60fps = 2100 frames → shown in 400px)
-const GRAPH_MAX_POINTS: usize = 2100;
+// One point per frame across the solver scene (42s * 60fps = 2520 frames → shown in 400px)
+const GRAPH_MAX_POINTS: usize = 2520;
 
 pub struct ScoreGraph {
     /// Rolling score history
@@ -30,7 +30,7 @@ impl ScoreGraph {
         ScoreGraph {
             scores: Vec::with_capacity(GRAPH_MAX_POINTS + 16),
             min_score: 0,
-            max_score: 1,
+            max_score: 0,
         }
     }
 
@@ -44,20 +44,17 @@ impl ScoreGraph {
         self.max_score = self.max_score.max(s);
     }
 
-    pub fn render(
-        &self,
-        s: &mut Surface,
-        x: i32,
-        y: i32,
-        fade: f32,
-    ) {
+    pub fn render(&self, s: &mut Surface, x: i32, y: i32, fade: f32) {
         if self.scores.len() < 2 {
             return;
         }
 
         let range = (self.max_score - self.min_score).max(1);
-        let gw = GRAPH_WIDTH.min(self.scores.len());
         let gh = GRAPH_HEIGHT;
+        // The whole history, squeezed into the graph's width.
+        let n = self.scores.len();
+        let gw = GRAPH_WIDTH.min(n);
+        let sample = |i: usize| self.scores[i * (n - 1) / (gw - 1).max(1)];
 
         // Background panel
         for py in 0..gh {
@@ -73,15 +70,14 @@ impl ScoreGraph {
         }
 
         // Score curve
-        let start = self.scores.len().saturating_sub(GRAPH_MAX_POINTS);
         for i in 1..gw {
-            let s0 = self.scores[start + i - 1];
-            let s1 = self.scores[start + i];
+            let s0 = sample(i - 1);
+            let s1 = sample(i);
 
             let px0 = x + (i - 1) as i32 * GRAPH_WIDTH as i32 / gw as i32;
-            let py0 = y + gh as i32 - 1 - ((s0 - self.min_score) * gh as i64 / range) as i32;
+            let py0 = y + gh as i32 - 1 - ((s0 - self.min_score) * (gh as i64 - 1) / range) as i32;
             let px1 = x + i as i32 * GRAPH_WIDTH as i32 / gw as i32;
-            let py1 = y + gh as i32 - 1 - ((s1 - self.min_score) * gh as i64 / range) as i32;
+            let py1 = y + gh as i32 - 1 - ((s1 - self.min_score) * (gh as i64 - 1) / range) as i32;
 
             let t = i as f32 / gw as f32;
             let col = palette::lerp_color(palette::RUST, palette::EMERALD_400, t);
@@ -117,4 +113,3 @@ impl ScoreGraph {
         );
     }
 }
-

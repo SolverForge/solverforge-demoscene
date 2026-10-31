@@ -162,15 +162,11 @@ pub fn render(
             let (px, py) = orrery.planet_screen_pos(planet, cx, cy);
             let ring_r = planet.visual_radius as i32 + 12;
             let ring_col = palette::dim(palette::GOLD, opts.move_ring_alpha * fade * 0.8);
-            ring_circle(
-                s, px as i32, py as i32, ring_r, 2, ring_col,
-            );
+            ring_circle(s, px as i32, py as i32, ring_r, 2, ring_col);
             // Outer glow ring
             let glow_r = ring_r + 4;
             let glow_col = palette::dim(palette::AMBER_400, opts.move_ring_alpha * fade * 0.3);
-            ring_circle(
-                s, px as i32, py as i32, glow_r, 1, glow_col,
-            );
+            ring_circle(s, px as i32, py as i32, glow_r, 1, glow_col);
         }
     }
 
@@ -181,6 +177,16 @@ pub fn render(
         let name_y = py as i32 - 4;
         let c = palette::dim(planet.color, fade * 0.7);
         font::draw_text(s, planet.name, name_x, name_y, 1, c);
+        // The planet's note, the only thing the score looks at.
+        let hz = format!("{:.0} Hz", planet.frequency());
+        font::draw_text(
+            s,
+            &hz,
+            name_x,
+            name_y + 10,
+            1,
+            palette::dim(planet.color, fade * 0.5),
+        );
     }
 }
 
@@ -233,7 +239,13 @@ fn render_sun(s: &mut Surface, cx: f64, cy: f64, fade: f32, time: f64) {
     }
 
     // Core — filled white-gold circle
-    fill_circle(s, cxi, cyi, core_r, palette::dim(palette::rgb(255, 245, 160), fade));
+    fill_circle(
+        s,
+        cxi,
+        cyi,
+        core_r,
+        palette::dim(palette::rgb(255, 245, 160), fade),
+    );
     fill_circle(
         s,
         cxi,
@@ -316,7 +328,13 @@ fn render_arcs(
             let f_a = pa.frequency();
             let f_b = pb.frequency();
             let (penalty, interval, dev) = harmonic_deviation(f_a, f_b);
-            let cons = 1.0 - (penalty as f64 / 1000.0);
+            // Gold means in tune (no penalty); any penalty draws the pair in
+            // red, darker the further it is from a pure ratio.
+            let cons = if penalty == 0 {
+                1.0
+            } else {
+                0.39 * (1.0 - penalty.min(1000) as f64 / 1000.0)
+            };
 
             // Is this pair highlighted (affected by current move)?
             let is_highlighted = opts
@@ -328,7 +346,11 @@ fn render_arcs(
             // Sweep strobe: the arc at the frontier glows white
             let sweep_strobe = if sweep_active {
                 let dist = opts.sweep_frontier - arc_index;
-                if dist < 1.0 { (1.0 - dist).clamp(0.0, 1.0) } else { 0.0 }
+                if dist < 1.0 {
+                    (1.0 - dist).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                }
             } else {
                 0.0
             };
@@ -346,18 +368,29 @@ fn render_arcs(
                 fade
             };
 
-            // Arc color from consonance
-            let base_color = harmonic_color(cons as f32);
+            // Arc color from consonance; an out-of-tune pair is a bright red
+            // that does not get lost among the gold ones.
+            let base_color = if penalty > 0 {
+                palette::lerp_color(
+                    palette::rgb(255, 96, 64),
+                    palette::rgb(220, 36, 28),
+                    (penalty.min(1000) as f32) / 1000.0,
+                )
+            } else {
+                harmonic_color(cons as f32)
+            };
             let arc_color = if sweep_strobe > 0.01 {
                 // Arc being evaluated RIGHT NOW: strobe white
                 let strobed = palette::lerp_color(base_color, palette::WHITE, sweep_strobe * 0.85);
                 palette::dim(strobed, effective_fade.max(fade * 0.6))
             } else if opts.flash_all && opts.flash_alpha > 0.01 {
-                let strobed = palette::lerp_color(base_color, palette::WHITE, opts.flash_alpha * 0.7);
+                let strobed =
+                    palette::lerp_color(base_color, palette::WHITE, opts.flash_alpha * 0.7);
                 palette::dim(strobed, effective_fade)
             } else if is_highlighted && opts.flash_alpha > 0.01 {
                 // SERIO highlighted arc: flash bright when move fires
-                let strobed = palette::lerp_color(base_color, palette::WHITE, opts.flash_alpha * 0.6);
+                let strobed =
+                    palette::lerp_color(base_color, palette::WHITE, opts.flash_alpha * 0.6);
                 palette::dim(strobed, effective_fade)
             } else {
                 palette::dim(base_color, effective_fade)
@@ -369,20 +402,26 @@ fn render_arcs(
 
             // Draw quadratic bezier arc (control point = center with offset)
             draw_bezier_arc(s, [(ax, ay), (bx, by), (cx, cy)], arc_color);
+            if penalty > 0 {
+                // Out of tune: drawn twice as thick.
+                draw_bezier_arc(
+                    s,
+                    [(ax + 1.0, ay), (bx + 1.0, by), (cx + 1.0, cy)],
+                    arc_color,
+                );
+                draw_bezier_arc(
+                    s,
+                    [(ax, ay + 1.0), (bx, by + 1.0), (cx, cy + 1.0)],
+                    arc_color,
+                );
+            }
 
             // Label near-perfect intervals
             if opts.show_labels && dev < 0.03 && cons > 0.7 {
                 let mid_x = ((ax + bx) / 2.0) as i32;
                 let mid_y = ((ay + by) / 2.0) as i32;
                 let label_col = palette::dim(palette::GOLD, effective_fade * 0.9);
-                font::draw_text(
-                    s,
-                    interval.name,
-                    mid_x - 20,
-                    mid_y - 8,
-                    1,
-                    label_col,
-                );
+                font::draw_text(s, interval.name, mid_x - 20, mid_y - 8, 1, label_col);
                 // Draw ratio label
                 let ratio_str = format!("{}:{}", interval.num, interval.den);
                 font::draw_text(
@@ -412,11 +451,7 @@ fn render_arcs(
 /// Draw a quadratic Bezier arc from (ax,ay) to (bx,by).
 /// Control point is 40% of the way from the midpoint toward the center,
 /// creating a gentle inward curve (toward the sun).
-fn draw_bezier_arc(
-    s: &mut Surface,
-    pts: [(f64, f64); 3],
-    color: u32,
-) {
+fn draw_bezier_arc(s: &mut Surface, pts: [(f64, f64); 3], color: u32) {
     let (ax, ay) = pts[0];
     let (bx, by) = pts[1];
     let (cx, cy) = pts[2];
@@ -455,14 +490,7 @@ fn draw_bezier_arc(
 
 // ── Planet rendering ──────────────────────────────────────────
 
-fn render_planet(
-    s: &mut Surface,
-    planet: &Planet,
-    px: f64,
-    py: f64,
-    fade: f32,
-    time: f64,
-) {
+fn render_planet(s: &mut Surface, planet: &Planet, px: f64, py: f64, fade: f32, time: f64) {
     let _ = time;
     let xi = px as i32;
     let yi = py as i32;
@@ -520,14 +548,7 @@ pub fn fill_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, col: u32) {
     }
 }
 
-pub fn bresenham(
-    s: &mut Surface,
-    x0: i32,
-    y0: i32,
-    x1: i32,
-    y1: i32,
-    col: u32,
-) {
+pub fn bresenham(s: &mut Surface, x0: i32, y0: i32, x1: i32, y1: i32, col: u32) {
     let dx = (x1 - x0).abs();
     let dy = -(y1 - y0).abs();
     let sx = if x0 < x1 { 1i32 } else { -1 };
@@ -556,14 +577,7 @@ pub fn bresenham(
 }
 
 /// Draw a circle ring (outline only)
-pub fn ring_circle(
-    s: &mut Surface,
-    cx: i32,
-    cy: i32,
-    r: i32,
-    thickness: i32,
-    col: u32,
-) {
+pub fn ring_circle(s: &mut Surface, cx: i32, cy: i32, r: i32, thickness: i32, col: u32) {
     let ro = r;
     let ri = (r - thickness).max(0);
     for dy in -ro..=ro {

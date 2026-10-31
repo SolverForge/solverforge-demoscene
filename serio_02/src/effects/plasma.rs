@@ -28,12 +28,7 @@ impl Plasma {
     }
 
     /// Render plasma with alpha-blend overlay on existing buffer
-    pub fn render_overlay(
-        &self,
-        s: &mut Surface,
-        time: f64,
-        alpha: f32,
-    ) {
+    pub fn render_overlay(&self, s: &mut Surface, time: f64, alpha: f32) {
         let t = time as f32;
         let w = s.w as f32;
         let h = s.h as f32;
@@ -61,8 +56,7 @@ impl Plasma {
                         let py = y + dy2;
                         if px < s.w && py < s.h {
                             let existing = s.buf[py * s.w + px];
-                            s.buf[py * s.w + px] =
-                                palette::lerp_color(existing, plasma_col, alpha);
+                            s.buf[py * s.w + px] = palette::lerp_color(existing, plasma_col, alpha);
                         }
                     }
                 }

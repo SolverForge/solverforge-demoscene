@@ -83,21 +83,36 @@ fn harmonic_filter(_s: &Orrery, _a: &Planet, _b: &Planet, _ai: usize, _bi: usize
 }
 
 fn harmonic_weight(s: &Orrery, ai: usize, bi: usize) -> HardSoftScore {
-    let f_a = FREQUENCIES[s.planets[ai].freq_idx];
-    let f_b = FREQUENCIES[s.planets[bi].freq_idx];
-    let (penalty, _, _) = harmonic_deviation(f_a, f_b);
+    HardSoftScore::of_soft(pair_penalty(s, ai, bi))
+}
 
-    // Adjacent orbits (distance 1) get 3x weight, distance-2 pairs get 2x.
-    // This makes the problem structurally harder: the solver can't just
-    // satisfy far-apart pairs and ignore neighbors.
-    let distance = ai.abs_diff(bi);
-    let multiplier = match distance {
+/// Orbit weight of a pair: adjacent orbits (distance 1) count 3x,
+/// distance-2 pairs 2x. The solver can't just satisfy far-apart pairs and
+/// ignore neighbours. This is the only way the orbits enter the score.
+pub fn pair_weight(ai: usize, bi: usize) -> i64 {
+    match ai.abs_diff(bi) {
         1 => 3,
         2 => 2,
         _ => 1,
-    };
+    }
+}
 
-    HardSoftScore::of_soft(penalty * multiplier)
+/// The soft penalty of one pair: its distance from a pure interval, times
+/// its orbit weight. The panel sums the same numbers the constraint does.
+pub fn pair_penalty(s: &Orrery, ai: usize, bi: usize) -> i64 {
+    let f_a = FREQUENCIES[s.planets[ai].freq_idx];
+    let f_b = FREQUENCIES[s.planets[bi].freq_idx];
+    let (penalty, _, _) = harmonic_deviation(f_a, f_b);
+    penalty * pair_weight(ai, bi)
+}
+
+/// Pairs of planets on the same note: the hard score is minus this.
+pub fn collision_count(s: &Orrery) -> i64 {
+    let p = &s.planets;
+    (0..p.len())
+        .flat_map(|i| ((i + 1)..p.len()).map(move |j| (i, j)))
+        .filter(|&(i, j)| p[i].freq_idx == p[j].freq_idx)
+        .count() as i64
 }
 
 // ── Constructor ───────────────────────────────────────────────

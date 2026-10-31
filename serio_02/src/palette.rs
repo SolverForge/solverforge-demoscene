@@ -67,7 +67,6 @@ pub const CHROME: u32 = rgb_const(220, 220, 235);
 // ── Celestial / Pythagorean Gold ─────────────────────────────
 pub const GOLD: u32 = rgb_const(255, 215, 0); // pure gold
 pub const AMBER_400: u32 = rgb_const(251, 191, 36); // amber
-pub const AMBER_600: u32 = rgb_const(217, 119, 6); // deep amber
 
 // ── Planetary Colors (classical 7) ───────────────────────────
 pub const LUNA: u32 = rgb_const(210, 215, 230); // silver-white
@@ -192,14 +191,7 @@ pub fn format_count(n: u64) -> String {
     }
 }
 
-pub fn bresenham(
-    s: &mut Surface,
-    x0: i32,
-    y0: i32,
-    x1: i32,
-    y1: i32,
-    col: u32,
-) {
+pub fn bresenham(s: &mut Surface, x0: i32, y0: i32, x1: i32, y1: i32, col: u32) {
     let dx = (x1 - x0).abs();
     let dy = -(y1 - y0).abs();
     let sx = if x0 < x1 { 1i32 } else { -1 };

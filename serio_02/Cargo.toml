@@ -19,3 +19,6 @@ cpal = "0.17"
 # The star of the show: SERIO incremental scoring engine
 solverforge-scoring = "0.5.8"
 solverforge-core = "0.5.8"
+
+# glyphfx (vendored once for every demo) and the story cards
+demofx = { path = "../vendor/demofx" }

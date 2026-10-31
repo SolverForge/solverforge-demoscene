@@ -138,12 +138,7 @@ impl Starfield {
         }
     }
 
-    fn render_tunnel_rings(
-        &self,
-        s: &mut Surface,
-        time: f64,
-        alpha: f32,
-    ) {
+    fn render_tunnel_rings(&self, s: &mut Surface, time: f64, alpha: f32) {
         let cx = s.w as f32 / 2.0;
         let cy = s.h as f32 / 2.0;
         let num_rings = 12;
