@@ -22,7 +22,7 @@ This entry is a route-splice board built to make SolverForge list variables legi
 
 ## Runtime Plan
 
-- total runtime: 116.0s
+- total runtime: 148.5s
 - fps: 60
 - resolution: 1280x720
 - default runtime: windowed `minifb` demo with live synthesized audio
@@ -34,15 +34,15 @@ This entry is a route-splice board built to make SolverForge list variables legi
 | Scene | Time | Purpose |
 |---|---:|---|
 | Invocation | 0:00-0:10 | reveal the route plan |
-| Stations | 0:10-0:22 | light route beads in list order |
-| Successors | 0:22-0:34 | make predecessor/successor structure explicit |
-| RequiredStation | 0:34-0:46 | introduce a required off-route station |
-| InsertionSearch | 0:46-1:00 | score candidate insertion positions |
-| Splice | 1:00-1:14 | break one link, form two, shift downstream indices |
-| ConstraintRepair | 1:14-1:30 | pulse only local route constraints |
-| Reroute | 1:30-1:40 | redraw a compact detour around a blocked link |
-| FinalRoute | 1:40-1:48 | lock the completed route circuit |
-| Scrolltext | 1:48-1:56 | land the list-variable thesis |
+| Stations | 0:10-0:27 | light route beads in list order |
+| Successors | 0:27-0:44.5 | make predecessor/successor structure explicit |
+| RequiredStation | 0:44.5-1:00.5 | introduce a required off-route station |
+| InsertionSearch | 1:00.5-1:16.5 | score candidate insertion positions |
+| Splice | 1:16.5-1:33 | break one link, form two, shift downstream indices |
+| ConstraintRepair | 1:33-1:49 | pulse only local route constraints |
+| Reroute | 1:49-2:04.5 | redraw a compact detour around a blocked link |
+| FinalRoute | 2:04.5-2:12.5 | lock the completed route circuit |
+| Scrolltext | 2:12.5-2:28.5 | land the list-variable thesis |
 
 ## Must-Have Rhetorical Beats
 
@@ -55,27 +55,13 @@ This entry is a route-splice board built to make SolverForge list variables legi
 7. a later obstruction causes a compact detour
 8. the final route is visibly valid and ordered
 
-## Recommended Caption Script
+## Caption Script
 
-- SOLVERFORGE PRESENTS
-- ORDERED MOVEMENT THROUGH CONSTRAINED SPACE
-- THE ROUTE IS A LIST
-- EACH STATION HAS A SUCCESSOR
-- A REQUIRED STATION APPEARS
-- EVALUATE INSERTION POSITIONS
-- TRY INSERT AT POS 4
-- BREAK ONE LINK FORM TWO
-- DOWNSTREAM INDICES SHIFT
-- ONLY LOCAL CONSTRAINTS PULSE
-- A LINK IS BLOCKED
-- A COMPACT DETOUR REPAIRS THE ROUTE
-- THE ORDERED PATH IS VALID
-- LIST VARIABLES ARE ORDERED SPACE
-- SOLVERFORGE
+The captions are story cards (`src/story.rs`): one or two plain sentences per moment, timed to the scene, brought in by a glyphfx effect over a scrim in the sky above the board. They name what the viewer is looking at (a vehicle's list of stops, a stop's place in the list, the link to the next stop, the extra cost of each gap, the cheapest gap) instead of the solver's vocabulary; "list variable" is introduced only at the end, after the viewer has seen one.
 
-## Scrolltext Draft
+The outro scroller restates the thesis in the same words:
 
-LIST VARIABLES ARE ORDERED SPACE ... ONE REQUIRED STATION ENTERS THE ROUTE ... ONE SUCCESSOR LINK BREAKS ... TWO LINKS FORM ... DOWNSTREAM INDICES SHIFT ... LOCAL ROUTE CONSTRAINTS REPAIR ... SOLVERFORGE BERGAMO MMXXVI ...
+A ROUTE IS AN ORDERED LIST ... ADD A STOP: TRY EVERY GAP, KEEP THE CHEAPEST ... RE-CHECK ONLY WHAT CHANGED ... SOLVERFORGE // BERGAMO MMXXVI ...
 
 ## Implementation Doctrine
 
@@ -112,6 +98,7 @@ framebuffer.rs raw BGR framebuffer and minifb conversion
 scene.rs       semantic scene timing
 route_plan.rs  station-backed route-plan layout
 route.rs       list-variable route state
+story.rs       the story cards
 render.rs      software draw passes
 main.rs        CLI orchestration
 ```

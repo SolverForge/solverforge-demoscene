@@ -7,6 +7,7 @@ mod render;
 mod route;
 mod route_plan;
 mod scene;
+mod story;
 
 use std::env;
 use std::io::{self, Write};
@@ -74,6 +75,7 @@ fn run_windowed(config: &DemoConfig) {
 
     let plan = RoutePlan::new();
     let route = RouteState::new(&plan);
+    let mut story = story::cards();
     let audio_clock = audio::AudioClock::new();
     let _audio_stream = audio::start_audio(audio_clock.clone());
 
@@ -115,7 +117,7 @@ fn run_windowed(config: &DemoConfig) {
         audio_clock.set_time(demo_time);
 
         fb.clear(VOID);
-        render_frame(&mut fb, &plan, &route, demo_time);
+        render_frame(&mut fb, &plan, &route, &mut story, demo_time);
         fb.to_minifb_buffer(&mut minifb_buffer);
         window
             .update_with_buffer(&minifb_buffer, config.width, config.height)
@@ -127,6 +129,7 @@ fn run_headless(config: &DemoConfig, seconds: f32) -> io::Result<()> {
     let seconds = seconds.max(0.0);
     let plan = RoutePlan::new();
     let route = RouteState::new(&plan);
+    let mut story = story::cards();
     audio::render_audio_wav(seconds, AUDIO_WAV_OUT);
 
     eprintln!(
@@ -142,7 +145,7 @@ fn run_headless(config: &DemoConfig, seconds: f32) -> io::Result<()> {
     for frame_idx in 0..frames {
         let t = frame_idx as f32 / config.fps as f32;
         fb.clear(VOID);
-        render_frame(&mut fb, &plan, &route, t);
+        render_frame(&mut fb, &plan, &route, &mut story, t);
         out.write_all(&fb.pixels)?;
         if frame_idx > 0 && frame_idx % (config.fps as usize * 10) == 0 {
             eprintln!("[render] {:.0}s / {:.0}s", t, seconds);

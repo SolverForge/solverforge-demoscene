@@ -19,23 +19,42 @@ pub struct SceneState {
     pub progress: f32,
 }
 
+/// Scene starts in order, then the end of the demo. The lengths fit the
+/// story cards (story.rs), each held long enough to read; the end sits on the
+/// song's 77th bar line (125 BPM) so the music finishes on the beat.
 pub const SCENE_BOUNDARIES: &[f32] = &[
-    0.0, 10.0, 22.0, 34.0, 46.0, 60.0, 74.0, 90.0, 100.0, 108.0, 124.0,
+    0.0, 10.0, 26.5, 44.0, 60.0, 75.5, 92.0, 108.0, 123.5, 131.5, 147.84,
 ];
 
+const SCENES: [SceneId; 10] = [
+    SceneId::Invocation,
+    SceneId::Stations,
+    SceneId::Successors,
+    SceneId::RequiredStation,
+    SceneId::InsertionSearch,
+    SceneId::Splice,
+    SceneId::ConstraintRepair,
+    SceneId::Reroute,
+    SceneId::FinalRoute,
+    SceneId::Scrolltext,
+];
+
+/// When a scene starts, in seconds.
+pub fn scene_start(id: SceneId) -> f32 {
+    let idx = SCENES.iter().position(|s| *s == id).unwrap_or(0);
+    SCENE_BOUNDARIES[idx]
+}
+
 pub fn scene_state(t: f32) -> SceneState {
-    let (id, start, end) = match t {
-        t if t < 10.0 => (SceneId::Invocation, 0.0, 10.0),
-        t if t < 22.0 => (SceneId::Stations, 10.0, 22.0),
-        t if t < 34.0 => (SceneId::Successors, 22.0, 34.0),
-        t if t < 46.0 => (SceneId::RequiredStation, 34.0, 46.0),
-        t if t < 60.0 => (SceneId::InsertionSearch, 46.0, 60.0),
-        t if t < 74.0 => (SceneId::Splice, 60.0, 74.0),
-        t if t < 90.0 => (SceneId::ConstraintRepair, 74.0, 90.0),
-        t if t < 100.0 => (SceneId::Reroute, 90.0, 100.0),
-        t if t < 108.0 => (SceneId::FinalRoute, 100.0, 108.0),
-        _ => (SceneId::Scrolltext, 108.0, 124.0),
-    };
+    let idx = SCENE_BOUNDARIES[1..SCENES.len()]
+        .iter()
+        .position(|start| t < *start)
+        .unwrap_or(SCENES.len() - 1);
+    let (id, start, end) = (
+        SCENES[idx],
+        SCENE_BOUNDARIES[idx],
+        SCENE_BOUNDARIES[idx + 1],
+    );
 
     let duration = end - start;
     let duration = if duration > 0.0 { duration } else { 0.0 };

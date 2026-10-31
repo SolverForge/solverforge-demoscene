@@ -12,3 +12,6 @@ path = "src/main.rs"
 cpal = "0.17.3"
 fundsp = "0.23.0"
 minifb = "0.28.0"
+
+# glyphfx (vendored once for every demo) and the story cards
+demofx = { path = "../vendor/demofx" }

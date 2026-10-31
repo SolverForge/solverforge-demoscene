@@ -16,7 +16,7 @@ impl Framebuffer {
     }
 
     pub fn clear(&mut self, color: Color) {
-        for chunk in self.pixels.chunks_exact_mut(3) {
+        for chunk in self.pixels.as_chunks_mut::<3>().0 {
             chunk[0] = color.b;
             chunk[1] = color.g;
             chunk[2] = color.r;
@@ -91,11 +91,31 @@ impl Framebuffer {
     }
 
     pub fn to_minifb_buffer(&self, out: &mut [u32]) {
-        for (idx, chunk) in self.pixels.chunks_exact(3).enumerate() {
+        for (idx, chunk) in self.pixels.as_chunks::<3>().0.iter().enumerate() {
             let b = chunk[0] as u32;
             let g = chunk[1] as u32;
             let r = chunk[2] as u32;
             out[idx] = (r << 16) | (g << 8) | b;
         }
+    }
+}
+
+/// Story cards draw straight into the BGR frame.
+impl demofx::Pixels for Framebuffer {
+    fn size(&self) -> (usize, usize) {
+        (self.width, self.height)
+    }
+
+    fn get(&self, x: usize, y: usize) -> u32 {
+        let idx = (y * self.width + x) * 3;
+        let (b, g, r) = (self.pixels[idx], self.pixels[idx + 1], self.pixels[idx + 2]);
+        ((r as u32) << 16) | ((g as u32) << 8) | b as u32
+    }
+
+    fn put(&mut self, x: usize, y: usize, rgb: u32) {
+        let idx = (y * self.width + x) * 3;
+        self.pixels[idx] = rgb as u8;
+        self.pixels[idx + 1] = (rgb >> 8) as u8;
+        self.pixels[idx + 2] = (rgb >> 16) as u8;
     }
 }

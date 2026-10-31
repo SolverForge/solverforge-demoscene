@@ -6,8 +6,18 @@ use crate::palette::{
 use crate::route::RouteState;
 use crate::route_plan::{RoutePlan, StationRole};
 use crate::scene::{scene_state, SceneId, SceneState};
+use demofx::Cards;
 
-pub fn render_frame(fb: &mut Framebuffer, plan: &RoutePlan, route: &RouteState, t: f32) {
+/// Seconds into the splice scene when the later stops are renumbered.
+const SPLICE_RENUMBER: f32 = 10.0;
+
+pub fn render_frame(
+    fb: &mut Framebuffer,
+    plan: &RoutePlan,
+    route: &RouteState,
+    story: &mut Cards,
+    t: f32,
+) {
     let scene = scene_state(t);
     draw_background(fb, scene, t);
     draw_plan_floor(fb, plan, scene);
@@ -29,7 +39,6 @@ pub fn render_frame(fb: &mut Framebuffer, plan: &RoutePlan, route: &RouteState, 
             draw_route(fb, plan, route.initial_route(), 1.0, t, true);
             draw_required_station(fb, plan, 1.0, t);
             draw_candidate_arcs(fb, plan, route, 1.0, Some(scene.progress));
-            draw_text(fb, 86, 642, "TRY INSERT AT POS 4", GOLD, 2, 0.88);
         }
         SceneId::Splice => draw_splice(fb, plan, route, scene, t),
         SceneId::ConstraintRepair => {
@@ -44,10 +53,12 @@ pub fn render_frame(fb: &mut Framebuffer, plan: &RoutePlan, route: &RouteState, 
     }
 
     draw_station_beads(fb, plan, route, scene, t);
-    draw_captions(fb, scene);
     if matches!(scene.id, SceneId::Scrolltext) {
         draw_scrolltext(fb, scene);
+    } else {
+        draw_progress(fb, scene);
     }
+    story.draw(fb, t, 1.0);
     draw_post(fb);
 }
 
@@ -256,15 +267,36 @@ fn draw_station_beads(
                 0.34,
             );
         }
-        draw_text(
-            fb,
-            p.x as i32 - 5,
-            p.y as i32 - 27 - lift as i32,
-            &idx.to_string(),
-            MINT,
-            1,
-            0.94,
-        );
+        // During the splice the later stops keep their old places until the
+        // new links have formed, then all move one place down at once.
+        let before_shift = matches!(scene.id, SceneId::Splice) && scene.local_t < SPLICE_RENUMBER;
+        let shown = if before_shift && idx > route.selected_position {
+            Some(idx - 1)
+        } else if before_shift && idx == route.selected_position {
+            None
+        } else {
+            Some(idx)
+        };
+        let shifted = matches!(scene.id, SceneId::Splice)
+            && idx > route.selected_position
+            && scene.local_t >= SPLICE_RENUMBER;
+        let flash = if shifted {
+            1.0 - smoothstep((scene.local_t - SPLICE_RENUMBER) / 1.2)
+        } else {
+            0.0
+        };
+        if let Some(n) = shown {
+            let big = flash > 0.3;
+            draw_text(
+                fb,
+                p.x as i32 - if big { 10 } else { 5 },
+                p.y as i32 - 27 - lift as i32 - if big { 8 } else { 0 },
+                &n.to_string(),
+                mix(MINT, GOLD, flash),
+                if big { 2 } else { 1 },
+                0.94,
+            );
+        }
     }
 
     if !matches!(scene.id, SceneId::Invocation | SceneId::Stations) {
@@ -359,17 +391,23 @@ fn draw_candidate_arcs(
             alpha,
             if selected { 2 } else { 1 },
         );
-        if search_progress.is_some() {
-            let label_x = ((prev.x + next.x + required.x) / 3.0) as i32 - 14;
-            let label_y = ((prev.y + next.y + required.y) / 3.0) as i32 - 18;
+        if let Some(progress) = search_progress {
+            // The extra cost of this gap, shown once it has been tried.
+            let tried = smoothstep((progress - candidate.score * 0.8) / 0.08);
+            let label_x = ((prev.x + next.x + required.x) / 3.0) as i32 - 12;
+            let label_y = ((prev.y + next.y + required.y) / 3.0) as i32 - 22;
             draw_text(
                 fb,
                 label_x,
                 label_y,
-                &format!("{:.0}", candidate.score * 100.0),
-                color,
-                1,
-                alpha + 0.2,
+                &format!("+{:.0}", candidate.score * 100.0),
+                if selected && scored {
+                    GOLD
+                } else {
+                    mix(GLASS, PANIC, tried * 0.5)
+                },
+                2,
+                0.25 + tried * 0.7,
             );
         }
     }
@@ -492,7 +530,6 @@ fn draw_reroute(
         0.9,
     );
     draw_route(fb, plan, route.rerouted_route(), reroute, t, true);
-    draw_text(fb, 86, 642, "ONLY THE AFFECTED LINKS REDRAW", MINT, 2, 0.82);
 }
 
 fn draw_final_lock(fb: &mut Framebuffer, plan: &RoutePlan, scene: SceneState, t: f32) {
@@ -529,31 +566,7 @@ fn draw_final_lock(fb: &mut Framebuffer, plan: &RoutePlan, scene: SceneState, t:
     }
 }
 
-fn draw_captions(fb: &mut Framebuffer, scene: SceneState) {
-    let (title, subtitle) = match scene.id {
-        SceneId::Invocation => (
-            "SOLVERFORGE PRESENTS",
-            "ORDERED MOVEMENT THROUGH CONSTRAINED SPACE",
-        ),
-        SceneId::Stations => ("THE ROUTE IS A LIST", "STATIONS LIGHT IN ROUTE ORDER"),
-        SceneId::Successors => (
-            "EACH STATION HAS A SUCCESSOR",
-            "PREV NEXT LINKS CARRY THE ROUTE",
-        ),
-        SceneId::RequiredStation => (
-            "A REQUIRED STATION APPEARS",
-            "THE LIST MUST ACCEPT A NEW VISIT",
-        ),
-        SceneId::InsertionSearch => ("EVALUATE INSERTION POSITIONS", "THE BEST LOCAL SPLICE WINS"),
-        SceneId::Splice => ("BREAK ONE LINK FORM TWO", "DOWNSTREAM INDICES SHIFT"),
-        SceneId::ConstraintRepair => ("ONLY LOCAL CONSTRAINTS PULSE", "TIME CAP ORDER DISTANCE"),
-        SceneId::Reroute => ("A LINK IS BLOCKED", "A COMPACT DETOUR REPAIRS THE ROUTE"),
-        SceneId::FinalRoute => ("THE ORDERED PATH IS VALID", "THE ROUTE LOCKS"),
-        SceneId::Scrolltext => ("LIST VARIABLES ARE ORDERED SPACE", "SOLVERFORGE"),
-    };
-
-    draw_text(fb, 58, 36, title, MINT, 3, 0.86);
-    draw_text(fb, 60, 82, subtitle, GOLD, 2, 0.76);
+fn draw_progress(fb: &mut Framebuffer, scene: SceneState) {
     let progress_w = 214;
     let x = fb.width as i32 - progress_w - 56;
     let y = fb.height as i32 - 38;
@@ -570,42 +583,14 @@ fn draw_captions(fb: &mut Framebuffer, scene: SceneState) {
 }
 
 fn draw_scrolltext(fb: &mut Framebuffer, scene: SceneState) {
-    let thesis = "LIST VARIABLES ARE ORDERED SPACE";
-    let hold = 5.8;
-    if scene.local_t < hold {
-        let alpha = smoothstep(scene.local_t / 0.7) * smoothstep((hold - scene.local_t) / 0.8);
-        draw_centered_text(fb, fb.height as i32 - 112, thesis, MINT, 3, 0.92 * alpha);
-        draw_centered_text(
-            fb,
-            fb.height as i32 - 70,
-            "ONE SPLICE SETTLES THE ROUTE",
-            GOLD,
-            2,
-            0.66 * alpha,
-        );
-        return;
-    }
-
-    let text = "ONE REQUIRED STATION ENTERS THE ROUTE ... ONE SUCCESSOR LINK BREAKS ... TWO LINKS FORM ... DOWNSTREAM INDICES SHIFT ... LOCAL ROUTE CONSTRAINTS REPAIR ... SOLVERFORGE BERGAMO MMXXVI ... ";
-    let speed = 22.0;
+    let text = "A ROUTE IS AN ORDERED LIST ... ADD A STOP: TRY EVERY GAP, KEEP THE CHEAPEST ... RE-CHECK ONLY WHAT CHANGED ... SOLVERFORGE // BERGAMO MMXXVI ... ";
+    let speed = 130.0;
     let width = text_width(text, 2);
-    let mut x = 70 - ((scene.local_t - hold) * speed) as i32;
+    let mut x = fb.width as i32 - (scene.local_t * speed) as i32;
     while x < fb.width as i32 {
-        draw_text(fb, x, fb.height as i32 - 92, text, MINT, 2, 0.9);
+        draw_text(fb, x, fb.height as i32 - 40, text, MINT, 2, 0.9);
         x += width + 80;
     }
-}
-
-fn draw_centered_text(
-    fb: &mut Framebuffer,
-    y: i32,
-    text: &str,
-    color: Color,
-    scale: i32,
-    alpha: f32,
-) {
-    let x = (fb.width as i32 - text_width(text, scale)) / 2;
-    draw_text(fb, x, y, text, color, scale, alpha);
 }
 
 fn role_color(role: StationRole) -> Color {
@@ -923,6 +908,7 @@ fn glyph_rows(ch: char) -> [u8; 7] {
         '7' => [0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
         '8' => [0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E],
         '9' => [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E],
+        '+' => [0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00],
         '-' => [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
         '.' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C],
         ',' => [0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C, 0x08],

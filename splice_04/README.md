@@ -1,6 +1,6 @@
 # Route Splice 04
 
-A 116-second SolverForge demoscene intro about list variables, successor links, insertion, and local route repair inside a top-down route plan.
+A 148-second SolverForge demoscene intro about list variables, successor links, insertion, and local route repair inside a top-down route plan.
 
 **A route list is ordered movement through constrained space.**
 
@@ -21,20 +21,32 @@ The central metaphor is a route-plan board where:
 
 The default experience is a windowed Rust demo with a standalone arena-tracker synth song: low ostinato bass, gated chord stabs, punchy sampled-style drums, sparse lead hooks, echo returns, fills, pads, and a staged solo section. The visuals do not drive the music.
 
+## The story
+
+The board explains itself on cards: one or two plain sentences per moment, set in the empty sky above the route and timed to what is happening (`src/story.rs`). Every card stays up long enough to read at a slow pace (entrance, 0.8 s plus 0.25 s a word, exit); demofx refuses a shorter window, and the scenes are as long as their cards need. A glyphfx effect brings the words in, they hold still to be read, then burn out letter by letter over a soft scrim.
+
+- A vehicle visits a list of stops, one after another. To SolverForge the route is a list: the number on each stop is its place in that list.
+- Each stop points to the next; the cost of a route lives mostly in those links.
+- A new stop must be visited. SolverForge tries every gap between two consecutive stops, scores the extra cost of each detour (lower is better), and the cheapest gap wins: between stop 3 and stop 4, for 18.
+- Inserting it breaks one link and makes two; every later stop moves one place down the list.
+- The rules (arrival time, vehicle load, visit order, distance) are re-checked only where the route changed.
+- A road closes; the same move repairs it with one detour stop, and only the broken link is redrawn.
+- SolverForge calls this a list variable: an ordered list the solver edits one splice at a time.
+
 ## Scenes
 
 | # | Scene | Time | Effect |
 |---|---:|---|---|
 | 1 | Invocation | 0-10s | Route plan emerges from blackness |
-| 2 | Stations | 10-22s | Route beads light in list order |
-| 3 | Successors | 22-34s | Moving arrows and `prev > next` labels make successor structure explicit |
-| 4 | Required Station | 34-46s | A blue required station appears off-route |
-| 5 | Insertion Search | 46-60s | Candidate arcs score insertion positions and the best splice wins |
-| 6 | Splice | 60-74s | One link breaks, two links form, downstream indices shift |
-| 7 | Constraint Repair | 74-90s | Only local route constraints pulse and settle |
-| 8 | Reroute | 90-100s | A blocked link causes a compact detour |
-| 9 | Final Route | 100-108s | The completed ordered path glows |
-| 10 | Scrolltext | 108-116s | Classic demoscene outro and loop |
+| 2 | Stations | 10-27s | Route beads light in list order |
+| 3 | Successors | 27-44.5s | Moving arrows and `prev > next` labels make successor structure explicit |
+| 4 | Required Station | 44.5-60.5s | A blue required station appears off-route |
+| 5 | Insertion Search | 60.5-76.5s | Candidate arcs score insertion positions and the best splice wins |
+| 6 | Splice | 76.5-93s | One link breaks, two links form, downstream indices shift |
+| 7 | Constraint Repair | 93-109s | Only local route constraints pulse and settle |
+| 8 | Reroute | 109-124.5s | A blocked link causes a compact detour |
+| 9 | Final Route | 124.5-132.5s | The completed ordered path glows |
+| 10 | Scrolltext | 132.5-148.5s | Classic demoscene outro and loop |
 
 ## Running
 
@@ -66,7 +78,7 @@ make render-gif   # render route_splice_04.gif
 Headless export is explicit:
 
 ```bash
-cargo run --release -- --render 116 | \
+cargo run --release -- --render 149 | \
   ffmpeg -f rawvideo -pixel_format bgr24 \
     -video_size 1280x720 -framerate 60 -i - \
     -i target/demo_audio.wav \
@@ -98,7 +110,8 @@ src/
 ├── scene.rs       scene timing and SPACE boundaries
 ├── route_plan.rs  station-backed route-plan geometry
 ├── route.rs       list-variable route state and insertion/reroute data
-└── render.rs      software-rendered route plan, route effects, captions
+├── story.rs       the story cards: text, timing, glyphfx effect
+└── render.rs      software-rendered route plan and route effects
 ```
 
 Design principles:
@@ -108,6 +121,7 @@ Design principles:
 - one stable route-plan stage for all route mutations
 - standalone song first, visual timing second
 - ordered route mutation must be legible without reading docs
+- the cards say what is on screen, in plain words, while it is on screen
 
 ## License
 

@@ -82,7 +82,7 @@ impl RouteState {
                 },
                 ConstraintBadge {
                     label: "DIST",
-                    station: 12,
+                    station: 3,
                     delay: 0.66,
                 },
             ],

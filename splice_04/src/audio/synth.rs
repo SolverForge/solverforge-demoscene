@@ -2,22 +2,21 @@ use std::sync::{Arc, Mutex};
 
 use fundsp::prelude32::*;
 
+use crate::scene::{scene_start, SceneId};
+
 const BPM: f32 = 125.0;
 const BEAT: f32 = 60.0 / BPM;
 const BAR: f32 = BEAT * 4.0;
 const STEP: f32 = BEAT / 4.0;
-const SONG_LEN: f32 = 124.0;
+const SONG_LEN: f32 = crate::config::DEFAULT_DURATION_SECONDS;
+/// Stations on the initial route (render.rs lights one bead per station).
+const ROUTE_STATIONS: usize = 11;
 
 const BRIDGE_START: f32 = 8.0;
 const BRIDGE_FULL: f32 = 14.0;
 const OVERDUB_START: f32 = BAR * 8.0;
 const OVERDUB_FULL: f32 = BAR * 10.0;
 const GUITAR_TIME_SCALE: f32 = 1.0;
-const STATION_INSERT_TIME: f32 = 60.0;
-const GRAPH_CHANGE_TIMES: [f32; 3] = [46.0, 60.0, 90.0];
-const ROUTE_VISIT_DRAW_TIMES: [f32; 11] = [
-    10.22, 11.31, 12.40, 13.49, 14.58, 15.67, 16.76, 17.85, 18.95, 20.04, 21.13,
-];
 
 const A4: f32 = 440.00;
 const B4: f32 = 493.88;
@@ -147,12 +146,16 @@ impl RouteSynth {
             self.unit.reset();
         }
         self.last_time = time;
-        let fade = ramp(time, 0.0, 1.5) * ramp(SONG_LEN - time, 0.0, 4.0);
-        let (left, right) = self.unit.get_stereo();
+        let mut stems = [0.0f32; 4];
+        self.unit.tick(&[], &mut stems);
+        let gains = outro_gains(time);
+        let mono: f32 = stems.iter().zip(gains).map(|(x, g)| x * g).sum();
+        let fade = ramp(time, 0.0, 1.5);
+        let music = master_shape(mono) * fade;
         let (event_left, event_right) = route_event_sfx(time);
         (
-            (left * fade + event_left).clamp(-1.0, 1.0),
-            (right * fade + event_right).clamp(-1.0, 1.0),
+            (music + event_left).clamp(-1.0, 1.0),
+            (music + event_right).clamp(-1.0, 1.0),
         )
     }
 }
@@ -161,23 +164,39 @@ fn route_event_sfx(time: f32) -> (f32, f32) {
     let mut left = 0.0;
     let mut right = 0.0;
 
-    for event_time in GRAPH_CHANGE_TIMES {
+    // The route board changes at the start of the search, the splice and the
+    // reroute; the stations light one by one through the stations scene.
+    let graph_changes = [
+        scene_start(SceneId::InsertionSearch),
+        scene_start(SceneId::Splice),
+        scene_start(SceneId::Reroute),
+    ];
+    for event_time in graph_changes {
         let (event_left, event_right) = graph_change_sfx(time - event_time);
         left += event_left;
         right += event_right;
     }
 
-    for (idx, event_time) in ROUTE_VISIT_DRAW_TIMES.iter().copied().enumerate() {
-        let (event_left, event_right) = visit_draw_sfx(time - event_time, idx);
+    for idx in 0..ROUTE_STATIONS {
+        let (event_left, event_right) = visit_draw_sfx(time - visit_draw_time(idx), idx);
         left += event_left;
         right += event_right;
     }
 
-    let (insert_left, insert_right) = station_insert_sfx(time - STATION_INSERT_TIME);
+    let (insert_left, insert_right) = station_insert_sfx(time - scene_start(SceneId::Splice));
     left += insert_left;
     right += insert_right;
 
     (left, right)
+}
+
+/// When render.rs lights route bead idx during the stations scene.
+fn visit_draw_time(idx: usize) -> f32 {
+    let (from, to) = (
+        scene_start(SceneId::Stations),
+        scene_start(SceneId::Successors),
+    );
+    from + (to - from) * (idx as f32 + 0.2) / ROUTE_STATIONS as f32
 }
 
 fn graph_change_sfx(event_t: f32) -> (f32, f32) {
@@ -424,7 +443,8 @@ fn build_synth() -> Box<dyn AudioUnit> {
     let pad = pad_voice() * pad_volume();
     let lead = lead * (dc(1.0) + bridge.clone() * 0.35);
     let arp = arp * (dc(1.0) + bridge * 0.55);
-    let groove = (bass + lead + arp * 0.70 + pad) * groove_vol;
+    let groove = (bass + lead + arp * 0.70) * groove_vol.clone();
+    let pad = pad * groove_vol;
 
     let overbeat_vol = lfo(move |t| ramp(t, OVERDUB_START, OVERDUB_FULL));
     let overbeat = overbeat() * overbeat_vol;
@@ -443,9 +463,36 @@ fn build_synth() -> Box<dyn AudioUnit> {
         }
     });
 
-    let mono = drums * 0.45 + groove * melodics_duck * sidechain * 0.92 + guitar + overbeat * 1.55;
-    let master = mono >> shape_fn(master_shape);
-    Box::new(master >> split::<U2>())
+    // Four stems, mixed in RouteSynth::sample so the ending can let them go
+    // one after another: drums, groove (bass, lead, arp), pad, overdub.
+    let duck = melodics_duck * sidechain * 0.92;
+    let groove = groove * duck.clone();
+    let pad = pad * duck;
+    Box::new((drums * 0.45) | groove | pad | (guitar + overbeat * 1.55))
+}
+
+/// The ending: the stems leave one at a time over the last bars, each fading
+/// out smoothly, so the song winds down instead of stopping. Gains for
+/// (drums, groove, pad, overdub) at time t.
+fn outro_gains(t: f32) -> [f32; 4] {
+    let leave = |from_bars: f32, to_bars: f32| {
+        1.0 - smooth(ramp(
+            t,
+            SONG_LEN - from_bars * BAR,
+            SONG_LEN - to_bars * BAR,
+        ))
+    };
+    let overdub = leave(12.0, 8.0);
+    let drums = leave(8.0, 4.0);
+    let groove = leave(6.0, 2.0);
+    // The pad swells to carry the last bars, then rings out to silence.
+    let pad =
+        (1.0 + 0.5 * smooth(ramp(t, SONG_LEN - 8.0 * BAR, SONG_LEN - 5.0 * BAR))) * leave(4.0, 0.0);
+    [drums, groove, pad, overdub]
+}
+
+fn smooth(x: f32) -> f32 {
+    x * x * (3.0 - 2.0 * x)
 }
 
 fn pad_voice() -> An<impl AudioNode<Inputs = U0, Outputs = U1>> {
@@ -766,10 +813,10 @@ mod tests {
 
     #[test]
     fn route_event_sfx_marks_graph_and_station_changes() {
-        let graph_hit = route_event_sfx(GRAPH_CHANGE_TIMES[0] + 0.03);
-        let station_hit = route_event_sfx(STATION_INSERT_TIME + 0.12);
-        let visit_hit = route_event_sfx(ROUTE_VISIT_DRAW_TIMES[3] + 0.003);
-        let quiet = route_event_sfx(12.0);
+        let graph_hit = route_event_sfx(scene_start(SceneId::InsertionSearch) + 0.03);
+        let station_hit = route_event_sfx(scene_start(SceneId::Splice) + 0.12);
+        let visit_hit = route_event_sfx(visit_draw_time(3) + 0.003);
+        let quiet = route_event_sfx(visit_draw_time(1) + 0.7);
 
         assert!(graph_hit.0.abs() + graph_hit.1.abs() > 0.01);
         assert!(station_hit.0.abs() + station_hit.1.abs() > 0.01);
