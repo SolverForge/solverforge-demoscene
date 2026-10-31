@@ -1,0 +1,127 @@
+<!doctype html>
+<!-- SERIO_02 vertical cover (1080x1920), drawn in the demo's own language:
+     its 8x8 font, palette and scene, with the numbers the demo shows. The
+     HTML is deterministic; render with the html-to-image-assets recipe at
+     1080x1920. -->
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#060812}
+canvas{display:block}
+</style></head><body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+const W = 1080, H = 1920;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+// The series' 8x8 font (vendor/demofx/src/font.rs), ASCII 32..127, bit 0 = left.
+const FONT = [[0, 0, 0, 0, 0, 0, 0, 0], [24, 60, 60, 24, 24, 0, 24, 0], [54, 54, 0, 0, 0, 0, 0, 0], [54, 54, 127, 54, 127, 54, 54, 0], [12, 62, 3, 30, 48, 31, 12, 0], [0, 99, 51, 24, 12, 102, 99, 0], [28, 54, 28, 110, 59, 51, 110, 0], [6, 6, 3, 0, 0, 0, 0, 0], [24, 12, 6, 6, 6, 12, 24, 0], [6, 12, 24, 24, 24, 12, 6, 0], [0, 102, 60, 255, 60, 102, 0, 0], [0, 12, 12, 63, 12, 12, 0, 0], [0, 0, 0, 0, 0, 12, 12, 6], [0, 0, 0, 63, 0, 0, 0, 0], [0, 0, 0, 0, 0, 12, 12, 0], [96, 48, 24, 12, 6, 3, 1, 0], [62, 99, 115, 123, 111, 103, 62, 0], [12, 14, 12, 12, 12, 12, 63, 0], [30, 51, 48, 28, 6, 51, 63, 0], [30, 51, 48, 28, 48, 51, 30, 0], [56, 60, 54, 51, 127, 48, 120, 0], [63, 3, 31, 48, 48, 51, 30, 0], [28, 6, 3, 31, 51, 51, 30, 0], [63, 51, 48, 24, 12, 12, 12, 0], [30, 51, 51, 30, 51, 51, 30, 0], [30, 51, 51, 62, 48, 24, 14, 0], [0, 12, 12, 0, 0, 12, 12, 0], [0, 12, 12, 0, 0, 12, 12, 6], [24, 12, 6, 3, 6, 12, 24, 0], [0, 0, 63, 0, 0, 63, 0, 0], [6, 12, 24, 48, 24, 12, 6, 0], [30, 51, 48, 24, 12, 0, 12, 0], [62, 99, 123, 123, 123, 3, 30, 0], [12, 30, 51, 51, 63, 51, 51, 0], [63, 102, 102, 62, 102, 102, 63, 0], [60, 102, 3, 3, 3, 102, 60, 0], [31, 54, 102, 102, 102, 54, 31, 0], [127, 70, 22, 30, 22, 70, 127, 0], [127, 70, 22, 30, 22, 6, 15, 0], [60, 102, 3, 3, 115, 102, 124, 0], [51, 51, 51, 63, 51, 51, 51, 0], [30, 12, 12, 12, 12, 12, 30, 0], [120, 48, 48, 48, 51, 51, 30, 0], [103, 102, 54, 30, 54, 102, 103, 0], [15, 6, 6, 6, 70, 102, 127, 0], [99, 119, 127, 127, 107, 99, 99, 0], [99, 103, 111, 123, 115, 99, 99, 0], [28, 54, 99, 99, 99, 54, 28, 0], [63, 102, 102, 62, 6, 6, 15, 0], [30, 51, 51, 51, 59, 30, 56, 0], [63, 102, 102, 62, 54, 102, 103, 0], [30, 51, 7, 14, 56, 51, 30, 0], [63, 45, 12, 12, 12, 12, 30, 0], [51, 51, 51, 51, 51, 51, 63, 0], [51, 51, 51, 51, 51, 30, 12, 0], [99, 99, 99, 107, 127, 119, 99, 0], [99, 99, 54, 28, 28, 54, 99, 0], [51, 51, 51, 30, 12, 12, 30, 0], [127, 99, 49, 24, 76, 102, 127, 0], [30, 6, 6, 6, 6, 6, 30, 0], [3, 6, 12, 24, 48, 96, 64, 0], [30, 24, 24, 24, 24, 24, 30, 0], [8, 28, 54, 99, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 255], [12, 12, 24, 0, 0, 0, 0, 0], [0, 0, 30, 48, 62, 51, 110, 0], [7, 6, 6, 62, 102, 102, 59, 0], [0, 0, 30, 51, 3, 51, 30, 0], [56, 48, 48, 62, 51, 51, 110, 0], [0, 0, 30, 51, 63, 3, 30, 0], [28, 54, 6, 15, 6, 6, 15, 0], [0, 0, 110, 51, 51, 62, 48, 31], [7, 6, 54, 110, 102, 102, 103, 0], [12, 0, 14, 12, 12, 12, 30, 0], [48, 0, 48, 48, 48, 51, 51, 30], [7, 6, 102, 54, 30, 54, 103, 0], [14, 12, 12, 12, 12, 12, 30, 0], [0, 0, 51, 127, 127, 107, 99, 0], [0, 0, 31, 51, 51, 51, 51, 0], [0, 0, 30, 51, 51, 51, 30, 0], [0, 0, 59, 102, 102, 62, 6, 15], [0, 0, 110, 51, 51, 62, 48, 120], [0, 0, 59, 110, 102, 6, 15, 0], [0, 0, 62, 3, 30, 48, 31, 0], [8, 12, 62, 12, 12, 44, 24, 0], [0, 0, 51, 51, 51, 51, 110, 0], [0, 0, 51, 51, 51, 30, 12, 0], [0, 0, 99, 107, 127, 127, 54, 0], [0, 0, 99, 54, 28, 54, 99, 0], [0, 0, 51, 51, 51, 62, 48, 31], [0, 0, 63, 25, 12, 38, 63, 0], [56, 12, 12, 7, 12, 12, 56, 0], [24, 24, 24, 0, 24, 24, 24, 0], [7, 12, 12, 56, 12, 12, 7, 0], [110, 59, 0, 0, 0, 0, 0, 0], [255, 255, 255, 255, 255, 255, 255, 255]];
+function hash(x){x=(x^61)^(x>>>16);x=Math.imul(x,9);x^=x>>>4;x=Math.imul(x,0x27d4eb2d);x^=x>>>15;return (x>>>0)/4294967296;}
+function rgb(c,k=1){return `rgb(${Math.round(c[0]*k)},${Math.round(c[1]*k)},${Math.round(c[2]*k)})`;}
+function rgba(c,a){return `rgba(${c[0]},${c[1]},${c[2]},${a})`;}
+function lerp(a,b,t){t=Math.max(0,Math.min(1,t));return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];}
+function ramp(stops,t){t=Math.max(0,Math.min(1,t))*(stops.length-1);const i=Math.min(stops.length-2,Math.floor(t));return lerp(stops[i],stops[i+1],t-i);}
+function hex(h){return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+const EMER=["064e3b","10b981","6ee7b7","d1fae5"].map(hex);
+// Pixel text in the 8x8 font; `px` is the size of one font pixel. colorAt(col,row,charIndex).
+function ptextWidth(s,px){return s.length*8*px;}
+function ptext(s,x,y,px,colorAt){
+  [...s].forEach((ch,i)=>{const code=ch.charCodeAt(0);if(code<32||code>127)return;const g=FONT[code-32];
+    for(let r=0;r<8;r++)for(let c=0;c<8;c++)if((g[r]>>c)&1){ctx.fillStyle=typeof colorAt==='function'?colorAt(i*8+c,r,i):colorAt;ctx.fillRect(x+(i*8+c)*px,y+r*px,px+.5,px+.5);}});
+}
+function ptextC(s,cx,y,px,col){ptext(s,Math.round(cx-ptextWidth(s,px)/2),y,px,col);}
+// Title banner: the font with a drop shadow, like the demos' glow titles.
+function title(word,suffix,y,px){
+  const w=ptextWidth(word,px), x0=Math.round((W-w-90)/2);
+  ptext(word,x0+px*.6,y+px*.6,px,'rgba(6,78,59,0.9)');
+  ptext(word,x0,y,px,(c,r)=>rgb(ramp(EMER,.35+.65*(1-r/8)*(.75+.25*Math.sin(c*.12)))));
+  ctx.font='bold 46px "DejaVu Sans Mono"';ctx.textBaseline='top';ctx.textAlign='left';
+  ctx.fillStyle=rgb(EMER[2]);ctx.fillText(suffix,x0+w+10,y+8*px-40);
+  return x0;
+}
+function spaced(text,y,size,color){ctx.font=`${size}px "DejaVu Sans Mono"`;ctx.textAlign='center';ctx.textBaseline='top';ctx.fillStyle=color;ctx.fillText(text.split('').join(' '),W/2,y);}
+function footer(line1){
+  ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.font='26px "DejaVu Sans Mono"';ctx.fillStyle='#ffd88a';ctx.fillText(line1,W/2,1776);
+  ctx.font='bold 30px "DejaVu Sans Mono"';ctx.fillStyle=rgb(EMER[2]);ctx.fillText('SOLVERFORGE  ·  ON THE WAY TO 1.0.0',W/2,1816);
+}
+function plate(y,h,a){const g=ctx.createLinearGradient(0,y,0,y+h);g.addColorStop(0,'rgba(6,8,18,0)');g.addColorStop(.25,`rgba(6,8,18,${a})`);g.addColorStop(.75,`rgba(6,8,18,${a})`);g.addColorStop(1,'rgba(6,8,18,0)');ctx.fillStyle=g;ctx.fillRect(0,y,W,h);}
+function stars(n,y0,y1,seed){for(let i=0;i<n;i++){const x=hash(i*7+seed)*W,y=y0+hash(i*13+seed+1)*(y1-y0),b=.25+.75*hash(i*17+seed+2),s=hash(i*5+seed)<.08?3:2;ctx.fillStyle=`rgba(200,216,255,${b*.7})`;ctx.fillRect(x,y,s,s);}}
+function glow(x,y,r,c,a){const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,rgba(c,a));g.addColorStop(1,rgba(c,0));ctx.fillStyle=g;ctx.fillRect(x-r,y-r,2*r,2*r);}
+// Phosphor bloom, scanlines, vignette: the demos' post pass.
+function post(){
+  const snap=document.createElement('canvas');snap.width=W;snap.height=H;const s=snap.getContext('2d');s.filter='blur(7px)';s.drawImage(cv,0,0);
+  ctx.globalCompositeOperation='lighter';ctx.globalAlpha=.45;ctx.drawImage(snap,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle='rgba(0,0,0,0.22)';for(let y=2;y<H;y+=3)ctx.fillRect(0,y,W,1);
+  const v=ctx.createRadialGradient(W/2,H/2,H*.25,W/2,H/2,H*.75);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,0.5)');ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
+}
+function run(compose){document.fonts.load('30px "DejaVu Sans Mono"').then(()=>{compose();post();document.body.dataset.done='1';});}
+
+// ---- SERIO_02: the seven planets sing; Luna has just moved a quarter tone
+// off its note, so its six pairs are out of tune (thick red) and the other
+// fifteen stay gold. Numbers are the demo's own panel at that moment.
+const GOLD=[255,215,0], RED=[255,96,64], CHROME=[220,220,235], E400=[52,211,153], E500=[16,185,129], AMBER=[251,191,36];
+const P=[ // name, colour, Hz, orbit radius (ORBITAL_RADII), angle
+  ['LUNA',[210,215,230],113,80,-0.6],
+  ['MERCURY',[180,165,140],139,110,2.2],
+  ['VENUS',[240,210,120],165,140,0.9],
+  ['EARTH',[60,160,200],208,175,-2.3],
+  ['MARS',[200,80,50],247,210,3.0],
+  ['JUPITER',[220,170,100],311,250,-1.1],
+  ['SATURN',[210,195,140],370,295,1.75],
+];
+const CX=540, CY=880, SC=1.42;
+const pos=P.map(p=>[CX+Math.cos(p[4])*p[3]*SC, CY+Math.sin(p[4])*p[3]*SC]);
+function compose(){
+  const bg=ctx.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#04060e');bg.addColorStop(.5,'#060812');bg.addColorStop(1,'#0c1020');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  stars(260,0,H,11);
+  // Orbits: faint dotted rings.
+  P.forEach(p=>{const r=p[3]*SC;const n=Math.round(r*0.55);for(let i=0;i<n;i++){const a=i/n*Math.PI*2;ctx.fillStyle='rgba(52,211,153,0.4)';ctx.fillRect(CX+Math.cos(a)*r-1.5,CY+Math.sin(a)*r-1.5,3,3);}});
+  // Sun.
+  glow(CX,CY,170,[255,170,60],.35);glow(CX,CY,60,[255,220,140],.9);
+  ctx.fillStyle='#fff3c8';ctx.beginPath();ctx.arc(CX,CY,20,0,7);ctx.fill();
+  // The 21 pair arcs.
+  ctx.lineCap='round';
+  const arcs=[];
+  for(let i=0;i<7;i++)for(let j=i+1;j<7;j++)arcs.push([i,j,i===0]);
+  arcs.sort((a,b)=>a[2]-b[2]); // red on top
+  for(const [i,j,off] of arcs){
+    const [ax,ay]=pos[i],[bx,by]=pos[j];const mx=(ax+bx)/2,my=(ay+by)/2;const qx=mx+(CX-mx)*.35,qy=my+(CY-my)*.35;
+    ctx.strokeStyle=off?rgba(RED,.95):rgba(GOLD,.42);ctx.lineWidth=off?6:2.4;
+    ctx.beginPath();ctx.moveTo(ax,ay);ctx.quadraticCurveTo(qx,qy,bx,by);ctx.stroke();
+    if(off){ctx.strokeStyle=rgba(RED,.25);ctx.lineWidth=16;ctx.stroke();}
+  }
+  // Planets with comet trails, names and notes in Hz.
+  P.forEach((p,k)=>{const [x,y]=pos[k];const r=p[3]*SC, a0=p[4];
+    for(let t=1;t<26;t++){const a=a0-t*0.012*(300/p[3]);ctx.fillStyle=rgba(p[1],.5*(1-t/26));ctx.beginPath();ctx.arc(CX+Math.cos(a)*r,CY+Math.sin(a)*r,9*(1-t/30),0,7);ctx.fill();}
+    glow(x,y,38,p[1],.55);ctx.fillStyle=rgb(p[1]);ctx.beginPath();ctx.arc(x,y,k===6?15:12,0,7);ctx.fill();
+    if(k===6){ctx.strokeStyle=rgba(p[1],.8);ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(x,y,28,8,-.35,0,7);ctx.stroke();}
+    // Label outside the planet, on a dark plate so it reads over the arcs.
+    const ux=Math.cos(a0), uy=Math.sin(a0), right=ux>=-0.2;
+    const name=p[0], hz=p[2]+' HZ', px=3, tw=Math.max(ptextWidth(name,px),ptextWidth(hz,px));
+    let lx=right?x+26:x-26-tw, ly=y+uy*22-26;
+    ctx.fillStyle='rgba(6,8,18,0.78)';ctx.fillRect(lx-8,ly-6,tw+16,62);
+    const al=(t)=>right?lx:lx+tw-ptextWidth(t,px);
+    ptext(name,al(name),ly,px,rgb(p[1]));ptext(hz,al(hz),ly+28,px,k===0?rgb(RED):rgb(CHROME,.8));
+  });
+  // Moved-note callout on Luna.
+  const [lx,ly]=pos[0];ctx.strokeStyle=rgba(RED,.9);ctx.lineWidth=3;ctx.beginPath();ctx.arc(lx,ly,30,0,7);ctx.stroke();
+  // Title block.
+  plate(70,380,.75);
+  title('SERIO','_02',110,22);
+  spaced('MUSICA UNIVERSALIS',336,34,'#e6eef7');
+  spaced('SEVEN PLANETS · 21 PAIRS',392,24,rgb(GOLD,.85));
+  // The panel, as in the demo.
+  plate(1370,400,.9);
+  const x0=150, px=3, lh=30;
+  ptext('PAIRS: HIGH / LOW PITCH',x0,1400,px,rgb(E500));
+  const rows=[
+    ['>MER/LUN 1.224   6:5 X3 OFF',1],['>VEN/LUN 1.456   3:2 X2 OFF',1],['>MAR/LUN 1.091   9:8 X1 OFF',1],
+    [' VEN/MER 1.189   6:5 X3 OK',0],[' EAR/MER 1.498   3:2 X2 OK',0],
+  ];
+  rows.forEach(([t,off],i)=>ptext(t,x0,1442+i*lh,px,off?rgb(RED):rgb(GOLD,.85)));
+  ptext('0 HARD',x0,1606,5,rgb(E400));ptext('-7095 SOFT',x0+290,1606,5,rgb(AMBER));
+  ptext('15 OF 21 PAIRS IN TUNE',x0,1662,px,rgb(CHROME,.8));
+  ptext('SERIO RE-CHECKS 6, NOT 21',x0,1696,px,rgb([60,160,255]));
+  footer('A PIXEL DEMO IN RUST + GLYPHFX');
+}
+run(compose);
+</script></body></html>
