@@ -2,7 +2,7 @@
 // keep its frames as sparse cell lists. Deterministic: same spec -> same frames.
 use std::ffi::{c_char, c_int, CStr, CString};
 
-use crate::canvas::{Cell, TextCanvas};
+use crate::cell::{Cell, CellSink};
 
 #[repr(C)]
 struct RawClip {
@@ -76,6 +76,10 @@ impl Clip {
         self.frames.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
+
     /// The settled last frame (e.g. a banner in its final colours).
     pub fn final_cells(&self) -> Vec<(u16, u16, Cell)> {
         self.frames.last().cloned().unwrap_or_default()
@@ -87,7 +91,7 @@ impl Clip {
     }
 
     /// Draw frame `idx` (clamped to the final frame) at a cell offset.
-    pub fn draw(&self, canvas: &mut TextCanvas, idx: usize, col0: i32, row0: i32, gain: f32) {
+    pub fn draw(&self, canvas: &mut impl CellSink, idx: usize, col0: i32, row0: i32, gain: f32) {
         let Some(frame) = self
             .frames
             .get(idx.min(self.frames.len().saturating_sub(1)))
@@ -114,7 +118,7 @@ impl Clip {
     /// Draw by time since the clip started, at a playback speed multiplier.
     pub fn draw_at(
         &self,
-        canvas: &mut TextCanvas,
+        canvas: &mut impl CellSink,
         t: f32,
         speed: f32,
         col0: i32,

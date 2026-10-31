@@ -1,7 +1,7 @@
 // Glyph masks for one 10x18 text cell. ASCII comes from the series' embedded
 // 8x8 font (double-height); block and box-drawing characters are procedural so
 // banners join seamlessly; anything else falls back to a soft dot.
-use crate::canvas::{CELL_H, CELL_W};
+use crate::cell::{CELL_H, CELL_W};
 
 pub type Mask = [u16; CELL_H];
 

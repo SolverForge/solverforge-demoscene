@@ -7,9 +7,9 @@
 // big moments -- the ingot thrown apart, the laser etching, the logo -- have
 // the screen to themselves.
 use crate::canvas::{Cell, TextCanvas, BIG_COLS, COLS};
-use crate::gfx::{Clip, ClipSpec};
 use crate::noise::h2;
 use crate::timeline::{bars, last_strike, smooth};
+use demofx::{Clip, ClipSpec};
 
 struct CardSpec {
     from: f32,

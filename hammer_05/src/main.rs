@@ -1,8 +1,6 @@
 mod audio;
 mod canvas;
-mod font;
 mod forge;
-mod gfx;
 mod logo;
 mod noise;
 mod post;

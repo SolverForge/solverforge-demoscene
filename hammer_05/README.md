@@ -38,7 +38,7 @@ Sources: [Turismo Valbondione](https://turismovalbondione.it/le-cascate-del-seri
 
 - **One text grid.** The world is a 128x40 grid of 10x18 cells plus a 64x20 double-size grid for the story text. Mountains, water, the wheel and the hammer are written as characters.
 - **Story cards.** Each scene gets one or two sentences in the empty space above the action, over a soft local shadow. A glyphfx effect that belongs to the scene brings the words in (the teletype `print` at night, `rain` over the falls, `burn` at the smelter, `beams` at the forge, `waves` for the quench, `decrypt` for SolverForge); they hold still to be read, then burn out letter by letter. At Ponte Nossa the words flash with each hammer blow. The big moments -- the ingot thrown apart, the laser etching, the logo -- have the screen to themselves.
-- **glyphfx as the text engine.** The card entrances and the credits are glyphfx effects, and so is the ingot (`scattered`, `unstable`, `smoke`, `laseretch`, `highlight`). They are real glyphfx effects, compiled from `vendor/glyphfx` (pinned v0.3.4) and run on a virtual 60 fps clock at startup through `csrc/gfx_shim.c`.
+- **glyphfx as the text engine.** The card entrances and the credits are glyphfx effects, and so is the ingot (`scattered`, `unstable`, `smoke`, `laseretch`, `highlight`). They are real glyphfx effects, compiled from the repository's one vendored copy, `../vendor/glyphfx` (pinned v0.3.4), and run on a virtual 60 fps clock at startup through `../vendor/demofx`.
 - **Glyphs.** ASCII comes from the series' 8x8 font at double height; block and box-drawing characters are procedural so the banner joins seamlessly.
 - **Phosphor.** Bloom, scanlines and vignette in software.
 - **Deterministic.** All randomness is hashed from cell, seed and time; glyphfx is seeded. `--render` output is bit-identical run to run.
@@ -69,17 +69,14 @@ Building needs a C compiler (for glyphfx) besides the usual Rust toolchain.
 ## Architecture
 
 ```text
-build.rs          compiles vendor/glyphfx + csrc/gfx_shim.c (whole-archive: the
-                  effect registry is weakly linked)
-csrc/gfx_shim.c   open / next frame / close over one glyphfx effect
-vendor/glyphfx/   pinned glyphfx sources, LICENSE, NOTICE
+../vendor/glyphfx/  pinned glyphfx sources, LICENSE, NOTICE (shared by every demo)
+../vendor/demofx/   glyphfx build + shim, clips parsed into sparse cells, the
+                    8x8 font with procedural block/box glyphs
 src/
 ├── main.rs       CLI, window loop (audio playhead = clock), headless export, stills
 ├── timeline.rs   125 BPM, 56 bars, sections, water flow, hammer strikes
 ├── scenes.rs     running order: worlds, glyphfx clips, copy, cuts and fades
-├── gfx.rs        glyphfx FFI, frames parsed into sparse cells
 ├── canvas.rs     text grids and colour helpers
-├── font.rs       8x8 ASCII + procedural block/box glyph masks
 ├── post.rs       cells -> pixels, logo, bloom, scanlines, vignette
 ├── noise.rs      hashes, value noise, ASCII shade ramp
 ├── valley.rs     the wall, the falls, mist, stars
@@ -92,7 +89,7 @@ src/
 
 ## Credits
 
-Text effects: [glyphfx](https://github.com/blackopsrepl/glyphfx), a C port of [ttfx](https://github.com/omacom/ttfx), itself a port of [TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects) by ChrisBuilds. MIT; see `vendor/glyphfx/LICENSE` and `vendor/glyphfx/NOTICE`.
+Text effects: [glyphfx](https://github.com/blackopsrepl/glyphfx), a C port of [ttfx](https://github.com/omacom/ttfx), itself a port of [TerminalTextEffects](https://github.com/ChrisBuilds/terminaltexteffects) by ChrisBuilds. MIT; see `../vendor/glyphfx/LICENSE` and `../vendor/glyphfx/NOTICE`.
 
 ## License
 

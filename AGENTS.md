@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository contains standalone Rust demo crates, not a shared workspace. Top-level directories map to products or releases: `planner123_01/`, `serio_01/`, `serio_02/`, and `screensaver_03/`. Each crate keeps runtime code in `src/` with modules grouped by concern such as `effects/`, `audio/`, and `orrery/`. Embedded assets stay next to the code that uses them, for example `planner123_01/src/effects/screenshots/*.png`. Build outputs land in the root `target/` directory.
+This repository contains standalone Rust demo crates, not a shared workspace. Top-level directories map to products or releases: `planner123_01/`, `serio_01/`, `serio_02/`, and `screensaver_03/`. The one exception is `vendor/`: `vendor/glyphfx` is the single vendored copy of the glyphfx text-effect engine and `vendor/demofx` is the path crate every demo uses for it (glyphfx clips, text cells, the 8x8 font, story cards); never vendor glyphfx into a demo directory. Each crate keeps runtime code in `src/` with modules grouped by concern such as `effects/`, `audio/`, and `orrery/`. Embedded assets stay next to the code that uses them, for example `planner123_01/src/effects/screenshots/*.png`. Build outputs land in the root `target/` directory.
 
 ## Build, Test, and Development Commands
 Run commands from the specific demo directory you are changing.

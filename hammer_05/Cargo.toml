@@ -15,6 +15,5 @@ minifb = "0.28"
 # Audio output (the track itself is synthesized by hand in src/audio)
 cpal = "0.17"
 
-[build-dependencies]
-# Compiles the vendored glyphfx C17 engine
-cc = "1"
+# glyphfx (vendored once for every demo), text cells and the 8x8 font
+demofx = { path = "../vendor/demofx" }

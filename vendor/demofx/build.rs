@@ -1,5 +1,5 @@
-// Compiles the vendored glyphfx engine (vendor/glyphfx, pinned v0.3.4) plus
-// the demo's C shim into one static library.
+// Compiles the vendored glyphfx engine (../glyphfx, pinned v0.3.4) plus the
+// demos' C shim into one static library. Every demo links this one copy.
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,9 @@ fn c_sources(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 fn main() {
-    let vendor = Path::new("vendor/glyphfx");
+    let here = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
+    let vendor = here.join("../glyphfx");
+    let shim = here.join("csrc/gfx_shim.c");
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
 
     let version = fs::read_to_string(vendor.join("VERSION")).expect("glyphfx VERSION");
@@ -45,10 +47,10 @@ fn main() {
         // every effect object in the link.
         .link_lib_modifier("+whole-archive")
         .files(&sources)
-        .file("csrc/gfx_shim.c")
+        .file(&shim)
         .compile("glyphfx");
 
     println!("cargo:rustc-link-lib=m");
-    println!("cargo:rerun-if-changed=csrc/gfx_shim.c");
-    println!("cargo:rerun-if-changed=vendor/glyphfx");
+    println!("cargo:rerun-if-changed={}", shim.display());
+    println!("cargo:rerun-if-changed={}", vendor.display());
 }

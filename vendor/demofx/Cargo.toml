@@ -1,0 +1,14 @@
+[package]
+name = "demofx"
+version = "0.1.0"
+edition = "2021"
+description = "The demos' text layer: the vendored glyphfx engine, text cells, the 8x8 font and timed story cards"
+license = "MIT"
+build = "build.rs"
+links = "glyphfx"
+
+[dependencies]
+
+[build-dependencies]
+# Compiles the vendored glyphfx C17 engine (../glyphfx)
+cc = "1"

@@ -6,29 +6,7 @@ pub const COLS: usize = 128;
 pub const ROWS: usize = 40;
 pub const BIG_COLS: usize = COLS / 2;
 pub const BIG_ROWS: usize = ROWS / 2;
-pub const CELL_W: usize = 10;
-pub const CELL_H: usize = 18;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Cell {
-    pub ch: char,
-    pub rgb: u32,
-}
-
-impl Cell {
-    pub const BLANK: Cell = Cell { ch: ' ', rgb: 0 };
-
-    pub fn new(ch: char, rgb: u32) -> Cell {
-        Cell { ch, rgb }
-    }
-
-    pub fn scaled(self, gain: f32) -> Cell {
-        Cell {
-            ch: self.ch,
-            rgb: scale_rgb(self.rgb, gain),
-        }
-    }
-}
+pub use demofx::{Cell, CELL_H, CELL_W};
 
 pub fn rgb_parts(rgb: u32) -> (f32, f32, f32) {
     (
@@ -105,5 +83,11 @@ impl TextCanvas {
                 self.cells[(row * cols + col) as usize] = cell;
             }
         }
+    }
+}
+
+impl demofx::CellSink for TextCanvas {
+    fn set(&mut self, col: i32, row: i32, cell: Cell) {
+        TextCanvas::set(self, col, row, cell);
     }
 }

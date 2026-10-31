@@ -2,8 +2,8 @@
 use std::collections::HashMap;
 
 use crate::canvas::{TextCanvas, CELL_H, CELL_W, COLS, ROWS};
-use crate::font::{mask, Mask};
 use crate::scenes::Look;
+use demofx::font::{mask, Mask};
 
 pub const WIDTH: usize = COLS * CELL_W;
 pub const HEIGHT: usize = ROWS * CELL_H;
