@@ -22,3 +22,7 @@ target
 
 # Rendered video captures
 *.mp4
+
+# Render intermediates (make render writes and removes them)
+demo_audio.wav
+video_only.mp4

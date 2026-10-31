@@ -53,6 +53,9 @@ pub struct Look {
     pub bg_bottom: u32,
     pub bloom: f32,
     pub logo: Option<LogoState>,
+    /// Demo time, and the gain of the corner logo (0 hides it).
+    pub time: f32,
+    pub corner: f32,
 }
 
 pub struct Demo {
@@ -163,6 +166,8 @@ impl Demo {
             bg_bottom: 0x0a1020,
             bloom: 0.55,
             logo: None,
+            time: t,
+            corner: 1.0,
         };
         match n.section {
             Section::Night => valley::draw(cv, t, flow(t), 0.45),
@@ -269,6 +274,8 @@ impl Demo {
             look.bg_top = scale_rgb(look.bg_top, fade);
             look.bg_bottom = scale_rgb(look.bg_bottom, fade);
         }
+        // The corner mark gives way to the large logo at the end.
+        look.corner = fade * (1.0 - look.logo.map_or(0.0, |l| l.progress));
         for hit in [16.0, 24.0, 33.0, 40.0] {
             let age = t - bars(hit);
             if (0.0..0.4).contains(&age) {

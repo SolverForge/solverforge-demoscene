@@ -60,6 +60,13 @@ pub fn render_frame(
         draw_progress(fb, scene);
     }
     story.draw(fb, t, 1.0);
+    // The corner mark, giving way to the large logo of the closing scene.
+    let corner = if matches!(scene.id, SceneId::Scrolltext) {
+        1.0 - (scene.local_t / 1.5).clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    demofx::logo::corner(fb, t, corner);
     draw_post(fb);
 }
 

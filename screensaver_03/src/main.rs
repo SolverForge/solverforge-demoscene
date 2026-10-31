@@ -337,6 +337,7 @@ fn render_frame(buffer: &mut [u32], state: &mut State, t: f64, overlay: bool) {
     draw_glow_orb(&mut surface, t);
     draw_logo_cluster(&mut surface, t);
     draw_panels(&mut surface, t);
+    demofx::logo::corner(&mut surface, t as f32, 1.0);
     if overlay {
         draw_overlay_copy(&mut surface, t, state.phrase_idx);
     }
@@ -473,8 +474,9 @@ fn draw_logo_cluster(surface: &mut Surface, t: f64) {
 fn draw_panels(surface: &mut Surface, t: f64) {
     let drift = (t * 0.6).sin() as i32 * 10;
     let panels = [
+        // Clear of the corner logo.
         Panel {
-            x: 72,
+            x: 150,
             y: 72 + drift,
             w: 320,
             h: 122,
@@ -577,7 +579,7 @@ fn draw_overlay_copy(surface: &mut Surface, t: f64, phrase_idx: usize) {
     font::draw_text(
         surface,
         "CRT PHOSPHOR // SILENT MODE // SOLVERFORGE AFTER DARK",
-        28,
+        140,
         24,
         1,
         palette::dim(palette::EMERALD_600, 0.45),

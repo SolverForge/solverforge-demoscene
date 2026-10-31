@@ -641,6 +641,13 @@ fn main() {
             1.0,
         );
 
+        // The corner mark, hidden while the outro's large logo is up.
+        demofx::logo::corner(
+            &mut s,
+            demo_time as f32,
+            if scene == 5 { 1.0 - fade_in } else { 1.0 },
+        );
+
         // ── "PRESS SPACE" blink ───────────────────────────────
         let blink = ((demo_time * 2.0).sin() as f32 * 0.5 + 0.5).abs();
         font::draw_text_centered(
@@ -1094,6 +1101,13 @@ fn run_headless(duration_secs: f64) {
             },
             demo_time as f32,
             1.0,
+        );
+
+        // The corner mark, hidden while the outro's large logo is up.
+        demofx::logo::corner(
+            &mut s,
+            demo_time as f32,
+            if scene == 5 { 1.0 - fade_in } else { 1.0 },
         );
 
         // BGR24 output

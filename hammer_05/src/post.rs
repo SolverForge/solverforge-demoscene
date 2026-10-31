@@ -65,6 +65,15 @@ impl Post {
                 state,
             );
         }
+        demofx::logo::corner(
+            &mut demofx::RgbBuffer {
+                buf: &mut self.pixels,
+                w: WIDTH,
+                h: HEIGHT,
+            },
+            look.time,
+            look.corner,
+        );
         self.bloom_and_shade(look.bloom);
     }
 

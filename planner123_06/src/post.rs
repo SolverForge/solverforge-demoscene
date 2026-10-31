@@ -37,6 +37,9 @@ pub struct Look {
     pub gain: f32,
     pub sprites: Vec<Sprite>,
     pub logo: Option<LogoState>,
+    /// Demo time, and the gain of the corner logo (0 hides it).
+    pub time: f32,
+    pub corner: f32,
 }
 
 impl Default for Look {
@@ -47,6 +50,8 @@ impl Default for Look {
             gain: 1.0,
             sprites: Vec::new(),
             logo: None,
+            time: 0.0,
+            corner: 1.0,
         }
     }
 }
@@ -101,6 +106,18 @@ impl Post {
                 state,
             );
         }
+        // The TUI's title bar fills the corner, so the mark sits in the
+        // empty sidebar under the calendar list.
+        demofx::logo::corner_at(
+            &mut demofx::RgbBuffer {
+                buf: &mut self.pixels,
+                w: WIDTH,
+                h: HEIGHT,
+            },
+            (108.0, 125.0),
+            look.time,
+            look.corner,
+        );
         if look.flash > 0.0 || look.gain < 1.0 {
             let (flash, gain) = (look.flash.min(1.0), look.gain.clamp(0.0, 1.0));
             for px in self.pixels.iter_mut() {

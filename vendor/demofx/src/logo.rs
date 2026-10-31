@@ -82,6 +82,33 @@ impl LogoState {
     }
 }
 
+/// The mark every demo carries in its top-left corner, sized to the frame
+/// height. It draws itself in over the demo's first seconds; `gain` fades it,
+/// and 0 hides it (while a demo's own large end logo is up, for example).
+pub fn corner(pixels: &mut impl Pixels, t: f32, gain: f32) {
+    let r = corner_radius(pixels);
+    corner_at(pixels, (r * 1.6, r * 1.7), t, gain);
+}
+
+/// The corner mark at a demo's own spot, for frames whose top-left corner
+/// is taken (a TUI's title bar, say).
+pub fn corner_at(pixels: &mut impl Pixels, center: (f32, f32), t: f32, gain: f32) {
+    if gain <= 0.0 {
+        return;
+    }
+    let r = corner_radius(pixels);
+    let k = ((t - 0.5) / 2.0).clamp(0.0, 1.0);
+    let progress = k * k * (3.0 - 2.0 * k);
+    draw(
+        pixels,
+        &LogoState::sized(center.0, center.1, r, progress, gain.min(1.0) * 0.85),
+    );
+}
+
+fn corner_radius(pixels: &impl Pixels) -> f32 {
+    pixels.size().1 as f32 * 0.04
+}
+
 fn lerp_rgb(a: u32, b: u32, t: f32) -> u32 {
     let t = t.clamp(0.0, 1.0);
     let ch = |v: u32, s: u32| ((v >> s) & 0xFF) as f32;

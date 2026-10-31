@@ -164,6 +164,8 @@ fn main() {
         let (scene, scene_time, fade_in, fade_out) = get_scene(demo_time);
 
         let fade = fade_in * fade_out;
+        // Full-frame app screenshots fill the corner; the mark steps aside.
+        let mut shot_cover = 0.0f32;
 
         // ── Render current scene ───────────────────────────────
         match scene {
@@ -294,6 +296,7 @@ fn main() {
                 if phase % 2 == 0 {
                     // ── Even phases: screenshot ─────────────────────────
                     let shot_idx = phase / 2; // 0=Plan, 1=Gantt, 2=Calendar
+                    shot_cover = phase_fade;
 
                     // Full-screen screenshot with proper 16:9 aspect ratio
                     // Fill as much of the 1280×720 canvas as possible
@@ -559,6 +562,22 @@ fn main() {
             }
         }
 
+        // The corner mark, hidden while the opening and closing logos are up.
+        let corner = match scene {
+            0 => 1.0 - fade_out,
+            5 => 1.0 - fade_in,
+            _ => 1.0,
+        } * (1.0 - shot_cover);
+        demofx::logo::corner(
+            &mut demofx::RgbBuffer {
+                buf: &mut buffer,
+                w: RENDER_W,
+                h: RENDER_H,
+            },
+            demo_time as f32,
+            corner,
+        );
+
         // ── Blinking "PRESS SPACE TO ADVANCE" ──────────────────
         {
             let blink = ((demo_time * 2.5).sin() * 0.5 + 0.5) as f32; // 0..1 pulsing
@@ -577,7 +596,7 @@ fn main() {
             }
         }
 
-        // ── HUD: scene name + time ─────────────────────────────
+        // ── HUD: scene name (bottom left; the logo has the corner) ──
         let scene_names = [
             "LOGO REVEAL",
             "PLASMA",
@@ -593,7 +612,7 @@ fn main() {
                 RENDER_H,
                 scene_names[scene],
                 8,
-                8,
+                RENDER_H as i32 - 16,
                 1,
                 palette::dim(palette::EMERALD_800, 0.5),
             );
@@ -654,6 +673,8 @@ fn run_headless(duration: f64) {
 
         let (scene, scene_time, fade_in, fade_out) = get_scene(demo_time);
         let fade = fade_in * fade_out;
+        // Full-frame app screenshots fill the corner; the mark steps aside.
+        let mut shot_cover = 0.0f32;
 
         match scene {
             0 => {
@@ -759,6 +780,7 @@ fn run_headless(duration: f64) {
 
                 if phase % 2 == 0 {
                     let shot_idx = phase / 2;
+                    shot_cover = phase_fade;
                     let dst_w = RENDER_W as i32;
                     let dst_h = RENDER_H as i32;
                     let shot_cx = RENDER_W as i32 / 2;
@@ -970,6 +992,22 @@ fn run_headless(duration: f64) {
                 );
             }
         }
+
+        // The corner mark, hidden while the opening and closing logos are up.
+        let corner = match scene {
+            0 => 1.0 - fade_out,
+            5 => 1.0 - fade_in,
+            _ => 1.0,
+        } * (1.0 - shot_cover);
+        demofx::logo::corner(
+            &mut demofx::RgbBuffer {
+                buf: &mut buffer,
+                w: RENDER_W,
+                h: RENDER_H,
+            },
+            demo_time as f32,
+            corner,
+        );
 
         // Convert minifb 0x00RRGGBB → BGR24
         for (i, &px) in buffer.iter().enumerate() {

@@ -113,20 +113,6 @@ pub fn render(
         }
     }
 
-    // ── SolverForge logo (top-left corner, small) ────────────
-    if scene_t > 1.0 {
-        let logo_alpha = smoothstep(1.0, 3.0, scene_t) as f32 * fade;
-        let logo_progress = smoothstep(1.0, 3.0, scene_t) as f32;
-        demofx::logo::draw(
-            &mut Surface {
-                buf: &mut *buffer,
-                w: width,
-                h: height,
-            },
-            &demofx::logo::LogoState::sized(80.0, 55.0, 45.0, logo_progress, logo_alpha * 0.8),
-        );
-    }
-
     // ── Greek title ───────────────────────────────────────────
     // "harmonia kosmou" (harmony of the cosmos) — ASCII approximation
     if scene_t > 1.5 {

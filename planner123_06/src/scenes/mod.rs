@@ -135,6 +135,9 @@ impl Demo {
                 close::draw(buf, &mut look, t, &clock)
             }
         }
+        // The corner mark gives way to the large logo at the end.
+        look.time = t;
+        look.corner = 1.0 - look.logo.map_or(0.0, |l| l.progress);
         look
     }
 }
