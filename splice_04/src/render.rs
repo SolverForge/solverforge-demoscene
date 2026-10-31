@@ -5,7 +5,7 @@ use crate::palette::{
 };
 use crate::route::RouteState;
 use crate::route_plan::{RoutePlan, StationRole};
-use crate::scene::{scene_state, SceneId, SceneState};
+use crate::scene::{scene_start, scene_state, SceneId, SceneState, SCENE_BOUNDARIES};
 use demofx::Cards;
 
 /// Seconds into the splice scene when the later stops are renumbered.
@@ -54,6 +54,7 @@ pub fn render_frame(
 
     draw_station_beads(fb, plan, route, scene, t);
     if matches!(scene.id, SceneId::Scrolltext) {
+        draw_end_logo(fb, scene);
         draw_scrolltext(fb, scene);
     } else {
         draw_progress(fb, scene);
@@ -580,6 +581,28 @@ fn draw_progress(fb: &mut Framebuffer, scene: SceneState) {
         EMERALD,
         0.72,
     );
+}
+
+/// The SolverForge mark in the sky over the finished route: the ring draws
+/// itself in, the detail and the name follow, and all of it fades with the
+/// music at the end.
+fn draw_end_logo(fb: &mut Framebuffer, scene: SceneState) {
+    let reveal = (scene.local_t / 3.0).clamp(0.0, 1.0);
+    let remaining = (SCENE_BOUNDARIES[SCENE_BOUNDARIES.len() - 1]
+        - scene_start(SceneId::Scrolltext))
+        - scene.local_t;
+    let gain = smoothstep((remaining / 1.5).clamp(0.0, 1.0));
+    let (cx, cy) = (fb.width as f32 / 2.0, 205.0);
+    demofx::logo::draw(
+        fb,
+        &demofx::logo::LogoState::sized(cx, cy, 80.0, ease_in_out(reveal), gain),
+    );
+    let name = smoothstep(((scene.local_t - 2.6) / 1.0).clamp(0.0, 1.0)) * gain;
+    if name > 0.0 {
+        let text = "SOLVERFORGE";
+        let x = cx as i32 - text_width(text, 2) / 2;
+        draw_text(fb, x, 300, text, EMERALD, 2, name);
+    }
 }
 
 fn draw_scrolltext(fb: &mut Framebuffer, scene: SceneState) {
