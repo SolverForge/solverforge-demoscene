@@ -56,7 +56,14 @@ impl Post {
         self.raster(canvas, 1);
         self.raster(big, 2);
         if let Some(state) = &look.logo {
-            crate::logo::draw(&mut self.pixels, WIDTH, HEIGHT, state);
+            demofx::logo::draw(
+                &mut demofx::RgbBuffer {
+                    buf: &mut self.pixels,
+                    w: WIDTH,
+                    h: HEIGHT,
+                },
+                state,
+            );
         }
         self.bloom_and_shade(look.bloom);
     }

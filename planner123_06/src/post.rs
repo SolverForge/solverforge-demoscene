@@ -10,7 +10,7 @@ use ratatui::style::Modifier;
 use crate::canvas::{lerp_rgb, scale_rgb, to_rgb, CELL_H, CELL_W, COLS, ROWS};
 use crate::data::{BG, FG};
 use crate::font::{mask, Mask};
-use crate::logo::LogoState;
+use demofx::logo::LogoState;
 
 pub const WIDTH: usize = COLS as usize * CELL_W;
 pub const HEIGHT: usize = ROWS as usize * CELL_H;
@@ -92,7 +92,14 @@ impl Post {
             self.sprite(s);
         }
         if let Some(state) = &look.logo {
-            crate::logo::draw(&mut self.pixels, WIDTH, HEIGHT, state);
+            demofx::logo::draw(
+                &mut demofx::RgbBuffer {
+                    buf: &mut self.pixels,
+                    w: WIDTH,
+                    h: HEIGHT,
+                },
+                state,
+            );
         }
         if look.flash > 0.0 || look.gain < 1.0 {
             let (flash, gain) = (look.flash.min(1.0), look.gain.clamp(0.0, 1.0));

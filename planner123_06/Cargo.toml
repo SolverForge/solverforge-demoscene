@@ -9,6 +9,7 @@ name = "planner123-06-demo"
 path = "src/main.rs"
 
 [dependencies]
+demofx = { path = "../vendor/demofx" }
 # The same TUI crate Planner123 is built on; its widgets draw into a Buffer
 # that the demo rasterises itself (no terminal backend).
 ratatui = { version = "0.29", default-features = false }

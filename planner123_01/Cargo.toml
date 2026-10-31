@@ -9,6 +9,7 @@ name = "planner123-demo"
 path = "src/main.rs"
 
 [dependencies]
+demofx = { path = "../vendor/demofx" }
 # Pixel framebuffer window
 minifb = "0.28"
 

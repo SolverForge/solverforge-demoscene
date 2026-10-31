@@ -9,6 +9,19 @@ pub struct Surface<'a> {
     pub w: usize,
     pub h: usize,
 }
+
+/// The shared SolverForge logo (demofx) draws straight into the frame.
+impl demofx::Pixels for Surface<'_> {
+    fn size(&self) -> (usize, usize) {
+        (self.w, self.h)
+    }
+    fn get(&self, x: usize, y: usize) -> u32 {
+        self.buf[y * self.w + x]
+    }
+    fn put(&mut self, x: usize, y: usize, rgb: u32) {
+        self.buf[y * self.w + x] = rgb;
+    }
+}
 /// Pack RGB into u32 (minifb format: 0x00RRGGBB)
 #[inline(always)]
 pub fn rgb(r: u8, g: u8, b: u8) -> u32 {
@@ -56,7 +69,6 @@ pub const EMERALD_500: u32 = rgb_const(16, 185, 129); // PRIMARY
 pub const EMERALD_600: u32 = rgb_const(5, 150, 105);
 pub const EMERALD_700: u32 = rgb_const(4, 120, 87);
 pub const EMERALD_800: u32 = rgb_const(6, 95, 70);
-pub const GREEN_500: u32 = rgb_const(34, 197, 94);
 
 // ── Neutrals ─────────────────────────────────────────────────
 pub const NEAR_BLACK: u32 = rgb_const(6, 8, 18); // deep space

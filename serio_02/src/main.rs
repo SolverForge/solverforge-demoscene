@@ -19,7 +19,6 @@
 mod audio;
 mod effects;
 mod font;
-mod logo;
 mod orrery;
 mod palette;
 mod story;
@@ -580,14 +579,15 @@ fn main() {
 
                 let logo_r = 120.0f32;
                 let pulse = (scene_t as f32 * 1.2).sin() * 0.1 + 0.9;
-                logo::draw_logo(
+                demofx::logo::draw(
                     &mut s,
-                    RENDER_W as f32 / 2.0,
-                    RENDER_H as f32 / 2.0 - 80.0,
-                    logo_r,
-                    1.0,
-                    demo_time,
-                    fade * pulse,
+                    &demofx::logo::LogoState::sized(
+                        RENDER_W as f32 / 2.0,
+                        RENDER_H as f32 / 2.0 - 80.0,
+                        logo_r,
+                        1.0,
+                        fade * pulse,
+                    ),
                 );
 
                 font::draw_text_centered_glow(
@@ -1027,14 +1027,15 @@ fn run_headless(duration_secs: f64) {
                 plasma.render_overlay(&mut s, demo_time, fade * 0.12);
                 let logo_r = 120.0f32;
                 let pulse = (scene_t as f32 * 1.2).sin() * 0.1 + 0.9;
-                logo::draw_logo(
+                demofx::logo::draw(
                     &mut s,
-                    RENDER_W as f32 / 2.0,
-                    RENDER_H as f32 / 2.0 - 80.0,
-                    logo_r,
-                    1.0,
-                    demo_time,
-                    fade * pulse,
+                    &demofx::logo::LogoState::sized(
+                        RENDER_W as f32 / 2.0,
+                        RENDER_H as f32 / 2.0 - 80.0,
+                        logo_r,
+                        1.0,
+                        fade * pulse,
+                    ),
                 );
                 font::draw_text_centered_glow(
                     &mut s,

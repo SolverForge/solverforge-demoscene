@@ -2,11 +2,11 @@
 // the 56 bars; story.rs adds the words.
 use crate::canvas::{lerp_rgb, scale_rgb, Cell, TextCanvas, CELL_H, CELL_W, COLS, ROWS};
 use crate::forge::{self, Ingot};
-use crate::logo::LogoState;
 use crate::post::{HEIGHT, WIDTH};
 use crate::story::Story;
 use crate::timeline::{bars, flow, last_strike, now, smooth, Section, BAR, DURATION, HAMMER_STOP};
 use crate::{river, valley};
+use demofx::logo::LogoState;
 use demofx::{Clip, ClipSpec};
 
 const BANNER: &str = "\

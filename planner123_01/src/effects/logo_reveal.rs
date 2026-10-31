@@ -4,7 +4,6 @@
 // ═══════════════════════════════════════════════════════════════
 
 use crate::font;
-use crate::logo;
 use crate::palette::{self, EMERALD_300, EMERALD_400, EMERALD_500, EMERALD_600, GREEN_500, WHITE};
 
 const NUM_PARTICLES: usize = 200;
@@ -128,7 +127,7 @@ impl LogoReveal {
         }
     }
 
-    pub fn render(&self, buffer: &mut [u32], width: usize, height: usize, time: f64, global_fade: f32) {
+    pub fn render(&self, buffer: &mut [u32], width: usize, height: usize, global_fade: f32) {
         let cx = width as f32 / 2.0;
         let cy = height as f32 / 2.0;
         let logo_radius = height.min(width) as f32 * 0.22;
@@ -164,16 +163,19 @@ impl LogoReveal {
 
         // Draw the ouroboros logo (progressive reveal)
         let logo_progress = (self.phase * 2.0).min(1.0);
-        logo::draw_logo(
-            buffer,
-            width,
-            height,
-            cx,
-            cy,
-            logo_radius,
-            logo_progress,
-            time,
-            global_fade * logo_progress,
+        demofx::logo::draw(
+            &mut demofx::RgbBuffer {
+                buf: &mut *buffer,
+                w: width,
+                h: height,
+            },
+            &demofx::logo::LogoState::sized(
+                cx,
+                cy,
+                logo_radius,
+                logo_progress,
+                global_fade * logo_progress,
+            ),
         );
 
         // Particles

@@ -6,11 +6,11 @@ use ratatui::buffer::Buffer;
 
 use crate::canvas::{scale_rgb, to_rgb, CELL_H, CELL_W, COLS, ROWS};
 use crate::data::{BG, FG};
-use crate::logo::LogoState;
 use crate::post::Look;
 use crate::timeline::{bars, smooth, BAR, BEAT};
 use crate::tui::{self, Chrome};
 use crate::views::{agenda, help, shell};
+use demofx::logo::LogoState;
 
 use super::{pressed, reveal};
 

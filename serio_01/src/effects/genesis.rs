@@ -12,7 +12,6 @@
 
 use crate::effects::orrery_render::{self, fill_circle, OrreryRenderOpts, TrailBuffer};
 use crate::font;
-use crate::logo;
 use crate::orrery::model::{Orrery, PLANET_COUNT};
 use crate::palette;
 use crate::palette::Surface;
@@ -118,18 +117,13 @@ pub fn render(
     if scene_t > 1.0 {
         let logo_alpha = smoothstep(1.0, 3.0, scene_t) as f32 * fade;
         let logo_progress = smoothstep(1.0, 3.0, scene_t) as f32;
-        logo::draw_logo(
+        demofx::logo::draw(
             &mut Surface {
                 buf: &mut *buffer,
                 w: width,
                 h: height,
             },
-            80.0,
-            55.0,
-            45.0,
-            logo_progress,
-            time,
-            logo_alpha * 0.8,
+            &demofx::logo::LogoState::sized(80.0, 55.0, 45.0, logo_progress, logo_alpha * 0.8),
         );
     }
 

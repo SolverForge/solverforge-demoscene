@@ -1,5 +1,4 @@
 mod font;
-mod logo;
 mod palette;
 
 use palette::Surface;
@@ -442,9 +441,15 @@ fn draw_logo_cluster(surface: &mut Surface, t: f64) {
     let radius = 112.0 + pulse * 10.0;
 
     for &(dx, dy, brightness) in &[(-10.0, 0.0, 0.08), (10.0, 0.0, 0.08), (0.0, 8.0, 0.06)] {
-        logo::draw_logo(surface, cx + dx, cy + dy, radius, 1.0, t, brightness);
+        demofx::logo::draw(
+            surface,
+            &demofx::logo::LogoState::sized(cx + dx, cy + dy, radius, 1.0, brightness),
+        );
     }
-    logo::draw_logo(surface, cx, cy, radius, 1.0, t, 1.0);
+    demofx::logo::draw(
+        surface,
+        &demofx::logo::LogoState::sized(cx, cy, radius, 1.0, 1.0),
+    );
 
     font::draw_text_centered_glow(
         surface,

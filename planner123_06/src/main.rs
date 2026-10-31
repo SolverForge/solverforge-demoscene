@@ -2,7 +2,6 @@ mod audio;
 mod canvas;
 mod data;
 mod font;
-mod logo;
 mod noise;
 mod post;
 mod scenes;

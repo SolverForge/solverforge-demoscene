@@ -9,5 +9,6 @@ name = "solverforge-screensaver"
 path = "src/main.rs"
 
 [dependencies]
+demofx = { path = "../vendor/demofx" }
 pixels = "0.15"
 winit = "0.29"

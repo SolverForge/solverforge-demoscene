@@ -6,7 +6,7 @@
 // demo's dark screen.
 use std::f32::consts::TAU;
 
-use crate::canvas::lerp_rgb;
+use crate::Pixels;
 
 type P = (f32, f32);
 
@@ -52,7 +52,7 @@ const EMERALD: u32 = 0x10b981;
 const INK: u32 = 0xecfdf5;
 const RING_WIDTH: f32 = 14.0;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct LogoState {
     /// Center in pixels.
     pub cx: f32,
@@ -64,6 +64,32 @@ pub struct LogoState {
     /// 0..1: inner ring, accents, crosshair and brackets fade in.
     pub detail: f32,
     pub gain: f32,
+}
+
+impl LogoState {
+    /// A logo whose body fits a circle of `radius` pixels (the SVG ring's
+    /// 75-unit extent), drawing itself in over `progress` 0..1 with the
+    /// detail fading in as the ring closes.
+    pub fn sized(cx: f32, cy: f32, radius: f32, progress: f32, gain: f32) -> Self {
+        Self {
+            cx,
+            cy,
+            scale: radius / 75.0,
+            progress,
+            detail: ((progress - 0.85) / 0.15).clamp(0.0, 1.0),
+            gain,
+        }
+    }
+}
+
+fn lerp_rgb(a: u32, b: u32, t: f32) -> u32 {
+    let t = t.clamp(0.0, 1.0);
+    let ch = |v: u32, s: u32| ((v >> s) & 0xFF) as f32;
+    let mix = |s: u32| {
+        let v = ch(a, s) + (ch(b, s) - ch(a, s)) * t;
+        (v.round().clamp(0.0, 255.0) as u32) << s
+    };
+    mix(16) | mix(8) | mix(0)
 }
 
 fn sub(a: P, b: P) -> P {
@@ -151,7 +177,9 @@ fn cover(sd: f32, scale: f32) -> f32 {
     (0.5 - sd * scale).clamp(0.0, 1.0)
 }
 
-pub fn draw(pixels: &mut [u32], width: usize, height: usize, s: &LogoState) {
+/// Draw the logo into any frame the demos render to.
+pub fn draw(pixels: &mut impl Pixels, s: &LogoState) {
+    let (width, height) = pixels.size();
     let ring_out = offset(&OUTER, RING_WIDTH / 2.0);
     let ring_in = offset(&OUTER, -RING_WIDTH / 2.0);
     let head: Vec<P> = HEAD.iter().map(|&(x, y)| (x + 100.0, y + 25.0)).collect();
@@ -175,7 +203,8 @@ pub fn draw(pixels: &mut [u32], width: usize, height: usize, s: &LogoState) {
                 (x as f32 + 0.5 - s.cx) / s.scale + 100.0,
                 (y as f32 + 0.5 - s.cy) / s.scale + 100.0,
             );
-            let px = &mut pixels[y * width + x];
+            let mut value = pixels.get(x, y);
+            let px = &mut value;
 
             // Body: the ring between the two miter offsets, revealed clockwise
             // from the top.
@@ -200,6 +229,7 @@ pub fn draw(pixels: &mut [u32], width: usize, height: usize, s: &LogoState) {
                 }
             }
             if detail <= 0.0 {
+                pixels.put(x, y, value);
                 continue;
             }
             // Inner octagon, 2 wide at 40%.
@@ -249,6 +279,7 @@ pub fn draw(pixels: &mut [u32], width: usize, height: usize, s: &LogoState) {
                 let d = (p.0 - sx - 2.0).abs().max((p.1 - sy - 2.0).abs()) - 2.0;
                 blend(px, INK, cover(d, s.scale) * 0.6 * detail);
             }
+            pixels.put(x, y, value);
         }
     }
 }

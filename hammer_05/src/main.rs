@@ -1,7 +1,6 @@
 mod audio;
 mod canvas;
 mod forge;
-mod logo;
 mod noise;
 mod post;
 mod river;

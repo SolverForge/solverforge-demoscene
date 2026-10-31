@@ -18,7 +18,6 @@
 mod audio;
 mod effects;
 mod font;
-mod logo;
 mod palette;
 
 use effects::copper::{CopperBars, CopperMode};
@@ -171,7 +170,7 @@ fn main() {
             0 => {
                 // Scene 0: Logo Reveal
                 logo_reveal.update(dt, RENDER_W, RENDER_H);
-                logo_reveal.render(&mut buffer, RENDER_W, RENDER_H, scene_time, fade);
+                logo_reveal.render(&mut buffer, RENDER_W, RENDER_H, fade);
             }
 
             1 => {
@@ -507,16 +506,19 @@ fn main() {
 
                 // Logo centered, large
                 let logo_r = RENDER_H.min(RENDER_W) as f32 * 0.25;
-                logo::draw_logo(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
-                    RENDER_W as f32 / 2.0,
-                    RENDER_H as f32 / 2.0 - 40.0,
-                    logo_r,
-                    1.0,
-                    scene_time,
-                    fade,
+                demofx::logo::draw(
+                    &mut demofx::RgbBuffer {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    &demofx::logo::LogoState::sized(
+                        RENDER_W as f32 / 2.0,
+                        RENDER_H as f32 / 2.0 - 40.0,
+                        logo_r,
+                        1.0,
+                        fade,
+                    ),
                 );
 
                 // Pulsing title
@@ -656,7 +658,7 @@ fn run_headless(duration: f64) {
         match scene {
             0 => {
                 logo_reveal.update(dt, RENDER_W, RENDER_H);
-                logo_reveal.render(&mut buffer, RENDER_W, RENDER_H, scene_time, fade);
+                logo_reveal.render(&mut buffer, RENDER_W, RENDER_H, fade);
             }
             1 => {
                 plasma.render(&mut buffer, RENDER_W, RENDER_H, scene_time, fade, false);
@@ -920,16 +922,19 @@ fn run_headless(duration: f64) {
                 starfield.update(dt, 0.3);
                 starfield.render(&mut buffer, RENDER_W, RENDER_H, fade * 0.4, scene_time);
                 let logo_r = RENDER_H.min(RENDER_W) as f32 * 0.25;
-                logo::draw_logo(
-                    &mut buffer,
-                    RENDER_W,
-                    RENDER_H,
-                    RENDER_W as f32 / 2.0,
-                    RENDER_H as f32 / 2.0 - 40.0,
-                    logo_r,
-                    1.0,
-                    scene_time,
-                    fade,
+                demofx::logo::draw(
+                    &mut demofx::RgbBuffer {
+                        buf: &mut buffer,
+                        w: RENDER_W,
+                        h: RENDER_H,
+                    },
+                    &demofx::logo::LogoState::sized(
+                        RENDER_W as f32 / 2.0,
+                        RENDER_H as f32 / 2.0 - 40.0,
+                        logo_r,
+                        1.0,
+                        fade,
+                    ),
                 );
                 let pulse = (scene_time as f32 * 2.0).sin() * 0.15 + 0.85;
                 font::draw_text_centered_glow(
@@ -1135,5 +1140,8 @@ fn render_audio_wav(duration: f64, path: &str) {
     }
 
     std::fs::write(path, &wav).expect("Failed to write audio WAV");
-    eprintln!("[render] Audio written: {path} ({:.1} MB)", wav.len() as f64 / 1_048_576.0);
+    eprintln!(
+        "[render] Audio written: {path} ({:.1} MB)",
+        wav.len() as f64 / 1_048_576.0
+    );
 }
