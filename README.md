@@ -36,7 +36,9 @@ Audiovisual demos in the tradition of the Amiga/PC demoscene -- built to showcas
 
 Each demo is a standalone Rust crate. See the README inside each directory for details on scenes, architecture, controls, and rendering.
 
-Text effects come from one vendored copy of [glyphfx](https://github.com/blackopsrepl/glyphfx) in `vendor/glyphfx`, built and wrapped for every demo by `vendor/demofx` (glyphfx clips as text cells, the 8x8 font, timed story cards). Demos that use it need a C compiler.
+Text effects come from one vendored copy of [glyphfx](https://github.com/blackopsrepl/glyphfx) in `vendor/glyphfx`, built and wrapped for every demo by `vendor/demofx` (glyphfx clips as text cells, the 8x8 font, timed story cards). `vendor/demofx` also draws the SolverForge logo for every demo, from the brand SVG. Demos that use it need a C compiler.
+
+Each demo keeps its vertical 9:16 social cover in `docs/social/`: a deterministic HTML source and its 1080x1920 PNG render.
 
 ## Quick Start
 
