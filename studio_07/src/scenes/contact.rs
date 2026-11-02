@@ -18,7 +18,7 @@ const OFFERS: [(&str, u32); 4] = [
     ("PLANNING", 0x34d399),
     ("ADVISORY", 0x7dd3fc),
     ("AGENTS", 0xa78bfa),
-    ("REDONA", 0xffc61a),
+    ("DEVREL", 0xfb923c),
 ];
 const CREDITS: &str = "STUDIO_07  -  SOLVERFORGE DEMOSCENE  -  BERGAMO MMXXVI";
 

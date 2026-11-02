@@ -19,7 +19,7 @@ Told in his own voice, one card of plain sentences per moment:
 - **One: planning systems.** Scheduling, routing and allocation, modeled and built on SolverForge. A route plan (36 stops, 4 vans of 10) starts careless and is improved by a local search, one kept move per step.
 - **Two: advisory, for any software project.** Discovery, architecture, code reviews and performance, directly with him. A system sketch sharpens as the steps light up.
 - **Three: agents and the tools under them.** MCP servers, terminal apps, native Linux desktop software. A tiling desktop where an agent works through the windows its log describes.
-- **Four: Redona Broadcasting.** Video for shops in Bergamo: phone clips sent on WhatsApp come back as videos ready to post, each checked first. In Redona's own colours, Bergamo's civic red and yellow.
+- **Four: developer relations.** If you like how he presents his own work, he can do the same for your project: demos, docs and quickstarts, release posts, videos like this one. A launch kit assembles tile by tile.
 - **The proof.** A sine scroller of published projects, and the background before SolverForge.
 - **The address.** hello@solverforge.ai, vdistefano.studio, solverforge.org, github.com/blackopsrepl.
 
@@ -32,7 +32,7 @@ Told in his own voice, one card of plain sentences per moment:
 | 14-27 | 0:28 | Plan | Route plan: careless start, kept moves one by one, length and van loads on the panel |
 | 27-35 | 0:54 | Advice | Blueprint: discovery, design, review, tuning, next step; the sketch sharpens |
 | 35-44 | 1:10 | Agents | Tiling desktop: planner, mail client, agent log and pointer |
-| 44-52 | 1:28 | Redona | Phones film, clips fly to the Redona TV, the video plays and is checked |
+| 44-52 | 1:28 | DevRel | A launch kit: docs, a quickstart that runs, the release post, a demo video |
 | 52-60 | 1:44 | Work | Starfield, turning octagon, copper bars, sine scroller of projects |
 | 60-68 | 2:00 | Contact | Portrait, name, address, the four offers |
 
@@ -47,10 +47,11 @@ Told in his own voice, one card of plain sentences per moment:
 
 ## Audio
 
-Synthesized sample by sample (`src/audio/song.rs`) into one buffer at startup; live playback and the WAV export read the same samples, and the audio playhead is the demo clock in the window.
+Synthwave, synthesized sample by sample (`src/audio/song.rs`) into one buffer at startup; live playback and the WAV export read the same samples, and the audio playhead is the demo clock in the window.
 
-- 120 BPM, A minor, Am - F - C - G, one chord per bar; a two-octave pad that ducks under the kick, a pulse arpeggio through a ping-pong delay, saw/square bass, synthesized kick, snare, claps and hats.
-- The arrangement follows the sections bar for bar: pad and arpeggio for the name, a half-time kick over the city, the full groove for the route search, a bell for the advisory blueprint, a saw lead for the agents, claps, octave bass and a square lead for Redona, everything for the scroller, the bell over the pad for the address.
+- 120 BPM, A harmonic minor, Am - F - Dm - E, one chord per bar: detuned supersaw pads that duck under the kick, a pulse arpeggio through a ping-pong delay, a gated 80s snare, open hats, tom fills and noise risers into each new section.
+- The bass is one gliding voice per bar: it slides in from the previous root and, in the big sections, slides up and down an octave every eighth.
+- The leads bend all the time, in the tracker style of the One Must Fall soundtrack: legato notes glide into each other, notes after a rest and held notes scoop up from two semitones below, longer notes grow a vibrato, and every second phrase ends with an octave dive. A supersaw for the route search and developer relations, FM brass for the city, the advisory blueprint and the address, a width-modulated pulse for the agents, supersaw over pulse for the scroller.
 - Every kept move of the route search is also a blip in the mix, at the moment it appears on screen (`Demo::move_times`).
 
 ## Running

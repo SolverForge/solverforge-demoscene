@@ -11,7 +11,7 @@ const COLD: &[&str] = &["--final-gradient-stops", "a9c8ee", "ffffff"];
 const GREEN: &[&str] = &["--final-gradient-stops", "34d399", "ecfdf5"];
 const BLUE: &[&str] = &["--final-gradient-stops", "7dd3fc", "e0f2fe"];
 const VIOLET: &[&str] = &["--final-gradient-stops", "c4b5fd", "f5f3ff"];
-const YELLOW: &[&str] = &["--final-gradient-stops", "ffc61a", "fff4cc"];
+const CORAL: &[&str] = &["--final-gradient-stops", "fb923c", "ffedd5"];
 const GOLD: &[&str] = &["--final-gradient-stops", "ffc94a", "fff3c4"];
 
 pub const CARDS: [CardSpec; 15] = [
@@ -100,21 +100,21 @@ pub const CARDS: [CardSpec; 15] = [
         VIOLET,
         TOP,
     ),
-    // REDONA
+    // DEVREL
     card(
         88.6,
         97.2,
-        "FOUR, FOR SHOPS IN BERGAMO: REDONA BROADCASTING.\nYOU SEND PHONE CLIPS ON WHATSAPP; YOU GET BACK VIDEOS READY TO POST.",
+        "FOUR: DEVELOPER RELATIONS. IF YOU LIKE HOW I PRESENT MY OWN WORK,\nI CAN DO THE SAME FOR YOUR PROJECT.",
         "beams",
-        YELLOW,
+        CORAL,
         TOP,
     ),
     card(
         97.4,
         103.7,
-        "EVERY VIDEO IS CHECKED BEFORE IT REACHES YOU.\nONE PLAN, ONE MONTHLY PRICE.",
+        "DEMOS, DOCS AND QUICKSTARTS, RELEASE POSTS,\nAND VIDEOS LIKE THIS ONE.",
         "middleout",
-        YELLOW,
+        CORAL,
         TOP,
     ),
     // WORK

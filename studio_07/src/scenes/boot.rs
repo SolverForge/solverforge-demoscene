@@ -10,7 +10,7 @@ use crate::timeline::Now;
 const SHELL: [(f32, &str, &str); 3] = [
     (3.2, "$ whoami", "vittorio distefano"),
     (5.4, "$ cat /etc/location", "bergamo, italy"),
-    (7.6, "$ ls ~/offers", "planning advisory agents redona"),
+    (7.6, "$ ls ~/offers", "planning advisory agents devrel"),
 ];
 
 pub fn draw(f: &mut Frame, portrait: &Portrait, name: &Clip, n: Now, t: f32) -> f32 {

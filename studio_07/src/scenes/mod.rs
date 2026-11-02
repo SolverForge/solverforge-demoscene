@@ -5,8 +5,8 @@ mod agents;
 mod boot;
 mod city;
 mod contact;
+mod devrel;
 mod plan;
-mod redona;
 mod work;
 
 use demofx::{Cards, Clip, ClipSpec};
@@ -65,7 +65,7 @@ impl Demo {
             Section::Plan => plan::draw(f, &self.plan, &self.move_times, n, t),
             Section::Advice => advice::draw(f, n, t),
             Section::Agents => agents::draw(f, n, t),
-            Section::Redona => redona::draw(f, n, t),
+            Section::DevRel => devrel::draw(f, n, t),
             Section::Work => work::draw(f, n, t),
             Section::Contact => contact::draw(f, &self.portrait, &self.name_wide, n, t),
         };

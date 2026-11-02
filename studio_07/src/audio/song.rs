@@ -1,13 +1,14 @@
-// STUDIO_07 soundtrack: 120 BPM in A minor, Am - F - C - G, one chord per
-// bar. The arrangement follows the picture's sections bar for bar (see
-// timeline.rs): a pad and a soft arpeggio for the name, the kick arrives
-// over the city, the full groove under the route search -- where every kept
-// move of the search is also a blip in the mix -- a bell for the advisory
-// blueprint, a saw lead for the agents, claps and a square lead for Redona,
-// everything for the scroller, and back to the pad for the address.
+// STUDIO_07 soundtrack: synthwave at 120 BPM in A harmonic minor,
+// Am - F - Dm - E, one chord per bar. Detuned supersaw pads, gliding octave bass, a gated
+// snare, tom fills and noise risers into the big sections, and leads that
+// bend all the time in the tracker style of the One Must Fall soundtrack:
+// legato notes slide into each other, held notes scoop up from below and
+// grow a vibrato, and phrase endings dive an octave.
 //
-// Every note is rendered once into buffers at startup; live playback and
-// the WAV export read the same samples.
+// The arrangement follows the picture's sections bar for bar (see
+// timeline.rs), and every kept move of the route search is also a blip in
+// the mix. Every note is rendered once into buffers at startup; live
+// playback and the WAV export read the same samples.
 use crate::timeline::{bars, now, Section, BAR, BEAT, DURATION, TOTAL_BARS};
 
 pub const SAMPLE_RATE: u32 = 44_100;
@@ -18,36 +19,63 @@ fn hz(midi: f32) -> f32 {
     440.0 * 2f32.powf((midi - 69.0) / 12.0)
 }
 
-// Am, F, C, G: bass roots and pad voicings.
-const ROOTS: [f32; 4] = [33.0, 29.0, 36.0, 31.0];
+/// One-pole smoothing coefficient for a time constant in seconds.
+fn coeff(tau: f32) -> f32 {
+    1.0 - (-1.0 / (tau * SR)).exp()
+}
+
+fn smooth(x: f32) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    x * x * (3.0 - 2.0 * x)
+}
+
+// A harmonic minor (G sharp, never G): Am - F - Dm - E, the E major
+// chord pulling back to Am every four bars.
+const ROOTS: [f32; 4] = [33.0, 29.0, 26.0, 28.0];
 const PADS: [[f32; 4]; 4] = [
-    [57.0, 60.0, 64.0, 67.0], // Am7
+    [57.0, 60.0, 64.0, 71.0], // Am add9
     [53.0, 57.0, 60.0, 64.0], // Fmaj7
-    [55.0, 60.0, 64.0, 67.0], // C/G
-    [55.0, 59.0, 62.0, 67.0], // G
+    [57.0, 62.0, 65.0, 69.0], // Dm
+    [56.0, 59.0, 62.0, 64.0], // E7
 ];
 
-/// The hook, four bars on an eighth-note grid: (start, length, midi).
-const HOOK: [(u8, u8, u8); 19] = [
+/// Two four-bar phrases on an eighth-note grid: (start, length, midi).
+const HOOK_A: [(u8, u8, u8); 19] = [
     (0, 2, 76),
-    (2, 1, 79),
+    (2, 1, 80),
     (3, 1, 81),
-    (4, 2, 79),
-    (6, 2, 76),
-    (8, 2, 77),
-    (10, 1, 76),
-    (11, 1, 72),
-    (12, 4, 69),
-    (16, 2, 72),
-    (18, 1, 76),
-    (19, 1, 79),
-    (20, 2, 84),
-    (22, 2, 79),
-    (24, 2, 79),
-    (26, 1, 77),
-    (27, 1, 74),
-    (28, 3, 71),
-    (31, 1, 74),
+    (4, 2, 83),
+    (6, 2, 84),
+    (8, 2, 84),
+    (10, 1, 81),
+    (11, 1, 77),
+    (12, 4, 76),
+    (16, 2, 74),
+    (18, 1, 77),
+    (19, 1, 81),
+    (20, 2, 86),
+    (22, 2, 84),
+    (24, 2, 83),
+    (26, 1, 81),
+    (27, 1, 80),
+    (28, 3, 76),
+    (31, 1, 80),
+];
+const HOOK_B: [(u8, u8, u8); 14] = [
+    (0, 3, 81),
+    (3, 1, 83),
+    (4, 2, 84),
+    (6, 2, 88),
+    (8, 2, 89),
+    (10, 2, 88),
+    (12, 4, 84),
+    (16, 2, 86),
+    (18, 1, 84),
+    (19, 1, 83),
+    (20, 4, 81),
+    (24, 2, 80),
+    (26, 2, 83),
+    (28, 4, 88),
 ];
 
 struct Mix {
@@ -134,9 +162,16 @@ pub fn render(move_times: &[f32]) -> Vec<[f32; 2]> {
         let section = now(t0 + 0.01).section;
         let next = now(t0 + BAR + 0.01).section;
         let chord = b % 4;
+        let prev_root = ROOTS[(b + 3) % 4];
         let last_bar = b + 1 == TOTAL_BARS as usize;
 
-        pad(&mut m, t0, chord, if last_bar { 3.5 } else { BAR + 0.35 });
+        pad(
+            &mut m,
+            t0,
+            chord,
+            if last_bar { 3.5 } else { BAR + 0.35 },
+            b,
+        );
         let groove = !matches!(section, Section::Boot | Section::Contact);
         if section != Section::Boot || b >= 2 {
             arp(&mut m, t0, chord, if groove { 1.0 } else { 0.6 });
@@ -144,57 +179,60 @@ pub fn render(move_times: &[f32]) -> Vec<[f32; 2]> {
         match section {
             Section::Boot => {}
             Section::City => {
-                bass(&mut m, t0, chord, false);
-                for beat in [0.0, 2.0] {
-                    kick(&mut m, t0 + beat * BEAT);
-                }
+                bass(&mut m, t0, prev_root, ROOTS[chord], Bass::Eighths, 0.8);
+                kick(&mut m, t0);
+                kick(&mut m, t0 + 2.5 * BEAT);
+                gated_snare(&mut m, t0 + 2.0 * BEAT, 0.8);
                 if b >= 10 {
                     hats(&mut m, t0, 2);
                 }
             }
-            Section::Plan | Section::Agents | Section::Work => {
-                bass(&mut m, t0, chord, true);
+            Section::Plan | Section::Agents | Section::DevRel | Section::Work => {
+                bass(&mut m, t0, prev_root, ROOTS[chord], Bass::Octaves, 1.0);
                 four_on_floor(&mut m, t0);
-                snares(&mut m, t0);
+                gated_snare(&mut m, t0 + BEAT, 1.0);
+                gated_snare(&mut m, t0 + 3.0 * BEAT, 1.0);
                 hats(&mut m, t0, 4);
             }
             Section::Advice => {
-                bass(&mut m, t0, chord, true);
+                bass(&mut m, t0, prev_root, ROOTS[chord], Bass::Eighths, 1.0);
                 four_on_floor(&mut m, t0);
+                gated_snare(&mut m, t0 + 3.0 * BEAT, 0.8);
                 hats(&mut m, t0, 2);
-            }
-            Section::Redona => {
-                bass_octaves(&mut m, t0, chord);
-                four_on_floor(&mut m, t0);
-                claps(&mut m, t0);
-                hats(&mut m, t0, 4);
             }
             Section::Contact => {
                 if b < 64 {
-                    bass(&mut m, t0, chord, false);
+                    bass(&mut m, t0, prev_root, ROOTS[chord], Bass::Held, 0.8);
                 }
             }
         }
-        // A snare roll into the big sections.
-        if next != section && matches!(next, Section::Plan | Section::Agents | Section::Work) {
-            for k in 0..8 {
-                let at = t0 + 2.0 * BEAT + k as f32 * BEAT / 4.0;
-                snare(&mut m, at, 0.35 + 0.08 * k as f32);
-            }
+        // Toms and a noise riser into every new section with a groove.
+        if next != section && !matches!(next, Section::Contact) && b + 1 < TOTAL_BARS as usize {
+            tom_fill(&mut m, t0);
+            riser(&mut m, t0);
         }
 
-        // Melody, four-bar phrases aligned to the section.
-        let phrase_bar = (b - first_bar(section)) % 4;
-        if phrase_bar == 0 {
+        // Leads: four-bar phrases from the start of each section, A then B.
+        let k = b - first_bar(section);
+        let left = section_bars(section) - k;
+        if k.is_multiple_of(4) && left >= 4 {
+            let phrase: &[(u8, u8, u8)] = if (k / 4).is_multiple_of(2) {
+                &HOOK_A
+            } else {
+                &HOOK_B
+            };
+            let b_side = (k / 4) % 2 == 1;
             match section {
-                Section::Advice => hook(&mut m, t0, Lead::Bell, 12.0),
-                Section::Agents => hook(&mut m, t0, Lead::Saw, 0.0),
-                Section::Redona => hook(&mut m, t0, Lead::Square, 0.0),
+                Section::City if k == 4 => lead(&mut m, t0, &HOOK_B, -12.0, Osc::Brass, 0.7, true),
+                Section::Plan if k >= 4 => lead(&mut m, t0, phrase, 0.0, Osc::Super, 1.0, b_side),
+                Section::Advice => lead(&mut m, t0, phrase, 0.0, Osc::Brass, 0.9, b_side),
+                Section::Agents => lead(&mut m, t0, phrase, 0.0, Osc::Pulse, 1.0, b_side),
+                Section::DevRel => lead(&mut m, t0, phrase, 0.0, Osc::Super, 1.0, b_side),
                 Section::Work => {
-                    hook(&mut m, t0, Lead::Saw, 0.0);
-                    hook(&mut m, t0, Lead::Bell, 12.0);
+                    lead(&mut m, t0, phrase, 0.0, Osc::Super, 1.0, b_side);
+                    lead(&mut m, t0, phrase, -12.0, Osc::Pulse, 0.6, b_side);
                 }
-                Section::Contact if b < 64 => hook(&mut m, t0, Lead::Bell, 0.0),
+                Section::Contact => lead(&mut m, t0, &HOOK_B, -12.0, Osc::Brass, 0.8, true),
                 _ => {}
             }
         }
@@ -215,22 +253,34 @@ pub fn render(move_times: &[f32]) -> Vec<[f32; 2]> {
     mixdown(m)
 }
 
-fn first_bar(section: Section) -> usize {
+fn section_span(section: Section) -> (usize, usize) {
     crate::timeline::SECTIONS
         .iter()
         .find(|(s, _, _)| *s == section)
-        .map(|(_, b0, _)| *b0 as usize)
-        .unwrap_or(0)
+        .map(|(_, b0, b1)| (*b0 as usize, *b1 as usize))
+        .unwrap_or((0, 0))
 }
 
-fn pad(m: &mut Mix, t0: f32, chord: usize, dur: f32) {
+fn first_bar(section: Section) -> usize {
+    section_span(section).0
+}
+
+fn section_bars(section: Section) -> usize {
+    let (b0, b1) = section_span(section);
+    b1 - b0
+}
+
+/// Supersaw pad: three detuned saws per chord tone through a lowpass whose
+/// cutoff breathes over eight bars.
+fn pad(m: &mut Mix, t0: f32, chord: usize, dur: f32, bar: usize) {
+    let open = 0.035 + 0.035 * (0.5 - 0.5 * (bar as f32 * TAU / 8.0).cos());
     for (k, &note) in PADS[chord].iter().enumerate() {
-        for (d, det) in [-0.07f32, 0.0, 0.07].iter().enumerate() {
+        for (d, det) in [-0.12f32, 0.0, 0.12].iter().enumerate() {
             let f = hz(note + det);
-            let pan = (k as f32 - 1.5) * 0.25 + (d as f32 - 1.0) * 0.2;
+            let pan = (k as f32 - 1.5) * 0.25 + (d as f32 - 1.0) * 0.35;
             let i0 = (t0 * SR) as usize;
             let n = (dur * SR) as usize;
-            let mut lp = 0.0f32;
+            let (mut lp, mut lp2) = (0.0f32, 0.0f32);
             let phase0 = (k * 3 + d) as f32 * 0.21;
             for s in 0..n {
                 let i = i0 + s;
@@ -239,9 +289,10 @@ fn pad(m: &mut Mix, t0: f32, chord: usize, dur: f32) {
                 }
                 let t = s as f32 / SR;
                 let raw = saw(phase0 + f * t);
-                lp += (raw - lp) * 0.08;
-                let e = env(t, 0.35, dur - 0.45, 0.45);
-                let v = lp * e * 0.022;
+                lp += (raw - lp) * open;
+                lp2 += (lp - lp2) * open * 1.5;
+                let e = env(t, 0.3, dur - 0.45, 0.45);
+                let v = lp2 * e * 0.026;
                 m.pad[i][0] += v * (1.0 - pan) * 0.5 * 1.4;
                 m.pad[i][1] += v * (1.0 + pan) * 0.5 * 1.4;
             }
@@ -260,8 +311,8 @@ fn arp(m: &mut Mix, t0: f32, chord: usize, gain: f32) {
         m.voice(
             at,
             0.2,
-            0.05 * gain,
-            if step % 2 == 0 { -0.35 } else { 0.35 },
+            0.045 * gain,
+            if step % 2 == 0 { -0.4 } else { 0.4 },
             0.6,
             move |t, _| {
                 let raw = pulse(f * t, 0.25);
@@ -272,62 +323,63 @@ fn arp(m: &mut Mix, t0: f32, chord: usize, gain: f32) {
     }
 }
 
-fn bass(m: &mut Mix, t0: f32, chord: usize, eighths: bool) {
-    let root = ROOTS[chord];
-    let steps: &[(f32, f32, f32)] = if eighths {
-        &[
-            (0.0, 0.45, 0.0),
-            (0.5, 0.45, 12.0),
-            (1.0, 0.45, 0.0),
-            (1.5, 0.45, 12.0),
-            (2.0, 0.45, 0.0),
-            (2.5, 0.45, 12.0),
-            (3.0, 0.45, 0.0),
-            (3.5, 0.45, 7.0),
-        ]
-    } else {
-        &[(0.0, 3.8, 0.0)]
-    };
-    for &(beat, len, up) in steps {
-        let f = hz(root + up + 12.0);
-        let mut lp = 0.0f32;
-        let dur = len * BEAT;
-        m.voice(t0 + beat * BEAT, dur + 0.05, 0.16, 0.0, 0.0, move |t, _| {
-            let raw = 0.6 * saw(f * t) + 0.4 * pulse(f * t, 0.5);
-            lp += (raw - lp) * 0.06;
-            lp * env(t, 0.004, dur - 0.04, 0.05)
-        });
-    }
+#[derive(Clone, Copy, PartialEq)]
+enum Bass {
+    /// Eighths on the root.
+    Eighths,
+    /// Eighths jumping root / octave, sliding between them.
+    Octaves,
+    /// One long note.
+    Held,
 }
 
-fn bass_octaves(m: &mut Mix, t0: f32, chord: usize) {
-    let root = ROOTS[chord];
-    for k in 0..8 {
-        let up = if k % 2 == 1 { 24.0 } else { 12.0 };
-        let f = hz(root + up);
-        let mut lp = 0.0f32;
-        m.voice(
-            t0 + k as f32 * BEAT / 2.0,
-            0.24,
-            0.15,
-            0.0,
-            0.0,
-            move |t, _| {
-                let raw = pulse(f * t, 0.5);
-                lp += (raw - lp) * 0.09;
-                lp * env(t, 0.003, 0.16, 0.06)
-            },
-        );
-    }
+/// One bar of bass as a single gliding voice: it slides in from the last
+/// bar's root, and in Octaves it slides up and down every eighth.
+fn bass(m: &mut Mix, t0: f32, from: f32, root: f32, kind: Bass, gain: f32) {
+    let eighth = BEAT / 2.0;
+    let mut pitch = from + 12.0;
+    let mut phase = 0.0f32;
+    let mut lp = 0.0f32;
+    let k_bar = coeff(0.035);
+    let k_oct = coeff(0.012);
+    m.voice(t0, BAR + 0.02, 0.17 * gain, 0.0, 0.0, move |t, _| {
+        let step = (t / eighth) as usize;
+        let up = if kind == Bass::Octaves && step % 2 == 1 {
+            12.0
+        } else {
+            0.0
+        };
+        let target = root + 12.0 + up;
+        pitch += (target - pitch) * if t < 0.1 { k_bar } else { k_oct };
+        phase += hz(pitch) / SR;
+        let local = if kind == Bass::Held {
+            t
+        } else {
+            t - step as f32 * eighth
+        };
+        let pluck = if kind == Bass::Held {
+            (-t * 0.8).exp()
+        } else {
+            (-local * 9.0).exp()
+        };
+        let raw = 0.65 * saw(phase) + 0.35 * pulse(phase, 0.5);
+        lp += (raw - lp) * (0.03 + 0.22 * pluck);
+        let gate = if kind == Bass::Held {
+            env(t, 0.01, BAR - 0.1, 0.1)
+        } else {
+            env(local, 0.003, eighth - 0.03, 0.02)
+        };
+        lp * gate * (0.55 + 0.45 * pluck)
+    });
 }
 
 fn kick(m: &mut Mix, at: f32) {
     m.kicks.push(at);
     let mut phase = 0.0f32;
     m.voice(at, 0.45, 0.55, 0.0, 0.0, move |t, _| {
-        let f = 48.0 + 110.0 * (-t * 32.0).exp();
+        let f = 46.0 + 120.0 * (-t * 30.0).exp();
         phase += f / SR;
-        (phase * TAU).sin() * (-t * 7.0).exp() + 0.3 * (-t * 300.0).exp()
+        (phase * TAU).sin() * (-t * 6.5).exp() + 0.3 * (-t * 300.0).exp()
     });
 }
 
@@ -337,98 +389,177 @@ fn four_on_floor(m: &mut Mix, t0: f32) {
     }
 }
 
-fn snare(m: &mut Mix, at: f32, gain: f32) {
-    m.voice(at, 0.3, gain * 0.32, 0.05, 0.15, move |t, mm| {
+/// The 80s gated snare: a crack, then a dense noise tail that stops dead.
+fn gated_snare(m: &mut Mix, at: f32, gain: f32) {
+    let mut lp = 0.0f32;
+    m.voice(at, 0.3, gain * 0.34, 0.05, 0.25, move |t, mm| {
         let n = mm.rnd();
-        0.7 * n * (-t * 16.0).exp() + 0.5 * (TAU * 185.0 * t).sin() * (-t * 22.0).exp()
+        lp += (n - lp) * 0.45;
+        let crack = 0.8 * n * (-t * 25.0).exp() + 0.6 * (TAU * 190.0 * t).sin() * (-t * 20.0).exp();
+        let gate = if t < 0.17 {
+            1.0
+        } else {
+            (1.0 - (t - 0.17) / 0.015).max(0.0)
+        };
+        crack + 0.42 * lp * gate * (1.0 - 0.3 * t / 0.17)
     });
 }
 
-fn snares(m: &mut Mix, t0: f32) {
-    for beat in [1.0, 3.0] {
-        snare(m, t0 + beat * BEAT, 1.0);
+/// Six toms down the kit over the last two beats of a bar.
+fn tom_fill(m: &mut Mix, t0: f32) {
+    for k in 0..6 {
+        let at = t0 + 2.0 * BEAT + k as f32 * BEAT / 3.0;
+        let base = 210.0 - k as f32 * 22.0;
+        let pan = 0.6 - k as f32 * 0.24;
+        let mut phase = 0.0f32;
+        m.voice(at, 0.4, 0.3, pan, 0.2, move |t, mm| {
+            let f = base * (1.0 + 0.6 * (-t * 22.0).exp());
+            phase += f / SR;
+            (phase * TAU).sin() * (-t * 7.0).exp() + 0.15 * mm.rnd() * (-t * 40.0).exp()
+        });
     }
 }
 
-fn claps(m: &mut Mix, t0: f32) {
-    for beat in [1.0, 3.0] {
-        m.voice(t0 + beat * BEAT, 0.25, 0.3, -0.1, 0.2, move |t, mm| {
-            let n = mm.rnd();
-            let burst = [0.0, 0.011, 0.022]
-                .iter()
-                .map(|o| {
-                    if t >= *o {
-                        (-(t - o) * 90.0).exp()
-                    } else {
-                        0.0
-                    }
-                })
-                .sum::<f32>();
-            n * (burst * 0.6 + 0.5 * (-t * 14.0).exp())
-        });
-    }
+/// White noise opening up over a bar, into the next section.
+fn riser(m: &mut Mix, t0: f32) {
+    let mut lp = 0.0f32;
+    m.voice(t0, BAR, 0.12, 0.0, 0.4, move |t, mm| {
+        let k = t / BAR;
+        let n = mm.rnd();
+        lp += (n - lp) * (0.01 + 0.5 * k * k);
+        lp * k * k
+    });
 }
 
 fn hats(m: &mut Mix, t0: f32, per_beat: usize) {
     let steps = 4 * per_beat;
     for k in 0..steps {
-        // Eighth-note hats sit on the off-beats.
         if per_beat == 2 && k % 2 == 0 {
             continue;
         }
         let at = t0 + k as f32 * BEAT / per_beat as f32;
-        let accent = if k % 2 == 1 { 1.0 } else { 0.6 };
+        // An open hat on every off-beat eighth of the 16th pattern.
+        let open = per_beat == 4 && k % 4 == 2;
+        let accent = if k % 2 == 1 { 0.7 } else { 1.0 };
+        let decay = if open { 14.0 } else { 70.0 };
         let mut prev = 0.0f32;
-        m.voice(at, 0.06, 0.08 * accent, 0.3, 0.0, move |t, mm| {
-            let n = mm.rnd();
-            let hp = n - prev;
-            prev = n;
-            hp * (-t * 70.0).exp()
-        });
+        m.voice(
+            at,
+            if open { 0.25 } else { 0.06 },
+            0.075 * accent,
+            0.3,
+            0.0,
+            move |t, mm| {
+                let n = mm.rnd();
+                let hp = n - prev;
+                prev = n;
+                hp * (-t * decay).exp()
+            },
+        );
     }
 }
 
-#[derive(Clone, Copy)]
-enum Lead {
-    Saw,
-    Square,
-    Bell,
+#[derive(Clone, Copy, PartialEq)]
+enum Osc {
+    /// Three detuned saws, filtered.
+    Super,
+    /// A pulse with slow width modulation, tracker style.
+    Pulse,
+    /// Two-operator FM brass.
+    Brass,
 }
 
-fn hook(m: &mut Mix, t0: f32, lead: Lead, up: f32) {
+/// A four-bar phrase as one monophonic voice that bends: legato notes glide
+/// into each other, notes after a rest and held notes scoop up from two
+/// semitones below, every note longer than an eighth grows a vibrato, and
+/// with `dive` the last note falls an octave.
+fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: f32, dive: bool) {
     let eighth = BEAT / 2.0;
-    for &(start, len, note) in HOOK.iter() {
-        let f = hz(note as f32 + up);
-        let at = t0 + start as f32 * eighth;
-        let dur = len as f32 * eighth;
-        match lead {
-            Lead::Saw => {
-                let mut lp = 0.0f32;
-                m.voice(at, dur + 0.12, 0.075, -0.15, 0.45, move |t, _| {
-                    let vib =
-                        1.0 + 0.004 * (TAU * 5.5 * t).sin() * ((t - 0.12) * 4.0).clamp(0.0, 1.0);
-                    let raw = 0.5 * saw(f * vib * t) + 0.5 * saw(f * vib * 1.004 * t + 0.3);
-                    lp += (raw - lp) * 0.2;
-                    lp * env(t, 0.01, dur - 0.02, 0.12)
-                });
-            }
-            Lead::Square => {
-                let mut lp = 0.0f32;
-                m.voice(at, dur + 0.08, 0.065, 0.15, 0.35, move |t, _| {
-                    let raw = pulse(f * t, 0.5);
-                    lp += (raw - lp) * 0.3;
-                    lp * env(t, 0.005, dur - 0.04, 0.08)
-                });
-            }
-            Lead::Bell => {
-                m.voice(at, 1.4, 0.07, 0.25, 0.55, move |t, _| {
-                    let idx = 2.2 * (-t * 5.0).exp();
-                    let modu = (TAU * f * 3.5 * t).sin() * idx;
-                    (TAU * f * t + modu).sin() * (-t * 3.2).exp() * env(t, 0.003, 10.0, 1.0)
-                });
+    let notes: Vec<(f32, f32, f32, bool)> = phrase
+        .iter()
+        .enumerate()
+        .map(|(i, &(s, l, n))| {
+            let start = s as f32 * eighth;
+            let legato = i > 0 && {
+                let (ps, pl, _) = phrase[i - 1];
+                ps + pl == s
+            };
+            (start, l as f32 * eighth, n as f32 + up, legato)
+        })
+        .collect();
+    let last = notes.len() - 1;
+    let mut idx = usize::MAX;
+    let mut pitch = notes[0].2 - 2.0;
+    let mut k_glide = coeff(0.05);
+    let mut phases = [0.0f32; 3];
+    let mut mod_phase = 0.0f32;
+    let mut lp = 0.0f32;
+    let mut amp = 0.0f32;
+    let (k_on, k_off) = (coeff(0.004), coeff(0.08));
+    let (pan, send, level) = match osc {
+        Osc::Super => (-0.12, 0.45, 0.075),
+        Osc::Pulse => (0.18, 0.4, 0.06),
+        Osc::Brass => (0.05, 0.5, 0.085),
+    };
+    let total = 16.0 * BEAT + if dive { 0.9 } else { 0.3 };
+    m.voice(t0, total, level * gain, pan, send, move |t, _| {
+        while idx.wrapping_add(1) <= last && notes[idx.wrapping_add(1)].0 <= t {
+            idx = idx.wrapping_add(1);
+            let (_, len, n, legato) = notes[idx];
+            if legato && len < 3.0 * eighth {
+                k_glide = coeff(0.045);
+            } else {
+                // Scoop up into the note.
+                pitch = pitch.min(n - 2.0);
+                if !legato {
+                    pitch = n - 2.0;
+                }
+                k_glide = coeff(if len >= 3.0 * eighth { 0.09 } else { 0.05 });
             }
         }
-    }
+        if idx == usize::MAX {
+            return 0.0;
+        }
+        let (start, len, n, _) = notes[idx];
+        let into = t - start;
+        let next_legato = idx < last && notes[idx + 1].3;
+        let mut gate = into < len - if next_legato { 0.0 } else { 0.02 };
+        let mut target = n;
+        if dive && idx == last {
+            let from = len * 0.5;
+            target -= 12.0 * smooth((into - from) / (len - from + 0.6));
+            gate = into < len + 0.6;
+        }
+        pitch += (target - pitch) * k_glide;
+        let vib = 0.3 * (TAU * 5.6 * into).sin() * smooth((into - 0.18) / 0.3);
+        let f = hz(pitch + vib);
+        amp += ((gate as i32 as f32) - amp) * if gate { k_on } else { k_off };
+        let s = match osc {
+            Osc::Super => {
+                let mut sum = 0.0;
+                for (j, d) in [1.0f32, 1.007, 0.993].iter().enumerate() {
+                    phases[j] = (phases[j] + f * d / SR).fract();
+                    sum += saw(phases[j]);
+                }
+                let bright = 0.12 + 0.2 * (-into * 4.0).exp();
+                lp += (sum / 3.0 - lp) * bright;
+                lp
+            }
+            Osc::Pulse => {
+                phases[0] = (phases[0] + f / SR).fract();
+                let duty = 0.3 + 0.15 * (TAU * 0.7 * (start + into)).sin();
+                lp += (pulse(phases[0], duty) - lp) * 0.3;
+                lp
+            }
+            Osc::Brass => {
+                phases[0] = (phases[0] + f / SR).fract();
+                mod_phase = (mod_phase + 2.0 * f / SR).fract();
+                let index = 0.5 + 1.8 * (-into * 5.0).exp();
+                (TAU * phases[0] + index * (TAU * mod_phase).sin()).sin()
+            }
+        };
+        s * amp
+    });
 }
 
 fn blip(m: &mut Mix, at: f32, f: f32, pan: f32) {

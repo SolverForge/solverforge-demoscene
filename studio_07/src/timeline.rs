@@ -19,8 +19,8 @@ pub enum Section {
     Advice,
     /// Offer three: agents and the tools under them, a tiling desktop.
     Agents,
-    /// Offer four: Redona Broadcasting, video for shops in Bergamo.
-    Redona,
+    /// Offer four: developer relations, a project's launch kit.
+    DevRel,
     /// Proof: the published work, on a scroller.
     Work,
     /// How to reach him.
@@ -34,7 +34,7 @@ pub const SECTIONS: [(Section, f32, f32); 8] = [
     (Section::Plan, 14.0, 27.0),
     (Section::Advice, 27.0, 35.0),
     (Section::Agents, 35.0, 44.0),
-    (Section::Redona, 44.0, 52.0),
+    (Section::DevRel, 44.0, 52.0),
     (Section::Work, 52.0, 60.0),
     (Section::Contact, 60.0, 68.0),
 ];

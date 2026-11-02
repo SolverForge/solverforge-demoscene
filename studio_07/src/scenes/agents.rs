@@ -37,7 +37,7 @@ const EVENTS: [(usize, f32, f32, u32, &str); 7] = [
     (1, 1.0, 2.0, 0xfbbf24, "review"),
     (2, 0.5, 1.0, 0x38bdf8, "call"),
     (2, 3.0, 2.5, 0x34d399, "deep work"),
-    (4, 2.0, 1.5, 0xf472b6, "redona"),
+    (4, 2.0, 1.5, 0xf472b6, "demo cut"),
     (1, 5.0, 1.0, 0x38bdf8, "sync"),
 ];
 /// To-do items the planner schedules: (when, day, hour, len, label).
@@ -216,7 +216,7 @@ const MAIL: [(&str, &str); 6] = [
     ("anna", "shift plan"),
     ("luca", "40 stops, 3 vans"),
     ("ci", "release green"),
-    ("giulia", "new clips"),
+    ("giulia", "docs draft"),
     ("marco", "review notes"),
     ("bench", "nightly run"),
 ];
