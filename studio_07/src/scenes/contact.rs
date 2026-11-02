@@ -8,7 +8,7 @@ use crate::portrait::Portrait;
 use crate::timeline::{smooth, Now};
 
 const LINES: [(&str, u32); 5] = [
-    ("INFO@VDISTEFANO.STUDIO", LIME),
+    ("HELLO@SOLVERFORGE.AI", LIME),
     ("VDISTEFANO.STUDIO", PAPER),
     ("SOLVERFORGE.ORG", PAPER),
     ("GITHUB.COM/BLACKOPSREPL", PAPER),

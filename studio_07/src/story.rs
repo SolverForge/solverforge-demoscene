@@ -36,7 +36,7 @@ pub const CARDS: [CardSpec; 15] = [
     card(
         20.6,
         27.8,
-        "IT PLANS SHIFTS, ROUTES AND TIMETABLES.\nTHAT KIND OF WORK IS WHAT I OFFER, IN FOUR WAYS.",
+        "SOLVERS ARE ONE PART OF WHAT I BUILD.\nHERE ARE FOUR WAYS TO WORK WITH ME.",
         "slide",
         COLD,
         TOP,
@@ -70,7 +70,7 @@ pub const CARDS: [CardSpec; 15] = [
     card(
         54.6,
         62.0,
-        "TWO: ADVISORY. TECHNICAL DISCOVERY, OPTIMIZATION STRATEGY\nAND ARCHITECTURE REVIEWS, WITH ME DIRECTLY.",
+        "TWO: ADVISORY, FOR ANY SOFTWARE PROJECT: DISCOVERY,\nARCHITECTURE, CODE REVIEWS AND PERFORMANCE, WITH ME DIRECTLY.",
         "wipe",
         BLUE,
         TOP,

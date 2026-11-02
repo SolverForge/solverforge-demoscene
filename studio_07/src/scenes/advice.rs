@@ -1,6 +1,6 @@
-// ADVICE: offer two, on blueprint paper. The five steps of an engagement
-// light up in turn (the path on vdistefano.studio/services), and the sketch
-// of a system below them sharpens from a wobbly draft into clean lines.
+// ADVICE: offer two, on blueprint paper: advisory for any software project.
+// The five steps of an engagement light up in turn, and the sketch of a
+// system below them sharpens from a wobbly draft into clean lines.
 use super::{typed, PAPER};
 use crate::gfx::{hash, Frame, H, W};
 use crate::timeline::{smooth, Now};
@@ -12,10 +12,10 @@ const LINE: u32 = 0x7dd3fc;
 const DIM: u32 = 0x2b5d8a;
 
 const STEPS: [(&str, &str); 5] = [
-    ("DISCOVERY", "FEASIBILITY, AND A FIRST-PASS ARCHITECTURE"),
-    ("FRAMING", "CONSTRAINTS AND OBJECTIVES, MADE PRECISE"),
-    ("STRATEGY", "MODEL DESIGN, SOLVER STRATEGY, TRADEOFFS"),
-    ("REVIEW", "LANGUAGE BOUNDARIES, APIS, JOBS, SERVICES"),
+    ("DISCOVERY", "IS IT WORTH BUILDING, AND IN WHAT SHAPE"),
+    ("DESIGN", "LANGUAGES, RUNTIMES, SERVICES, DATA"),
+    ("REVIEW", "CODE, APIS, PROTOTYPES, MIGRATIONS"),
+    ("TUNING", "WHAT IS SLOW, FRAGILE OR EXPENSIVE, AND WHY"),
     ("NEXT STEP", "A SHARPER NEXT STEP, BEFORE EXPENSIVE CODE"),
 ];
 const FIRST: f32 = 1.4;
@@ -156,7 +156,7 @@ fn traced_box(f: &mut Frame, x: i32, y: i32, w: i32, h: i32, c: u32, a: f32, k: 
     }
 }
 
-/// A small system drawing: client, API, job queue, solver, data. Wobbly
+/// A small system drawing: client, API, queue, worker, data. Wobbly
 /// and dashed while the problem is unclear, straight and solid once it is.
 fn sketch(f: &mut Frame, clarity: f32, t: f32, a: f32) {
     if a <= 0.0 {
@@ -165,8 +165,8 @@ fn sketch(f: &mut Frame, clarity: f32, t: f32, a: f32) {
     let nodes = [
         ("CLIENT", 170, 520),
         ("API", 420, 470),
-        ("JOBS", 420, 600),
-        ("SOLVER", 700, 535),
+        ("QUEUE", 420, 600),
+        ("WORKER", 700, 535),
         ("DATA", 990, 535),
     ];
     let edges = [(0, 1), (1, 2), (2, 3), (1, 3), (3, 4)];

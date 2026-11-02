@@ -17,11 +17,11 @@ Told in his own voice, one card of plain sentences per moment:
 - **Who.** Vittorio Distefano, a software engineer in Bergamo, Italy, who builds software for hard problems. His portrait prints dot by dot while a shell answers `whoami`.
 - **Where.** Bergamo's upper town at night -- the Venetian walls, the Campanone, Santa Maria Maggiore, the Duomo, the Rocca, San Vigilio, the funicular -- and SolverForge's mark over it: an open-source constraint solver with a native Rust core and a Python surface.
 - **One: planning systems.** Scheduling, routing and allocation, modeled and built on SolverForge. A route plan (36 stops, 4 vans of 10) starts careless and is improved by a local search, one kept move per step.
-- **Two: advisory.** Technical discovery, optimization strategy and architecture reviews, from the five-step path on [vdistefano.studio/services](https://vdistefano.studio/services/). A system sketch sharpens as the steps light up.
+- **Two: advisory, for any software project.** Discovery, architecture, code reviews and performance, directly with him. A system sketch sharpens as the steps light up.
 - **Three: agents and the tools under them.** MCP servers, terminal apps, native Linux desktop software. A tiling desktop where an agent works through the windows its log describes.
 - **Four: Redona Broadcasting.** Video for shops in Bergamo: phone clips sent on WhatsApp come back as videos ready to post, each checked first. In Redona's own colours, Bergamo's civic red and yellow.
 - **The proof.** A sine scroller of published projects, and the background before SolverForge.
-- **The address.** info@vdistefano.studio, vdistefano.studio, solverforge.org, github.com/blackopsrepl.
+- **The address.** hello@solverforge.ai, vdistefano.studio, solverforge.org, github.com/blackopsrepl.
 
 ## Scenes
 
@@ -30,7 +30,7 @@ Told in his own voice, one card of plain sentences per moment:
 | 0-6 | 0:00 | Boot | The name decrypts, the portrait prints, a shell answers who, where and what |
 | 6-14 | 0:12 | City | Bergamo's upper town at night; the SolverForge mark rises |
 | 14-27 | 0:28 | Plan | Route plan: careless start, kept moves one by one, length and van loads on the panel |
-| 27-35 | 0:54 | Advice | Blueprint: discovery, framing, strategy, review, next step; the sketch sharpens |
+| 27-35 | 0:54 | Advice | Blueprint: discovery, design, review, tuning, next step; the sketch sharpens |
 | 35-44 | 1:10 | Agents | Tiling desktop: planner, mail client, agent log and pointer |
 | 44-52 | 1:28 | Redona | Phones film, clips fly to the Redona TV, the video plays and is checked |
 | 52-60 | 1:44 | Work | Starfield, turning octagon, copper bars, sine scroller of projects |
