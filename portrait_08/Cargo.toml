@@ -1,0 +1,19 @@
+[package]
+name = "portrait-08-demo"
+version = "0.1.0"
+edition = "2021"
+description = "SolverForge demoscene: PORTRAIT_08 -- Vittorio Distefano, the person, in a vertical reel"
+
+[[bin]]
+name = "portrait-08-demo"
+path = "src/main.rs"
+
+[dependencies]
+# Pixel framebuffer window
+minifb = "0.28"
+
+# Audio output (the track itself is synthesized by hand in src/audio)
+cpal = "0.17"
+
+# glyphfx (vendored once for every demo), the 8x8 font, story cards, the logo
+demofx = { path = "../vendor/demofx" }

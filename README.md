@@ -34,6 +34,7 @@ Audiovisual demos in the tradition of the Amiga/PC demoscene -- built to showcas
 | [`hammer_05/`](hammer_05/) | SolverForge -- the Serio and the forge, textmode on glyphfx | 107s | Complete |
 | [`planner123_06/`](planner123_06/) | [Planner123](https://github.com/blackopsrepl/Planner123) -- the demo runs inside the app, textmode on ratatui | 107s | Complete |
 | [`studio_07/`](studio_07/) | [Vittorio Distefano](https://vdistefano.studio) -- who he is and the four ways to work with him | 136s | Complete |
+| [`portrait_08/`](portrait_08/) | [Vittorio Distefano](https://vdistefano.studio) -- the person: guitar, worlds, hard problems, home; a vertical 9:16 reel | 140s | Complete |
 
 Each demo is a standalone Rust crate. See the README inside each directory for details on scenes, architecture, controls, and rendering.
 
