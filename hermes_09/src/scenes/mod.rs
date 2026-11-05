@@ -4,7 +4,7 @@ mod intro;
 mod live;
 mod outro;
 
-pub use live::HOLE;
+pub use live::{DIALOG, HOLE, PORTRAIT};
 
 use demofx::Cards;
 

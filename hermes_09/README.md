@@ -7,9 +7,11 @@ Hermes Agent Plugin Hackathon. 84 seconds at 1920x1080, 60 fps:
   meetings. Five task blocks land on top of them in red with a negative
   score, then slide one by one into free time until the score reads `0hard`.
   The score is recomputed every frame from the blocks on screen.
-- **Live (12–72 s).** A bezel opens over rolling copper bars, with the statue
-  from Hermes Desktop's backdrop barely visible underneath. The window is left
-  black: the narrated Desktop take goes there in compositing.
+- **Live (12–72 s).** Bezels open over rolling copper bars, with the statue
+  from Hermes Desktop's backdrop barely visible underneath: a 1440x810 window
+  for the Desktop take, and beside it a portrait box and a dialog box for the
+  advisor, the Nous Girl pet, who speaks the narration the way SimCity's
+  advisor did on the SNES. All three are left black for compositing.
 - **Outro (72–84 s).** The logo draws itself, the guarantees run on the
   cards, and the repository address stays up to the last frame.
 
@@ -26,8 +28,8 @@ make check     # cargo check
 make clippy
 ```
 
-`hermes-09-demo --live` prints where the live take goes, as
-`<from s> <to s> <x> <y> <w> <h>`, for the compositing step.
+`hermes-09-demo --live` prints when the live section runs and where its
+windows are (`take`, `portrait`, `dialog`, as `x y w h`), for compositing.
 
 ## Post-production
 
@@ -35,12 +37,20 @@ The final video is assembled in the ArtCraft suite:
 
 1. The Desktop takes are recorded with seshat.
 2. They are cut to 60 s in FilmCraft (1600x900, 30 fps).
-3. seshat narrates the cut and burns in its captions.
+3. seshat narrates the cut in the advisor's voice, without burned-in
+   captions: the dialog box carries the words.
 4. EffectCraft places the narrated cut over this render at 12 s, centred in
-   the window. The take's scale follows the bezel's own opening curve:
-   `smooth((t-12)/0.8) * smooth((72-t)/0.8)`.
+   the take's window, scaled with the bezel's own opening curve
+   `smooth((t-12)/0.8) * smooth((72-t)/0.8)`. It animates the Nous Girl from
+   her pet spritesheet (idle, a wave as she starts, gestures while she talks,
+   a jump on "zero hard"), and types each narrated line into the dialog box
+   over the time it is spoken.
 
 ## Credits
+
+The advisor is the Nous Girl pet for Hermes Desktop
+(`~/.hermes/pets/nous-girl/spritesheet.webp`), after the Nous Research girl
+logo.
 
 The statue in `assets/hermes_statue.pgm` comes from Hermes Desktop's backdrop
 (`apps/desktop/public/ds-assets/filler-bg0.jpg` in the

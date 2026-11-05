@@ -34,15 +34,17 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
     if args.iter().any(|a| a == "--live") {
-        // For the compose step: where the live take goes, in time and space.
-        let (x0, y0, x1, y1) = scenes::HOLE;
-        println!(
-            "{} {} {x0} {y0} {} {}",
-            timeline::LIVE_FROM,
-            timeline::LIVE_TO,
-            x1 - x0,
-            y1 - y0
-        );
+        // For the compose step: when the live section runs, and where the
+        // take, the advisor's portrait and her dialog box go.
+        println!("live {} {}", timeline::LIVE_FROM, timeline::LIVE_TO);
+        let windows = [
+            ("take", scenes::HOLE),
+            ("portrait", scenes::PORTRAIT),
+            ("dialog", scenes::DIALOG),
+        ];
+        for (name, (x0, y0, x1, y1)) in windows {
+            println!("{name} {x0} {y0} {} {}", x1 - x0, y1 - y0);
+        }
         return Ok(());
     }
     if let Some(seconds) = value_after("--render") {
@@ -69,7 +71,7 @@ fn usage() {
     eprintln!("  hermes-09-demo --render [seconds]      stream BGR24 frames to stdout, write {AUDIO_WAV_OUT}");
     eprintln!("  hermes-09-demo --stills t1,t2,.. [--out dir]   write PPM stills at those times");
     eprintln!(
-        "  hermes-09-demo --live                   print the live take's window: from to x y w h"
+        "  hermes-09-demo --live                   print the live section and its windows (take, portrait, dialog): x y w h"
     );
 }
 
