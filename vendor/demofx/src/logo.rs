@@ -109,6 +109,7 @@ fn corner_radius(pixels: &impl Pixels) -> f32 {
     pixels.size().1 as f32 * 0.04
 }
 
+#[inline(always)]
 fn lerp_rgb(a: u32, b: u32, t: f32) -> u32 {
     let t = t.clamp(0.0, 1.0);
     let ch = |v: u32, s: u32| ((v >> s) & 0xFF) as f32;
@@ -126,6 +127,15 @@ fn dot(a: P, b: P) -> f32 {
     a.0 * b.0 + a.1 * b.1
 }
 
+#[inline(always)]
+fn near_segment(p: P, a: P, b: P, margin: f32) -> bool {
+    p.0 >= a.0.min(b.0) - margin
+        && p.0 <= a.0.max(b.0) + margin
+        && p.1 >= a.1.min(b.1) - margin
+        && p.1 <= a.1.max(b.1) + margin
+}
+
+#[inline(always)]
 fn seg_dist(p: P, a: P, b: P) -> f32 {
     let (pa, ba) = (sub(p, a), sub(b, a));
     let h = (dot(pa, ba) / dot(ba, ba)).clamp(0.0, 1.0);
@@ -133,18 +143,24 @@ fn seg_dist(p: P, a: P, b: P) -> f32 {
     dot(d, d).sqrt()
 }
 
-/// Signed distance to a closed polygon (negative inside).
-fn sd_poly(p: P, v: &[P]) -> f32 {
-    let mut d = dot(sub(p, v[0]), sub(p, v[0]));
+/// Signed distance within the coverage margin (negative inside).
+/// Farther distances may saturate because coverage is already zero or full.
+#[inline(always)]
+fn sd_poly(p: P, v: &[P], margin: f32) -> f32 {
+    let mut d = f32::MAX;
     let mut s = 1.0;
     let n = v.len();
     for i in 0..n {
         let j = (i + n - 1) % n;
         let e = sub(v[j], v[i]);
         let w = sub(p, v[i]);
-        let h = (dot(w, e) / dot(e, e)).clamp(0.0, 1.0);
-        let b = (w.0 - e.0 * h, w.1 - e.1 * h);
-        d = d.min(dot(b, b));
+        // Distances beyond the coverage support all produce the same zero
+        // or full coverage; retain the winding test for their sign.
+        if near_segment(p, v[i], v[j], margin) {
+            let h = (dot(w, e) / dot(e, e)).clamp(0.0, 1.0);
+            let b = (w.0 - e.0 * h, w.1 - e.1 * h);
+            d = d.min(dot(b, b));
+        }
         let c = [p.1 >= v[i].1, p.1 < v[j].1, e.0 * w.1 > e.1 * w.0];
         if c.iter().all(|x| *x) || c.iter().all(|x| !*x) {
             s = -s;
@@ -181,6 +197,7 @@ fn offset(v: &[P; 8], d: f32) -> [P; 8] {
 }
 
 /// The brand gradient runs corner to corner over the body's bounding box.
+#[inline(always)]
 fn gradient(p: P) -> u32 {
     let u = (p.0 - (35.0 - RING_WIDTH / 2.0)) / (130.0 + RING_WIDTH);
     let v = (p.1 - (25.0 - RING_WIDTH / 2.0)) / (150.0 + RING_WIDTH);
@@ -192,6 +209,7 @@ fn gradient(p: P) -> u32 {
     }
 }
 
+#[inline(always)]
 fn blend(px: &mut u32, rgb: u32, a: f32) {
     if a <= 0.0 {
         return;
@@ -200,50 +218,103 @@ fn blend(px: &mut u32, rgb: u32, a: f32) {
 }
 
 /// Coverage from a signed distance in SVG units at `scale` px per unit.
+#[inline(always)]
 fn cover(sd: f32, scale: f32) -> f32 {
     (0.5 - sd * scale).clamp(0.0, 1.0)
 }
 
-/// Draw the logo into any frame the demos render to.
-pub fn draw(pixels: &mut impl Pixels, s: &LogoState) {
+// Rasterize only a primitive's support, keeping the original logo clip and
+// pixel-center transform. Layers retain their original blending order.
+fn paint(
+    pixels: &mut impl Pixels,
+    s: &LogoState,
+    bounds: (f32, f32, f32, f32),
+    mut shade: impl FnMut(P, &mut u32),
+) {
     let (width, height) = pixels.size();
-    let ring_out = offset(&OUTER, RING_WIDTH / 2.0);
-    let ring_in = offset(&OUTER, -RING_WIDTH / 2.0);
-    let head: Vec<P> = HEAD.iter().map(|&(x, y)| (x + 100.0, y + 25.0)).collect();
     let half = 100.0 * s.scale;
-    let (x0, x1) = (
-        (s.cx - half).max(0.0) as usize,
-        ((s.cx + half) as usize).min(width),
-    );
-    let (y0, y1) = (
-        (s.cy - half).max(0.0) as usize,
-        ((s.cy + half) as usize).min(height),
-    );
-    let reveal = s.progress.clamp(0.0, 1.0);
-    let detail = s.detail.clamp(0.0, 1.0) * s.gain;
-    let head_a = ((reveal - 0.94) / 0.06).clamp(0.0, 1.0) * s.gain;
-
+    let x0 = ((s.cx + (bounds.0 - 100.0) * s.scale)
+        .floor()
+        .max(s.cx - half)
+        .max(0.0)) as usize;
+    let x1 = ((s.cx + (bounds.2 - 100.0) * s.scale).ceil() as usize)
+        .min((s.cx + half) as usize)
+        .min(width);
+    let y0 = ((s.cy + (bounds.1 - 100.0) * s.scale)
+        .floor()
+        .max(s.cy - half)
+        .max(0.0)) as usize;
+    let y1 = ((s.cy + (bounds.3 - 100.0) * s.scale).ceil() as usize)
+        .min((s.cy + half) as usize)
+        .min(height);
     for y in y0..y1 {
         for x in x0..x1 {
-            // Pixel center in SVG units.
             let p = (
                 (x as f32 + 0.5 - s.cx) / s.scale + 100.0,
                 (y as f32 + 0.5 - s.cy) / s.scale + 100.0,
             );
             let mut value = pixels.get(x, y);
-            let px = &mut value;
+            shade(p, &mut value);
+            pixels.put(x, y, value);
+        }
+    }
+}
 
-            // Body: the ring between the two miter offsets, revealed clockwise
-            // from the top.
-            let ring = cover(sd_poly(p, &ring_out).max(-sd_poly(p, &ring_in)), s.scale);
-            if ring > 0.0 && reveal > 0.0 {
-                let angle = (p.0 - 100.0).atan2(100.0 - p.1).rem_euclid(TAU) / TAU;
-                let shown = ((reveal * 1.03 - angle) * 40.0).clamp(0.0, 1.0);
-                blend(px, gradient(p), ring * shown * s.gain);
-            }
-            // Head with its black outline and eyes.
-            if head_a > 0.0 {
-                let sd = sd_poly(p, &head);
+/// Draw the logo into any frame the demos render to.
+pub fn draw(pixels: &mut impl Pixels, s: &LogoState) {
+    let ring_out = offset(&OUTER, RING_WIDTH / 2.0);
+    let ring_in = offset(&OUTER, -RING_WIDTH / 2.0);
+    let head = HEAD.map(|(x, y)| (x + 100.0, y + 25.0));
+    let edges: [(P, f32); 8] = std::array::from_fn(|i| {
+        let a = OUTER[i];
+        let e = sub(OUTER[(i + 1) % 8], a);
+        let length = dot(e, e).sqrt();
+        let n = (e.1 / length, -e.0 / length);
+        (n, dot(n, a))
+    });
+    // A full pixel of slack keeps antialiasing inside every support bound.
+    let margin = 1.0 / s.scale;
+    let reveal = s.progress.clamp(0.0, 1.0);
+    let detail = s.detail.clamp(0.0, 1.0) * s.gain;
+    let head_a = ((reveal - 0.94) / 0.06).clamp(0.0, 1.0) * s.gain;
+    if reveal > 0.0 {
+        paint(
+            pixels,
+            s,
+            (20.0 - margin, 10.0 - margin, 180.0 + margin, 190.0 + margin),
+            |p, px| {
+                let edge_distance = edges
+                    .iter()
+                    .map(|&(n, d)| dot(n, p) - d)
+                    .fold(f32::NEG_INFINITY, f32::max);
+                if edge_distance.abs() > RING_WIDTH / 2.0 + margin {
+                    return;
+                }
+                let ring = if edge_distance >= -RING_WIDTH / 2.0 + margin
+                    && edge_distance <= RING_WIDTH / 2.0 - margin
+                {
+                    1.0
+                } else {
+                    cover(
+                        sd_poly(p, &ring_out, margin).max(-sd_poly(p, &ring_in, margin)),
+                        s.scale,
+                    )
+                };
+                if ring > 0.0 {
+                    let angle = (p.0 - 100.0).atan2(100.0 - p.1).rem_euclid(TAU) / TAU;
+                    let shown = ((reveal * 1.03 - angle) * 40.0).clamp(0.0, 1.0);
+                    blend(px, gradient(p), ring * shown * s.gain);
+                }
+            },
+        );
+    }
+    if head_a > 0.0 {
+        paint(
+            pixels,
+            s,
+            (89.5 - margin, 12.5 - margin, 110.5 + margin, 25.5 + margin),
+            |p, px| {
+                let sd = sd_poly(p, &head, 0.5 + margin);
                 blend(px, 0x000000, cover(sd - 0.5, s.scale) * head_a);
                 blend(px, gradient(p), cover(sd + 0.5, s.scale) * head_a);
                 for ex in [-3.0, 3.0] {
@@ -254,27 +325,55 @@ pub fn draw(pixels: &mut impl Pixels, s: &LogoState) {
                         cover(dot(e, e).sqrt() - 1.5, s.scale) * head_a,
                     );
                 }
-            }
-            if detail <= 0.0 {
-                pixels.put(x, y, value);
-                continue;
-            }
-            // Inner octagon, 2 wide at 40%.
+            },
+        );
+    }
+    if detail <= 0.0 {
+        return;
+    }
+    paint(
+        pixels,
+        s,
+        (59.0 - margin, 54.0 - margin, 141.0 + margin, 136.0 + margin),
+        |p, px| {
             let inner = (0..8)
+                .filter(|&i| near_segment(p, INNER[i], INNER[(i + 1) % 8], 1.0 + margin))
                 .map(|i| seg_dist(p, INNER[i], INNER[(i + 1) % 8]))
                 .fold(f32::MAX, f32::min);
             blend(px, EMERALD, cover(inner - 1.0, s.scale) * 0.4 * detail);
-            // Accent circles at the outer vertices (r 5, 30%).
-            for v in OUTER {
+        },
+    );
+    for v in OUTER {
+        paint(
+            pixels,
+            s,
+            (
+                v.0 - 5.0 - margin,
+                v.1 - 5.0 - margin,
+                v.0 + 5.0 + margin,
+                v.1 + 5.0 + margin,
+            ),
+            |p, px| {
                 let e = sub(p, v);
                 blend(
                     px,
                     EMERALD,
                     cover(dot(e, e).sqrt() - 5.0, s.scale) * 0.3 * detail,
                 );
-            }
+            },
+        );
+    }
+    paint(
+        pixels,
+        s,
+        (
+            78.75 - margin,
+            78.75 - margin,
+            121.25 + margin,
+            121.25 + margin,
+        ),
+        |p, px| {
             let c = sub(p, (100.0, 100.0));
-            // Crosshair arms, 2.5 wide, round caps.
             let arms = [
                 ((-20.0, 0.0), (-8.0, 0.0)),
                 ((20.0, 0.0), (8.0, 0.0)),
@@ -286,11 +385,9 @@ pub fn draw(pixels: &mut impl Pixels, s: &LogoState) {
                 .map(|&(a, b)| seg_dist(c, a, b))
                 .fold(f32::MAX, f32::min);
             blend(px, INK, cover(arm - 1.25, s.scale) * detail);
-            // Target ring r 6 (2.5 wide) and the emerald dot r 3.
             let r = dot(c, c).sqrt();
             blend(px, INK, cover((r - 6.0).abs() - 1.25, s.scale) * detail);
             blend(px, EMERALD, cover(r - 3.0, s.scale) * detail);
-            // Corner brackets, 2 wide.
             let mut bracket = f32::MAX;
             for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
                 let (a, k, b) = (
@@ -301,12 +398,22 @@ pub fn draw(pixels: &mut impl Pixels, s: &LogoState) {
                 bracket = bracket.min(seg_dist(c, a, k)).min(seg_dist(c, k, b));
             }
             blend(px, EMERALD, cover(bracket - 1.0, s.scale) * detail);
-            // Six small squares at edge midpoints (4x4, 60%).
-            for (sx, sy) in SQUARES {
+        },
+    );
+    for (sx, sy) in SQUARES {
+        paint(
+            pixels,
+            s,
+            (
+                sx - margin,
+                sy - margin,
+                sx + 4.0 + margin,
+                sy + 4.0 + margin,
+            ),
+            |p, px| {
                 let d = (p.0 - sx - 2.0).abs().max((p.1 - sy - 2.0).abs()) - 2.0;
                 blend(px, INK, cover(d, s.scale) * 0.6 * detail);
-            }
-            pixels.put(x, y, value);
-        }
+            },
+        );
     }
 }
