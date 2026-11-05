@@ -62,6 +62,7 @@ struct State {
     drops: Vec<Drop>,
     phrase_idx: usize,
     glitch_buffer: Vec<u32>,
+    crt_brightness: Vec<f32>,
 }
 
 struct SaverWindow {
@@ -279,6 +280,15 @@ impl State {
             drops,
             phrase_idx: 0,
             glitch_buffer: vec![palette::NEAR_BLACK; W * GLITCH_ROWS],
+            crt_brightness: (0..W * H)
+                .map(|i| {
+                    let (x, y) = (i % W, i / W);
+                    let scan = if y % 2 == 0 { 0.96 } else { 0.86 };
+                    let vignette_y = 1.0 - ((y as f32 / H as f32) - 0.5).abs() * 0.5;
+                    let vignette_x = 1.0 - ((x as f32 / W as f32) - 0.5).abs() * 0.9;
+                    (scan * vignette_x * vignette_y).clamp(0.0, 1.0)
+                })
+                .collect(),
         }
     }
 
@@ -341,7 +351,12 @@ fn render_frame(buffer: &mut [u32], state: &mut State, t: f64, overlay: bool) {
     if overlay {
         draw_overlay_copy(&mut surface, t, state.phrase_idx);
     }
-    draw_crt_pass(&mut surface, &mut state.glitch_buffer, t);
+    draw_crt_pass(
+        &mut surface,
+        &mut state.glitch_buffer,
+        &state.crt_brightness,
+        t,
+    );
 }
 
 fn clear_gradient(surface: &mut Surface, t: f64) {
@@ -586,16 +601,9 @@ fn draw_overlay_copy(surface: &mut Surface, t: f64, phrase_idx: usize) {
     );
 }
 
-fn draw_crt_pass(surface: &mut Surface, glitch_buffer: &mut [u32], t: f64) {
-    for y in 0..surface.h {
-        let scan = if y % 2 == 0 { 0.96 } else { 0.86 };
-        let vignette_y = 1.0 - ((y as f32 / surface.h as f32) - 0.5).abs() * 0.5;
-        let offset = y * surface.w;
-        for x in 0..surface.w {
-            let vignette_x = 1.0 - ((x as f32 / surface.w as f32) - 0.5).abs() * 0.9;
-            let brightness = (scan * vignette_x * vignette_y).clamp(0.0, 1.0);
-            surface.buf[offset + x] = palette::dim(surface.buf[offset + x], brightness);
-        }
+fn draw_crt_pass(surface: &mut Surface, glitch_buffer: &mut [u32], brightness: &[f32], t: f64) {
+    for (pixel, &factor) in surface.buf.iter_mut().zip(brightness) {
+        *pixel = palette::dim(*pixel, factor);
     }
 
     let glitch_center = ((t * 0.37).sin() * 0.5 + 0.5) * surface.h as f64;
