@@ -1,0 +1,122 @@
+<!doctype html>
+<!-- ROUTING_10 vertical cover (1080x1920). A textmode composition in the
+     demo's own language: the road web, ten numbered stops, the solved loop
+     in lime over the naive crisscross in rose, and the trip's totals.
+     Render with the html-to-image-assets recipe at 1080x1920. -->
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#020503}
+canvas{display:block}
+</style></head><body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+const W = 1080, H = 1920;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+function h2(a, b) {
+  let v = Math.imul(a, 73856093) ^ Math.imul(b, 19349663);
+  v = Math.imul(v ^ (v >>> 13), 0x27d4eb2d);
+  return ((v ^ (v >>> 15)) >>> 0) / 4294967296;
+}
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// Background: near-black with a faint green radial floor.
+const bg = ctx.createRadialGradient(540, 760, 60, 540, 960, 1100);
+bg.addColorStop(0, '#07231a');
+bg.addColorStop(0.55, '#03130d');
+bg.addColorStop(1, '#020503');
+ctx.fillStyle = bg;
+ctx.fillRect(0, 0, W, H);
+
+// Dot grid.
+for (let y = 40; y < H; y += 36) {
+  for (let x = 24; x < W; x += 36) {
+    if (h2(x, y) < 0.04) {
+      ctx.fillStyle = 'rgba(16,185,129,0.28)';
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }
+}
+
+// The road web: the same 14-point web as the demo's trip.rs, drawn as thin
+// emerald lines with small town dots.
+const P = [
+  [300, 700], [452, 600], [668, 588], [868, 636], [984, 772],
+  [936, 952], [760, 1012], [592, 1064], [412, 1004], [268, 902],
+  [548, 858], [752, 858], [412, 750], [704, 692],
+];
+const ROADS = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,0],
+  [10,11],[12,10],[13,11],[0,12],[2,13],[11,5],[10,8]];
+ctx.lineWidth = 2.5;
+for (const [a, b] of ROADS) {
+  ctx.strokeStyle = 'rgba(16,185,129,0.38)';
+  ctx.beginPath();
+  ctx.moveTo(P[a][0], P[a][1]);
+  ctx.lineTo(P[b][0], P[b][1]);
+  ctx.stroke();
+}
+
+// The naive crisscross (rose, thin): stops joined in the given order.
+const GIVEN = [0, 3, 1, 6, 2, 8, 4, 7, 9, 5];
+ctx.strokeStyle = 'rgba(244,63,94,0.55)';
+ctx.setLineDash([7, 9]);
+ctx.beginPath();
+ctx.moveTo(P[GIVEN[0]][0], P[GIVEN[0]][1]);
+for (const s of GIVEN.slice(1)) ctx.lineTo(P[s][0], P[s][1]);
+ctx.stroke();
+ctx.setLineDash([]);
+
+// The solved loop (lime, wide): around the periphery.
+ctx.lineWidth = 7;
+ctx.lineJoin = 'round';
+ctx.shadowColor = 'rgba(132,255,160,0.85)';
+ctx.shadowBlur = 22;
+ctx.strokeStyle = '#a3ffbe';
+ctx.beginPath();
+ctx.moveTo(P[1][0], P[1][1]);
+for (const s of [2, 3, 4, 5, 6, 7, 8, 9, 0]) ctx.lineTo(P[s][0], P[s][1]);
+ctx.closePath();
+ctx.stroke();
+ctx.shadowBlur = 0;
+
+// The stops: numbered cells like the intro's.
+ctx.font = '700 30px ui-monospace, Menlo, monospace';
+ctx.textAlign = 'center';
+GIVEN.forEach((point, i) => {
+  const [x, y] = P[point];
+  ctx.fillStyle = 'rgba(110,231,183,0.16)';
+  ctx.fillRect(x - 30, y - 30, 60, 60);
+  ctx.strokeStyle = '#ecfdf5';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x - 30, y - 30, 60, 60);
+  ctx.fillStyle = '#ecfdf5';
+  ctx.fillText(String(i + 1), x, y + 10);
+});
+
+// The totals: honest to the drawing.
+ctx.font = '400 54px ui-monospace, Menlo, monospace';
+ctx.fillStyle = '#a3ffbe';
+ctx.textAlign = 'left';
+ctx.fillText('664 KM', 96, 1696);
+ctx.font = '400 40px ui-monospace, Menlo, monospace';
+ctx.fillStyle = '#ecfdf5';
+ctx.textAlign = 'right';
+ctx.fillText('63% SHORTER, BEST FOUND', 984, 1696);
+
+// The wordmark.
+const BRAND = 'ROUTING_10';
+ctx.font = '700 118px ui-monospace, Menlo, monospace';
+ctx.fillStyle = '#10b981';
+ctx.shadowColor = 'rgba(16,185,129,0.7)';
+ctx.shadowBlur = 26;
+ctx.textAlign = 'center';
+ctx.fillText(BRAND, 540, 226);
+ctx.shadowBlur = 0;
+ctx.font = '400 34px ui-monospace, Menlo, monospace';
+ctx.fillStyle = '#6ee7b7';
+ctx.fillText('SOLVERFORGE ROUTING FOR HERMES AGENT', 540, 292);
+ctx.font = '400 30px ui-monospace, Menlo, monospace';
+ctx.fillStyle = 'rgba(236,253,245,0.8)';
+ctx.fillText('TWENTY STOPS ACROSS PUGLIA, LIVE IN THE DESKTOP', 540, 352);
+ctx.fillStyle = 'rgba(110,231,183,0.75)';
+ctx.fillText('github.com/blackopsrepl/hermes-solverforge-routing', 540, 412);
+</script></body></html>
