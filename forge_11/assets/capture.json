@@ -1,0 +1,709 @@
+{
+ "schema": "forge11.capture/1",
+ "captured_at": "2026-11-10T12:42:59.717Z",
+ "versions": {
+  "solverforge_cli": "3.9.0",
+  "solverforge": "0.25.1",
+  "agent_model": "claude-opus-5-5"
+ },
+ "prompt": "Use the solverforge-modeling skill to turn this planning problem into a runnable SolverForge app.\n\n## The problem\n\nWe run a city bus depot with 12 buses. Over the next 10 working days we have 20\nmaintenance jobs to schedule. Each job belongs to one bus, needs one skill\n(mechanical, electrical, or bodywork), and takes one full day. A job cannot\nstart before its parts arrive (an earliest day), and it has a due day.\n\nWe have 4 technicians. Each technician has one or more of the three skills and\ncan work on at most one job per day.\n\nA bus that is in the workshop on a given day is out of service that day. The\ndepot must keep at least 10 of its 12 buses in service every day, so no more\nthan 2 different buses may be in the workshop on the same day.\n\nFor every job we need to decide which technician does it and on which day.\n\n## Intake answers (treat these as confirmed; do not stop to ask)\n\n- Output shell: `api` (headless HTTP API, no browser UI).\n- Hard constraints (a plan that breaks any of these is invalid):\n  1. The technician has the skill the job needs.\n  2. A technician does at most one job per day.\n  3. A job is not scheduled before its parts arrive.\n  4. At most 2 different buses are in the workshop on any day.\n  5. Every job gets a technician and a day.\n- Soft constraints (optimize):\n  1. Finish jobs by their due day; penalize each day late.\n  2. Spread work evenly across technicians.\n- Score type: `HardSoftScore`.\n- Name the app `depot-maintenance` and create it in the current directory.\n- Demo data: replace the generic sample data with the depot described above\n  (12 buses, 20 jobs, 4 technicians, 10 days), deterministic, with a feasible\n  plan possible.\n\nWhen you echo the model back, keep going instead of waiting for confirmation.\nFinish only after a real solve completes with a score, as the skill requires.\nAt the end, list every `solverforge` command you ran, in order, and the final\nscore of the verification solve.\n",
+ "agent_steps": [
+  {
+   "t_ms": 4763,
+   "kind": "tool",
+   "text": "skill_view(name=solverforge-modeling)"
+  },
+  {
+   "t_ms": 9030,
+   "kind": "tool",
+   "text": "skill_view(name=solverforge-modeling, file_path=references/constraint-patterns.md)"
+  },
+  {
+   "t_ms": 9030,
+   "kind": "tool",
+   "text": "skill_view(name=solverforge-modeling, file_path=references/problem-modeling.md)"
+  },
+  {
+   "t_ms": 9030,
+   "kind": "tool",
+   "text": "$ pwd; ls -la; solverforge --version; solverforge new --help; solverforge generate variable --help; solverforge generate constraint --help"
+  },
+  {
+   "t_ms": 13556,
+   "kind": "tool",
+   "text": "$ ls ~/.cargo/bin; export PATH=$HOME/.cargo/bin:$PATH; solverforge --version; which cargo; cargo --version"
+  },
+  {
+   "t_ms": 26560,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH; solverforge new --help; solverforge generate variable --help; solverforge generate constraint --help; solverforge generat…"
+  },
+  {
+   "t_ms": 26560,
+   "kind": "tool",
+   "text": "skill_view(file_path=references/verification.md, name=solverforge-modeling)"
+  },
+  {
+   "t_ms": 26560,
+   "kind": "tool",
+   "text": "skill_view(file_path=references/gotchas.md, name=solverforge-modeling)"
+  },
+  {
+   "t_ms": 37566,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH; set -x solverforge new depot-maintenance --shell api && cd depot-maintenance && solverforge generate solution schedule --…"
+  },
+  {
+   "t_ms": 42871,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH for c in \"technician_skill --join --hard\" \"technician_one_job_per_day --pair --hard\" \"parts_arrival --unary --hard\" \"works…"
+  },
+  {
+   "t_ms": 47136,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH for c in \"technician_skill --join --hard\" \"technician_one_job_per_day --pair --hard\" \"parts_arrival --unary --hard\" \"works…"
+  },
+  {
+   "t_ms": 72748,
+   "kind": "tool",
+   "text": "$ cat src/data/data_seed.rs; cat solverforge.app.toml; ls ~/.cargo/registry/src/*/ | command grep -i '^solverforge'"
+  },
+  {
+   "t_ms": 77680,
+   "kind": "tool",
+   "text": "$ command grep -n solverforge Cargo.toml; R=$(ls -d ~/.cargo/registry/src/*/solverforge-scoring-0.25.1 | head -1); command grep -rn \"pub struct CollectedVec\\|p…"
+  },
+  {
+   "t_ms": 81175,
+   "kind": "tool",
+   "text": "$ R=$(ls -d ~/.cargo/registry/src/*/solverforge-scoring-0.25.1 | head -1); sed -n 1,75p $R/src/stream/collector/collect_vec.rs; sed -n 1,72p $R/src/stream/coll…"
+  },
+  {
+   "t_ms": 104080,
+   "kind": "tool",
+   "text": "$ command grep -rn \"data::\\|DemoData\\|generate(\" src/api src/solver src/main.rs src/lib.rs | head -20; sed -n 60,110p ~/.cargo/registry/src/*/solverforge-scori…"
+  },
+  {
+   "t_ms": 110742,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH; solverforge generate data --help; solverforge config --help 2>&1 | head -20"
+  },
+  {
+   "t_ms": 120886,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH; solverforge generate data --size standard && git status --short | head"
+  },
+  {
+   "t_ms": 171788,
+   "kind": "say",
+   "text": "Now the constraint bodies."
+  },
+  {
+   "t_ms": 171788,
+   "kind": "tool",
+   "text": "execute_code(code=import os B=\"/home/pvd/.hermes/cache/scratch/forge11/run/depot-maintenance/src/\" files={} files[\"constraints/technician_skill.rs\"]='''use cra…"
+  },
+  {
+   "t_ms": 192247,
+   "kind": "tool",
+   "text": "execute_code(code=B=\"/home/pvd/.hermes/cache/scratch/forge11/run/depot-maintenance/src/\" p=B+\"domain/technician.rs\"; s=open(p).read() s=s.replace(\"/// TODO — d…"
+  },
+  {
+   "t_ms": 202569,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH sed -i 's/^mod data_seed;/\\/\\/ Compiler-owned CLI seed; its sample `generate` is superseded by `depot`.\\n#[allow(dead_code…"
+  },
+  {
+   "t_ms": 205967,
+   "kind": "tool",
+   "text": "tool_call()"
+  },
+  {
+   "t_ms": 216995,
+   "kind": "say",
+   "text": "Compiles clean. Now tests."
+  },
+  {
+   "t_ms": 216995,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH; solverforge test 2>&1 | command grep -E \"^test |test result|error|warning|panicked\" | head -60"
+  },
+  {
+   "t_ms": 253297,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH; sed -i '/^ use solverforge::prelude::\\*;$/{N;}' /dev/null; python3 - <<'EOF' p='src/data/depot.rs'; s=open(p).read() s=s.…"
+  },
+  {
+   "t_ms": 278875,
+   "kind": "tool",
+   "text": "$ export PATH=$HOME/.cargo/bin:$PATH; cd /home/pvd/.hermes/cache/scratch/forge11/run/depot-maintenance && nohup solverforge server --port 7861 > $TMPDIR/depot-…"
+  },
+  {
+   "t_ms": 285708,
+   "kind": "tool",
+   "text": "$ cd $TMPDIR; for i in $(seq 1 120); do curl -sf localhost:7861/health && break; sleep 2; done; echo curl -s localhost:7861/demo-data; echo curl -s localhost:7…"
+  },
+  {
+   "t_ms": 333160,
+   "kind": "tool",
+   "text": "$ cd $TMPDIR; command grep -ci panic depot-server.log; curl -s localhost:7861/jobs/0/analysis | python3 -c \" import sys,json;d=json.load(sys.stdin) def walk(o,…"
+  },
+  {
+   "t_ms": 338842,
+   "kind": "tool",
+   "text": "$ kill $(lsof -t -i:7861) 2>/dev/null; sleep 1; curl -s localhost:7861/health || echo stopped"
+  },
+  {
+   "t_ms": 355538,
+   "kind": "say",
+   "text": "I built the app and ran a real solve. It finished COMPLETED with a best score of 0hard/-100soft and nothing panicked. That plan breaks no hard rule, has every …"
+  }
+ ],
+ "code": [
+  {
+   "path": "src/constraints/workshop_capacity.rs",
+   "title": "At most two buses in the workshop",
+   "excerpt": "pub fn constraint() -> impl IncrementalConstraint<Schedule, HardSoftScore> {\n    ConstraintFactory::<Schedule, HardSoftScore>::new()\n        .for_each(Schedule::jobs())\n        .filter(has_day)\n        .group_by(day_group_key, collect_vec(collected_value))\n        .penalize(hard_weight(collected_values_weight))\n        .named(\"workshop_capacity\")\n}"
+  },
+  {
+   "path": "src/constraints/workshop_capacity.rs",
+   "title": "Count distinct buses, penalize the excess",
+   "excerpt": "fn distinct_buses(items: &CollectedVec<usize>) -> usize {\n    let mut buses = items.to_vec();\n    buses.sort_unstable();\n    buses.dedup();\n    buses.len()\n}\n\n/// One hard point per bus over the workshop limit that day.\nfn collected_values_weight(_day: &usize, items: &CollectedVec<usize>) -> HardSoftScore {\n    let excess = distinct_buses(items).saturating_sub(MAX_BUSES_IN_WORKSHOP);\n    HardSoftScore::of_hard(excess as i64)\n}"
+  },
+  {
+   "path": "src/constraints/technician_skill.rs",
+   "title": "The technician has the skill",
+   "excerpt": "pub fn constraint() -> impl IncrementalConstraint<Schedule, HardSoftScore> {\n    ConstraintFactory::<Schedule, HardSoftScore>::new()\n        .for_each(Schedule::jobs())\n        .join((\n            Schedule::technicians(),\n            equal_bi(entity_join_key, fact_join_key),\n        ))\n        .penalize(hard_weight(join_weight))\n        .named(\"technician_skill\")\n}"
+  },
+  {
+   "path": "src/constraints/balanced_workload.rs",
+   "title": "Spread the work evenly",
+   "excerpt": "fn balance_weight(_scope: &usize, load: &LoadBalance<Option<usize>>) -> HardSoftScore {\n    HardSoftScore::of_soft(load.loads().values().map(|jobs| jobs * jobs).sum())\n}"
+  },
+  {
+   "path": "src/constraints/due_day_lateness.rs",
+   "title": "One soft point per day late",
+   "excerpt": "fn unary_condition(entity: &Job) -> bool {\n    entity.day.is_some_and(|day| day as i64 > entity.due_day)\n}"
+  },
+  {
+   "path": "src/api/routes.rs",
+   "title": "Live repair: a breakdown becomes a problem change",
+   "excerpt": "    let breakdown = ClosureProblemChange::<Schedule, _>::new(\"bus breakdown\", move |director| {\n        let jobs = &mut director.working_solution_mut().jobs;\n        let job_id = format!(\"job-{:02}\", jobs.len() + 1);\n        jobs.push(Job::new(\n            job_id,\n            request.bus_idx,\n            request.skill,\n            request.earliest_day,\n            request.due_day,\n        ));\n    });"
+  }
+ ],
+ "solve": {
+  "wall_ms": 153,
+  "trajectory": [
+   {
+    "t_ms": 2,
+    "hard": -20,
+    "soft": 0
+   },
+   {
+    "t_ms": 7,
+    "hard": -19,
+    "soft": -1
+   },
+   {
+    "t_ms": 8,
+    "hard": -18,
+    "soft": -2
+   },
+   {
+    "t_ms": 11,
+    "hard": -17,
+    "soft": -3
+   },
+   {
+    "t_ms": 12,
+    "hard": -16,
+    "soft": -6
+   },
+   {
+    "t_ms": 14,
+    "hard": -15,
+    "soft": -9
+   },
+   {
+    "t_ms": 16,
+    "hard": -14,
+    "soft": -10
+   },
+   {
+    "t_ms": 18,
+    "hard": -13,
+    "soft": -15
+   },
+   {
+    "t_ms": 20,
+    "hard": -13,
+    "soft": -13
+   },
+   {
+    "t_ms": 22,
+    "hard": -12,
+    "soft": -18
+   },
+   {
+    "t_ms": 22,
+    "hard": -11,
+    "soft": -23
+   },
+   {
+    "t_ms": 24,
+    "hard": -10,
+    "soft": -30
+   },
+   {
+    "t_ms": 24,
+    "hard": -10,
+    "soft": -28
+   },
+   {
+    "t_ms": 25,
+    "hard": -9,
+    "soft": -35
+   },
+   {
+    "t_ms": 26,
+    "hard": -8,
+    "soft": -42
+   },
+   {
+    "t_ms": 27,
+    "hard": -7,
+    "soft": -45
+   },
+   {
+    "t_ms": 29,
+    "hard": -6,
+    "soft": -54
+   },
+   {
+    "t_ms": 31,
+    "hard": -6,
+    "soft": -52
+   },
+   {
+    "t_ms": 35,
+    "hard": -6,
+    "soft": -50
+   },
+   {
+    "t_ms": 39,
+    "hard": -5,
+    "soft": -57
+   },
+   {
+    "t_ms": 46,
+    "hard": -4,
+    "soft": -66
+   },
+   {
+    "t_ms": 50,
+    "hard": -3,
+    "soft": -73
+   },
+   {
+    "t_ms": 53,
+    "hard": -2,
+    "soft": -84
+   },
+   {
+    "t_ms": 54,
+    "hard": -2,
+    "soft": -82
+   },
+   {
+    "t_ms": 96,
+    "hard": -1,
+    "soft": -91
+   },
+   {
+    "t_ms": 145,
+    "hard": 0,
+    "soft": -102
+   },
+   {
+    "t_ms": 153,
+    "hard": 0,
+    "soft": -100
+   }
+  ],
+  "plan": [
+   {
+    "job": "job-01",
+    "bus": "Bus 01",
+    "technician": "Sara",
+    "day": 0
+   },
+   {
+    "job": "job-02",
+    "bus": "Bus 02",
+    "technician": "Marco",
+    "day": 0
+   },
+   {
+    "job": "job-03",
+    "bus": "Bus 03",
+    "technician": "Luca",
+    "day": 1
+   },
+   {
+    "job": "job-04",
+    "bus": "Bus 01",
+    "technician": "Giulia",
+    "day": 3
+   },
+   {
+    "job": "job-05",
+    "bus": "Bus 04",
+    "technician": "Sara",
+    "day": 1
+   },
+   {
+    "job": "job-06",
+    "bus": "Bus 05",
+    "technician": "Marco",
+    "day": 2
+   },
+   {
+    "job": "job-07",
+    "bus": "Bus 06",
+    "technician": "Luca",
+    "day": 4
+   },
+   {
+    "job": "job-08",
+    "bus": "Bus 04",
+    "technician": "Marco",
+    "day": 3
+   },
+   {
+    "job": "job-09",
+    "bus": "Bus 07",
+    "technician": "Sara",
+    "day": 5
+   },
+   {
+    "job": "job-10",
+    "bus": "Bus 08",
+    "technician": "Luca",
+    "day": 2
+   },
+   {
+    "job": "job-11",
+    "bus": "Bus 09",
+    "technician": "Giulia",
+    "day": 4
+   },
+   {
+    "job": "job-12",
+    "bus": "Bus 07",
+    "technician": "Luca",
+    "day": 7
+   },
+   {
+    "job": "job-13",
+    "bus": "Bus 10",
+    "technician": "Sara",
+    "day": 6
+   },
+   {
+    "job": "job-14",
+    "bus": "Bus 11",
+    "technician": "Giulia",
+    "day": 5
+   },
+   {
+    "job": "job-15",
+    "bus": "Bus 12",
+    "technician": "Giulia",
+    "day": 7
+   },
+   {
+    "job": "job-16",
+    "bus": "Bus 10",
+    "technician": "Marco",
+    "day": 8
+   },
+   {
+    "job": "job-17",
+    "bus": "Bus 02",
+    "technician": "Luca",
+    "day": 6
+   },
+   {
+    "job": "job-18",
+    "bus": "Bus 06",
+    "technician": "Giulia",
+    "day": 8
+   },
+   {
+    "job": "job-19",
+    "bus": "Bus 03",
+    "technician": "Sara",
+    "day": 9
+   },
+   {
+    "job": "job-20",
+    "bus": "Bus 12",
+    "technician": "Marco",
+    "day": 9
+   }
+  ]
+ },
+ "repair": {
+  "event": {
+   "kind": "bus_aog",
+   "label": "Bus 05 breaks down in service: it needs an urgent electrical repair, parts on hand from day 1, back by day 2",
+   "detail": {
+    "request": {
+     "busIdx": 4,
+     "skill": "electrical",
+     "earliestDay": 1,
+     "dueDay": 2
+    },
+    "response": {
+     "status": 202,
+     "body": {
+      "jobId": "0",
+      "changeId": 1
+     }
+    },
+    "job_id": "0",
+    "submitted_at_ms": 155,
+    "new_job": {
+     "job": "job-21",
+     "bus": "Bus 05",
+     "technician": "Marco",
+     "day": 1
+    },
+    "next_job_id_status": 404,
+    "phases_after": [
+     "Construction Heuristic",
+     "Local Search",
+     "Construction Heuristic",
+     "Local Search"
+    ],
+    "snapshot_revision_before": 28,
+    "snapshot_revision_after": 30,
+    "lifecycle_after": "SOLVING"
+   }
+  },
+  "mechanism": "POST /jobs/{id}/breakdowns -> state.solver.add_problem_change(&id, ClosureProblemChange::<Schedule, _>::new(\"bus breakdown\", move |director| { director.working_solution_mut().jobs.push(Job::new(..)) })) -> MANAGER.add_problem_change(parse_job_id(id)?, change)",
+  "wall_ms": 17,
+  "trajectory": [
+   {
+    "t_ms": 156,
+    "hard": -1,
+    "soft": -100
+   },
+   {
+    "t_ms": 172,
+    "hard": 0,
+    "soft": -111
+   }
+  ],
+  "plan": [
+   {
+    "job": "job-01",
+    "bus": "Bus 01",
+    "technician": "Sara",
+    "day": 0
+   },
+   {
+    "job": "job-02",
+    "bus": "Bus 02",
+    "technician": "Marco",
+    "day": 0
+   },
+   {
+    "job": "job-03",
+    "bus": "Bus 03",
+    "technician": "Luca",
+    "day": 1
+   },
+   {
+    "job": "job-04",
+    "bus": "Bus 01",
+    "technician": "Marco",
+    "day": 3
+   },
+   {
+    "job": "job-05",
+    "bus": "Bus 04",
+    "technician": "Sara",
+    "day": 3
+   },
+   {
+    "job": "job-06",
+    "bus": "Bus 05",
+    "technician": "Giulia",
+    "day": 2
+   },
+   {
+    "job": "job-07",
+    "bus": "Bus 06",
+    "technician": "Luca",
+    "day": 4
+   },
+   {
+    "job": "job-08",
+    "bus": "Bus 04",
+    "technician": "Giulia",
+    "day": 3
+   },
+   {
+    "job": "job-09",
+    "bus": "Bus 07",
+    "technician": "Sara",
+    "day": 5
+   },
+   {
+    "job": "job-10",
+    "bus": "Bus 08",
+    "technician": "Luca",
+    "day": 2
+   },
+   {
+    "job": "job-11",
+    "bus": "Bus 09",
+    "technician": "Giulia",
+    "day": 4
+   },
+   {
+    "job": "job-12",
+    "bus": "Bus 07",
+    "technician": "Luca",
+    "day": 7
+   },
+   {
+    "job": "job-13",
+    "bus": "Bus 10",
+    "technician": "Sara",
+    "day": 6
+   },
+   {
+    "job": "job-14",
+    "bus": "Bus 11",
+    "technician": "Marco",
+    "day": 5
+   },
+   {
+    "job": "job-15",
+    "bus": "Bus 12",
+    "technician": "Giulia",
+    "day": 7
+   },
+   {
+    "job": "job-16",
+    "bus": "Bus 10",
+    "technician": "Marco",
+    "day": 8
+   },
+   {
+    "job": "job-17",
+    "bus": "Bus 02",
+    "technician": "Luca",
+    "day": 6
+   },
+   {
+    "job": "job-18",
+    "bus": "Bus 06",
+    "technician": "Giulia",
+    "day": 8
+   },
+   {
+    "job": "job-19",
+    "bus": "Bus 03",
+    "technician": "Sara",
+    "day": 9
+   },
+   {
+    "job": "job-20",
+    "bus": "Bus 12",
+    "technician": "Marco",
+    "day": 9
+   },
+   {
+    "job": "job-21",
+    "bus": "Bus 05",
+    "technician": "Marco",
+    "day": 1
+   }
+  ],
+  "changed": [
+   {
+    "job": "job-04",
+    "from": {
+     "technician": "Giulia",
+     "day": 3
+    },
+    "to": {
+     "technician": "Marco",
+     "day": 3
+    }
+   },
+   {
+    "job": "job-05",
+    "from": {
+     "technician": "Sara",
+     "day": 1
+    },
+    "to": {
+     "technician": "Sara",
+     "day": 3
+    }
+   },
+   {
+    "job": "job-06",
+    "from": {
+     "technician": "Marco",
+     "day": 2
+    },
+    "to": {
+     "technician": "Giulia",
+     "day": 2
+    }
+   },
+   {
+    "job": "job-08",
+    "from": {
+     "technician": "Marco",
+     "day": 3
+    },
+    "to": {
+     "technician": "Giulia",
+     "day": 3
+    }
+   },
+   {
+    "job": "job-14",
+    "from": {
+     "technician": "Giulia",
+     "day": 5
+    },
+    "to": {
+     "technician": "Marco",
+     "day": 5
+    }
+   }
+  ],
+  "unchanged_count": 15
+ },
+ "provenance": {
+  "workdir": "/home/pvd/.hermes/cache/scratch/forge11/run/depot-maintenance",
+  "session_id": "20261110_133518_9417b9",
+  "commands": [
+   "git clone --branch v3.9.0 --depth 1 https://github.com/SolverForge/solverforge-cli  (in /home/pvd/.hermes/cache/scratch/forge11)",
+   "cd /home/pvd/.hermes/cache/scratch/forge11/run && git init -q && ../solverforge-cli/scripts/install-skill --agent codex --project /home/pvd/.hermes/cache/scratch/forge11/run",
+   "~/.hermes/config.yaml skills.external_dirs += /home/pvd/.hermes/cache/scratch/forge11/run/.agents/skills  (temporary; project tier quarantined the skill, see report; config restored afterwards)",
+   "cd /home/pvd/.hermes/cache/scratch/forge11/run && env -i HOME=$HOME USER=$USER LANG=C.UTF-8 TERM=xterm-256color PATH=/usr/bin:$HOME/.cargo/bin:/bin:$HOME/.local/bin hermes chat --query-file ../prompt.md --oneshot --yolo --pass-session-id --max-turns 250 --format stream-json   (2026-11-10T12:35:14.607Z .. 2026-11-10T12:41:22.591Z)",
+   "Repair step applied by hand per the walkthrough's 'Repair the Plan Live' section: src/solver/service.rs add_problem_change pass-through, src/api/routes.rs POST /jobs/{id}/breakdowns (adapted to the agent's model: Schedule, i64 days, job id format job-{:02}), solver.toml = the section's late-acceptance phases with no time limit",
+   "cd /home/pvd/.hermes/cache/scratch/forge11/run/depot-maintenance && CARGO_TARGET_DIR=/home/pvd/.hermes/cache/scratch/forge11/run-target /usr/bin/cargo build --release && /usr/bin/cargo test --release   (19 passed)",
+   "PORT=7881 /home/pvd/.hermes/cache/scratch/forge11/run-target/release/depot_maintenance",
+   "python3 /home/pvd/.hermes/cache/scratch/forge11/drive_solve.py http://127.0.0.1:7881 /home/pvd/.hermes/cache/scratch/forge11/run-solve.json 0hard/-100soft settle 120 '{\"busIdx\":4,\"skill\":\"electrical\",\"earliestDay\":1,\"dueDay\":2}'"
+  ]
+ }
+}

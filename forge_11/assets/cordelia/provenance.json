@@ -1,0 +1,77 @@
+{
+  "character": "Cordelia (SolverForge brand direction), DEFIANCE expression, dark mode",
+  "derived_from": {
+    "prompt_ids": [
+      "da3aa0cd-c47a-417a-84ed-57c37a049ab8 (Cordelia six-expression atlas: DEFIANCE nucleus)",
+      "d379e55e-04be-4179-9c71-e1defa146151 (character sheet identity)",
+      "de066cbb-8f94-42b5-9b4f-9fd45e8e09d8 (dark-mode cast description)"
+    ],
+    "edit_input": "solverforge-brand-direction/assets/dark/cordelia-defiance.png sha256 daa75552e9d2fc524640a6189a43dcad0c1f2d23f75dacb944a0e3a5e6c24a27",
+    "reference_images": [
+      "solverforge-brand-direction/inputs/cordelia-expressions.png"
+    ]
+  },
+  "tool": "Hermes image_generate (provider openai-codex, model gpt-image-2-medium, image-to-image edit)",
+  "aspect_ratio": "square",
+  "requested_size": "1024x1024",
+  "returned_size": "1380x1140",
+  "seed": null,
+  "embedded": "each <name>.ppm is the <name>.png resized to 680x562 with ImageMagick: magick <name>.png -resize 680x562! -depth 8 PPM:<name>.ppm",
+  "eye_anchors_ppm_px": "[left, right] iris centres in the 680x562 PPM, measured on the pixels (brightest emerald cluster + magnified check)",
+  "frames": {
+    "charge": {
+      "png": "charge.png",
+      "png_sha256": "dc64f83e6f3427b2b4c08076861fa46cf36a7b6e179b3bfc68629b91e2a0a0c3",
+      "ppm": "charge.ppm",
+      "ppm_sha256": "018cc03880f691bcdc625d5ec3ee9dce4a0c964bd7b8c63f27ef1dce16d917fe",
+      "request_id": "66049876-b324-498c-8a3a-7f3f9d27b6e0",
+      "prompt": "Edit the FIRST image (approved SolverForge DARK MODE illustration of CORDELIA, DEFIANCE expression) into an animation keyframe. KEEP EVERYTHING IDENTICAL: same framing and composition, same over-shoulder head turn, same face, same silver-gray high sweeping ponytail with black geometric cyan-seamed hair clips, same black circuit collar, same black leather moto jacket with emerald facet, same engraved ink hatching and semi-realistic anime rendering on the deep emerald-black ground (#07110e) with faint jade circuit-line graphics. Second reference is Cordelia's expression atlas for identity only. KEYFRAME 1 'CHARGE': her DEFIANCE intensifies: brows lowered harder, eye contact locked, tense parted mouth; her irises begin to glow EMERALD-MINT from within, a small bright emerald glint in each pupil, faint green light rim on the lids and lashes. No beams yet. No text, no letters, no logo, no other characters, no red eyes.",
+      "eyes": [
+        [
+          437,
+          343
+        ],
+        [
+          510,
+          371
+        ]
+      ]
+    },
+    "ignite": {
+      "png": "ignite.png",
+      "png_sha256": "96fd2d07286aa82efefcaf319c55ee03104ca350cbe89294b7e16a765ee367c2",
+      "ppm": "ignite.ppm",
+      "ppm_sha256": "31b1504753fbbd1e61af43d62e33dac758114f11cfe799dbe81081f020199a05",
+      "request_id": "1bbfc043-6fae-4b9b-a727-e2a069e25e06",
+      "prompt": "Edit the FIRST image (approved SolverForge DARK MODE illustration of CORDELIA, DEFIANCE expression) into an animation keyframe. KEEP EVERYTHING IDENTICAL: same framing and composition, same over-shoulder head turn, same face, same silver-gray high sweeping ponytail with black geometric cyan-seamed hair clips, same black circuit collar, same black leather moto jacket with emerald facet, same engraved ink hatching and semi-realistic anime rendering on the deep emerald-black ground (#07110e) with faint jade circuit-line graphics. Second reference is Cordelia's expression atlas for identity only. KEYFRAME 2 'IGNITE': both eyes have ignited: each eye blazes with a WHITE-HOT core inside an emerald-mint flare, small star-shaped lens glints, emerald light spilling onto her lids, cheek, nose bridge and the nearest hair strands; brows lowered hard, mouth parted, eye contact locked. No beams yet. No text, no letters, no logo, no other characters, no red.",
+      "eyes": [
+        [
+          437,
+          343
+        ],
+        [
+          510,
+          371
+        ]
+      ]
+    },
+    "fire": {
+      "png": "fire.png",
+      "png_sha256": "604684a8f54e2f0705ee30cd8ad65a1dd8349baac8846da0288c6f00732ba186",
+      "ppm": "fire.ppm",
+      "ppm_sha256": "854b70e636de2342dc9255f27faa3783cfc85418b67ce5cf0c3b9e4ba2763ffd",
+      "request_id": "1b2096c4-0d3f-4eb3-b225-653cf3202aec",
+      "prompt": "Edit the FIRST image (approved SolverForge DARK MODE illustration of CORDELIA, DEFIANCE expression) into an animation keyframe. KEEP EVERYTHING IDENTICAL: same framing and composition, same over-shoulder head turn, same face, same silver-gray high sweeping ponytail with black geometric cyan-seamed hair clips, same black circuit collar, same black leather moto jacket with emerald facet, same engraved ink hatching and semi-realistic anime rendering on the deep emerald-black ground (#07110e) with faint jade circuit-line graphics. Second reference is Cordelia's expression atlas for identity only. KEYFRAME 3 'FIRE': fierce defiance, brows down, mouth parted in a challenge; from BOTH eyes two straight intense laser beams fire toward the RIGHT edge of the frame, white-hot cores with emerald-mint glow, bright flare at each eye, light spilling emerald onto her cheek, nose and hair strands, wind-blown fringe. No text, no letters, no logo, no other characters, no red.",
+      "eyes": [
+        [
+          446,
+          348
+        ],
+        [
+          510,
+          371
+        ]
+      ]
+    }
+  }
+}

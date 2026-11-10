@@ -1,0 +1,556 @@
+{
+  "schema": "forge11.placeholder/1",
+  "captured_at": "1970-01-01T00:00:00Z",
+  "versions": {
+    "solverforge_cli": "0.0.0-placeholder",
+    "solverforge": "0.0.0-placeholder",
+    "agent_model": "placeholder-model"
+  },
+  "prompt": "PLACEHOLDER PROMPT (synthetic, replace with the real capture). We run a city bus depot. Every week each bus has maintenance jobs: brakes, doors, HVAC, tyres, engine checks. Five technicians, each with their own skills, work one job per day. Some jobs need parts that arrive mid-week. The workshop holds two buses at a time, and every job has a due day. Build me a SolverForge planner for this in my repo, and keep the plan stable when someone calls in sick.",
+  "agent_steps": [
+    {
+      "t_ms": 7411,
+      "kind": "say",
+      "text": "PLACEHOLDER: reading the problem statement and the solverforge-modeling skill"
+    },
+    {
+      "t_ms": 48629,
+      "kind": "tool",
+      "text": "PLACEHOLDER $ solverforge new bus-maintenance"
+    },
+    {
+      "t_ms": 89402,
+      "kind": "file",
+      "text": "PLACEHOLDER src/domain/job.rs"
+    },
+    {
+      "t_ms": 131320,
+      "kind": "file",
+      "text": "PLACEHOLDER src/domain/technician.rs"
+    },
+    {
+      "t_ms": 167111,
+      "kind": "say",
+      "text": "PLACEHOLDER: jobs are planning entities; technician and day are planning variables"
+    },
+    {
+      "t_ms": 208025,
+      "kind": "file",
+      "text": "PLACEHOLDER src/constraints/skills.rs"
+    },
+    {
+      "t_ms": 254387,
+      "kind": "file",
+      "text": "PLACEHOLDER src/constraints/workshop_capacity.rs"
+    },
+    {
+      "t_ms": 294794,
+      "kind": "file",
+      "text": "PLACEHOLDER src/constraints/due_day.rs"
+    },
+    {
+      "t_ms": 331050,
+      "kind": "file",
+      "text": "PLACEHOLDER src/constraints/parts.rs"
+    },
+    {
+      "t_ms": 370542,
+      "kind": "tool",
+      "text": "PLACEHOLDER $ cargo test"
+    },
+    {
+      "t_ms": 417316,
+      "kind": "say",
+      "text": "PLACEHOLDER: 9 tests pass"
+    },
+    {
+      "t_ms": 455970,
+      "kind": "tool",
+      "text": "PLACEHOLDER $ cargo run --release -- solve data/week.json"
+    },
+    {
+      "t_ms": 494323,
+      "kind": "say",
+      "text": "PLACEHOLDER: feasible plan found, 0 hard"
+    },
+    {
+      "t_ms": 534485,
+      "kind": "tool",
+      "text": "PLACEHOLDER $ curl -X POST localhost:7860/problem-change"
+    },
+    {
+      "t_ms": 582825,
+      "kind": "say",
+      "text": "PLACEHOLDER: plan repaired in the running solve"
+    }
+  ],
+  "code": [
+    {
+      "path": "src/constraints/skills.rs (PLACEHOLDER)",
+      "title": "PLACEHOLDER: technician has the skill",
+      "excerpt": "// PLACEHOLDER EXCERPT - not real generated code\npub fn missing_skill(f: &ConstraintFactory) -> Constraint {\n    f.for_each::<Job>()\n        .filter(|job| !job.technician().has_skill(job.skill()))\n        .penalize(HardSoftScore::ONE_HARD)\n        .named(\"missing skill\")\n}"
+    },
+    {
+      "path": "src/constraints/workshop_capacity.rs (PLACEHOLDER)",
+      "title": "PLACEHOLDER: at most two buses in the workshop",
+      "excerpt": "// PLACEHOLDER EXCERPT - not real generated code\npub fn workshop_capacity(f: &ConstraintFactory) -> Constraint {\n    f.for_each::<Job>()\n        .group_by(|job| job.day(), count_distinct(|job| job.bus()))\n        .filter(|_, buses| *buses > 2)\n        .penalize_by(HardSoftScore::ONE_HARD, |_, buses| buses - 2)\n        .named(\"workshop holds two buses\")\n}"
+    },
+    {
+      "path": "src/constraints/due_day.rs (PLACEHOLDER)",
+      "title": "PLACEHOLDER: done before the due day",
+      "excerpt": "// PLACEHOLDER EXCERPT - not real generated code\npub fn late_job(f: &ConstraintFactory) -> Constraint {\n    f.for_each::<Job>()\n        .filter(|job| job.day() > job.due_day())\n        .penalize_by(HardSoftScore::ONE_SOFT, |job| job.day() - job.due_day())\n        .named(\"late job\")\n}"
+    },
+    {
+      "path": "src/constraints/parts.rs (PLACEHOLDER)",
+      "title": "PLACEHOLDER: parts arrive first",
+      "excerpt": "// PLACEHOLDER EXCERPT - not real generated code\npub fn parts_not_in_stock(f: &ConstraintFactory) -> Constraint {\n    f.for_each::<Job>()\n        .join::<Part>(equal(|job| job.part(), |part| part.id()))\n        .filter(|job, part| job.day() < part.arrival_day())\n        .penalize(HardSoftScore::ONE_HARD)\n        .named(\"part not in stock\")\n}"
+    }
+  ],
+  "solve": {
+    "wall_ms": 5000,
+    "trajectory": [
+      {
+        "t_ms": 0,
+        "hard": -14,
+        "soft": -420
+      },
+      {
+        "t_ms": 5,
+        "hard": -13,
+        "soft": -374
+      },
+      {
+        "t_ms": 23,
+        "hard": -12,
+        "soft": -350
+      },
+      {
+        "t_ms": 57,
+        "hard": -11,
+        "soft": -331
+      },
+      {
+        "t_ms": 107,
+        "hard": -10,
+        "soft": -314
+      },
+      {
+        "t_ms": 174,
+        "hard": -9,
+        "soft": -299
+      },
+      {
+        "t_ms": 260,
+        "hard": -9,
+        "soft": -285
+      },
+      {
+        "t_ms": 365,
+        "hard": -8,
+        "soft": -272
+      },
+      {
+        "t_ms": 490,
+        "hard": -7,
+        "soft": -260
+      },
+      {
+        "t_ms": 635,
+        "hard": -6,
+        "soft": -248
+      },
+      {
+        "t_ms": 800,
+        "hard": -6,
+        "soft": -237
+      },
+      {
+        "t_ms": 987,
+        "hard": -5,
+        "soft": -226
+      },
+      {
+        "t_ms": 1195,
+        "hard": -4,
+        "soft": -216
+      },
+      {
+        "t_ms": 1425,
+        "hard": -4,
+        "soft": -206
+      },
+      {
+        "t_ms": 1677,
+        "hard": -3,
+        "soft": -196
+      },
+      {
+        "t_ms": 1952,
+        "hard": -3,
+        "soft": -186
+      },
+      {
+        "t_ms": 2250,
+        "hard": -2,
+        "soft": -177
+      },
+      {
+        "t_ms": 2571,
+        "hard": -2,
+        "soft": -168
+      },
+      {
+        "t_ms": 2916,
+        "hard": 0,
+        "soft": -159
+      },
+      {
+        "t_ms": 3284,
+        "hard": 0,
+        "soft": -151
+      },
+      {
+        "t_ms": 3677,
+        "hard": 0,
+        "soft": -142
+      },
+      {
+        "t_ms": 4093,
+        "hard": 0,
+        "soft": -134
+      },
+      {
+        "t_ms": 4534,
+        "hard": 0,
+        "soft": -126
+      },
+      {
+        "t_ms": 5000,
+        "hard": 0,
+        "soft": -118
+      }
+    ],
+    "plan": [
+      {
+        "job": "PH-J01 brakes",
+        "bus": "PH-BUS-01",
+        "technician": "PH-TECH-A",
+        "day": 0
+      },
+      {
+        "job": "PH-J02 doors",
+        "bus": "PH-BUS-02",
+        "technician": "PH-TECH-B",
+        "day": 3
+      },
+      {
+        "job": "PH-J03 hvac",
+        "bus": "PH-BUS-03",
+        "technician": "PH-TECH-C",
+        "day": 1
+      },
+      {
+        "job": "PH-J04 tyres",
+        "bus": "PH-BUS-04",
+        "technician": "PH-TECH-D",
+        "day": 4
+      },
+      {
+        "job": "PH-J05 engine",
+        "bus": "PH-BUS-05",
+        "technician": "PH-TECH-E",
+        "day": 2
+      },
+      {
+        "job": "PH-J06 inspection",
+        "bus": "PH-BUS-06",
+        "technician": "PH-TECH-A",
+        "day": 0
+      },
+      {
+        "job": "PH-J07 brakes",
+        "bus": "PH-BUS-07",
+        "technician": "PH-TECH-B",
+        "day": 3
+      },
+      {
+        "job": "PH-J08 doors",
+        "bus": "PH-BUS-08",
+        "technician": "PH-TECH-C",
+        "day": 1
+      },
+      {
+        "job": "PH-J09 hvac",
+        "bus": "PH-BUS-01",
+        "technician": "PH-TECH-D",
+        "day": 4
+      },
+      {
+        "job": "PH-J10 tyres",
+        "bus": "PH-BUS-02",
+        "technician": "PH-TECH-E",
+        "day": 2
+      },
+      {
+        "job": "PH-J11 engine",
+        "bus": "PH-BUS-03",
+        "technician": "PH-TECH-A",
+        "day": 0
+      },
+      {
+        "job": "PH-J12 inspection",
+        "bus": "PH-BUS-04",
+        "technician": "PH-TECH-B",
+        "day": 3
+      },
+      {
+        "job": "PH-J13 brakes",
+        "bus": "PH-BUS-05",
+        "technician": "PH-TECH-C",
+        "day": 1
+      },
+      {
+        "job": "PH-J14 doors",
+        "bus": "PH-BUS-06",
+        "technician": "PH-TECH-D",
+        "day": 4
+      },
+      {
+        "job": "PH-J15 hvac",
+        "bus": "PH-BUS-07",
+        "technician": "PH-TECH-E",
+        "day": 2
+      },
+      {
+        "job": "PH-J16 tyres",
+        "bus": "PH-BUS-08",
+        "technician": "PH-TECH-A",
+        "day": 0
+      }
+    ]
+  },
+  "repair": {
+    "event": {
+      "kind": "technician_unavailable",
+      "label": "PLACEHOLDER: PH-TECH-C calls in sick",
+      "detail": {
+        "technician": "PH-TECH-C"
+      }
+    },
+    "mechanism": "PLACEHOLDER POST /jobs/{id}/problem-changes",
+    "wall_ms": 2000,
+    "trajectory": [
+      {
+        "t_ms": 0,
+        "hard": -4,
+        "soft": -118
+      },
+      {
+        "t_ms": 7,
+        "hard": -4,
+        "soft": -150
+      },
+      {
+        "t_ms": 33,
+        "hard": -3,
+        "soft": -148
+      },
+      {
+        "t_ms": 79,
+        "hard": -3,
+        "soft": -145
+      },
+      {
+        "t_ms": 150,
+        "hard": -2,
+        "soft": -143
+      },
+      {
+        "t_ms": 244,
+        "hard": -2,
+        "soft": -141
+      },
+      {
+        "t_ms": 365,
+        "hard": -1,
+        "soft": -140
+      },
+      {
+        "t_ms": 512,
+        "hard": -1,
+        "soft": -138
+      },
+      {
+        "t_ms": 687,
+        "hard": -1,
+        "soft": -137
+      },
+      {
+        "t_ms": 891,
+        "hard": -1,
+        "soft": -135
+      },
+      {
+        "t_ms": 1123,
+        "hard": 0,
+        "soft": -134
+      },
+      {
+        "t_ms": 1385,
+        "hard": 0,
+        "soft": -132
+      },
+      {
+        "t_ms": 1677,
+        "hard": 0,
+        "soft": -131
+      },
+      {
+        "t_ms": 2000,
+        "hard": 0,
+        "soft": -130
+      }
+    ],
+    "plan": [
+      {
+        "job": "PH-J01 brakes",
+        "bus": "PH-BUS-01",
+        "technician": "PH-TECH-A",
+        "day": 0
+      },
+      {
+        "job": "PH-J02 doors",
+        "bus": "PH-BUS-02",
+        "technician": "PH-TECH-B",
+        "day": 3
+      },
+      {
+        "job": "PH-J03 hvac",
+        "bus": "PH-BUS-03",
+        "technician": "PH-TECH-A",
+        "day": 1
+      },
+      {
+        "job": "PH-J04 tyres",
+        "bus": "PH-BUS-04",
+        "technician": "PH-TECH-D",
+        "day": 4
+      },
+      {
+        "job": "PH-J05 engine",
+        "bus": "PH-BUS-05",
+        "technician": "PH-TECH-E",
+        "day": 2
+      },
+      {
+        "job": "PH-J06 inspection",
+        "bus": "PH-BUS-06",
+        "technician": "PH-TECH-A",
+        "day": 0
+      },
+      {
+        "job": "PH-J07 brakes",
+        "bus": "PH-BUS-07",
+        "technician": "PH-TECH-B",
+        "day": 3
+      },
+      {
+        "job": "PH-J08 doors",
+        "bus": "PH-BUS-08",
+        "technician": "PH-TECH-D",
+        "day": 2
+      },
+      {
+        "job": "PH-J09 hvac",
+        "bus": "PH-BUS-01",
+        "technician": "PH-TECH-D",
+        "day": 4
+      },
+      {
+        "job": "PH-J10 tyres",
+        "bus": "PH-BUS-02",
+        "technician": "PH-TECH-E",
+        "day": 2
+      },
+      {
+        "job": "PH-J11 engine",
+        "bus": "PH-BUS-03",
+        "technician": "PH-TECH-A",
+        "day": 0
+      },
+      {
+        "job": "PH-J12 inspection",
+        "bus": "PH-BUS-04",
+        "technician": "PH-TECH-B",
+        "day": 3
+      },
+      {
+        "job": "PH-J13 brakes",
+        "bus": "PH-BUS-05",
+        "technician": "PH-TECH-E",
+        "day": 1
+      },
+      {
+        "job": "PH-J14 doors",
+        "bus": "PH-BUS-06",
+        "technician": "PH-TECH-D",
+        "day": 4
+      },
+      {
+        "job": "PH-J15 hvac",
+        "bus": "PH-BUS-07",
+        "technician": "PH-TECH-E",
+        "day": 2
+      },
+      {
+        "job": "PH-J16 tyres",
+        "bus": "PH-BUS-08",
+        "technician": "PH-TECH-A",
+        "day": 0
+      }
+    ],
+    "changed": [
+      {
+        "job": "PH-J03 hvac",
+        "from": {
+          "technician": "PH-TECH-C",
+          "day": 1
+        },
+        "to": {
+          "technician": "PH-TECH-A",
+          "day": 1
+        }
+      },
+      {
+        "job": "PH-J08 doors",
+        "from": {
+          "technician": "PH-TECH-C",
+          "day": 1
+        },
+        "to": {
+          "technician": "PH-TECH-D",
+          "day": 2
+        }
+      },
+      {
+        "job": "PH-J13 brakes",
+        "from": {
+          "technician": "PH-TECH-C",
+          "day": 1
+        },
+        "to": {
+          "technician": "PH-TECH-E",
+          "day": 1
+        }
+      }
+    ],
+    "unchanged_count": 13
+  },
+  "provenance": {
+    "workdir": "/placeholder/bus-maintenance",
+    "session_id": "placeholder",
+    "commands": [
+      "cargo run --release -- solve data/week.json"
+    ]
+  }
+}
