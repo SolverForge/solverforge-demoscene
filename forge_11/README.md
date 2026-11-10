@@ -8,7 +8,7 @@
       ── DESCRIBE, GENERATE, SOLVE, REPAIR // TEXTMODE ──
 ```
 
-A 90-second, 1920x1080, 60 fps demo for SolverForge. It replays one real
+A 2:42, 1920x1080, 60 fps demo for SolverForge. It replays one real
 agent session: a maintenance problem described in plain language, the model a
 coding agent writes for it with the solverforge-modeling skill, the solve on
 the laptop, and a disruption pushed into the running solve. Your model. Your
@@ -50,39 +50,76 @@ breakdown pushed into the running solve as a problem change and healed in
 
 ## Scenes
 
-| Bars | Time | Section | What you see |
-|---:|---|---|---|
-| 0-2 | 0:00 | Boot | Warp starfield, copper bars, the SOLVERFORGE banner beamed in by glyphfx, the four verbs landing on the beat |
-| 2-9 | 0:04 | 01 Describe | The prompt typed to the coding agent word by word on the sixteenth-note grid, domain words lit; the plan's buses drive past on the river road |
-| 9-19 | 0:18 | 02 Generate | The forge: the agent transcript scrolls by; each constraint excerpt is struck on the anvil on a bar line, enters white-hot through a glyphfx effect, then quenches from orange to its syntax colours in a puff of steam |
-| 19-27 | 0:38 | 03 Solve | The run command types in; the score replays the captured trajectory on a log clock, the real solver milliseconds counting; the plan's blocks drop onto a technician x day board; feasibility lands on a beat |
-| 27-39 | 0:54 | 04 Repair | The live plan; the captured disruption strikes on the second bar and enters the running solve through the captured mechanism (shown verbatim, wrapped over two lines); **Cordelia** cuts in over the score panel, defiant, her eyes charge and ignite, and on the downbeat the repair enters the solve her eye-lasers sear across to the board (see below); a new job drops in red-hot (or a technician's row is struck out); changed jobs travel to their new slots while every other block stays put; the score recovers; then each change is reviewed in turn, ghost to new slot; changed / untouched / added counts from the capture |
-| 39-45 | 1:18 | 05 Close | YOUR MODEL. YOUR MACHINE. YOUR SOLVER VERSION., each with a line from the capture; the ouroboros draws itself; solverforge.org |
+The first cut ran 90 seconds, a limit carried over from a hackathon video
+that does not apply here. This cut spends the extra time on comprehension,
+not on more on screen: one idea per moment, each section opened by a line
+that leads on from the last, each caption held for its reading window and no
+longer, so the whole stays brisk.
+
+| Bars | Time | Was | Section | What you see |
+|---:|---|---|---|---|
+| 0-10 | 0:00 | 4 s -> 20 s | Boot | Flight into a warp starfield, always forward and gaining speed; copper bars roll in; the SOLVERFORGE banner is beamed in by glyphfx on bar three and held, a glyphfx highlight runs across it on bars five and nine; one line says this is a real session; the four verbs land on the last bar's beats as the stars warp into the cut |
+| 10-20 | 0:20 | 14 s -> 20 s | 01 Describe | Opener; the prompt typed to the coding agent word by word over 11 s (was 10 s, now after the opener explains what it is), domain words lit, its last screen held for 3 s; the plan's buses drive past on the river road |
+| 20-36 | 0:40 | 20 s -> 32 s | 02 Generate | Opener; the agent transcript scrolls; each constraint excerpt is struck on the anvil and held 3-6 s by its length (was 2-5 s), white-hot glyphfx entrance, quench to syntax colours, steam |
+| 36-51 | 1:12 | 16 s -> 30 s | 03 Solve | Opener; the run command; the board's axes introduced (each mechanic's row lit on a beat, then the days); what red means, with the score panel lit and the board dimmed while the run replays; FEASIBLE lands only after that line is read and holds 3.5 s; what the amber number means |
+| 51-68 | 1:42 | 24 s -> 34 s | 04 Repair | Opener; a bar of the live week; the breakdown strikes on a bar line and everything but the broken bus's work steps back; Cordelia's performance (below); PLAN HEALED holds 3.5 s; the change list she covered is lit again as she leaves; what moved, then each change in turn with the rest of the board dimmed; one closing line |
+| 68-81 | 2:16 | 12 s -> 26 s | 05 Close | Three sentences, one at a time, each with its line from the capture; the ouroboros draws itself in the middle of the frame; solverforge.org holds over the final E minor |
+
+Why each length: every caption is up for `max(demofx::reading_window, 15
+characters a second + 2 s)` and the next thing starts on the beat after it.
+Boot is ten bars because the song's intro needs two bars of pad, four of
+banner and four of hook to build into the first downbeat. Describe types the
+prompt at a pace where the lit domain words can be followed, then moves on.
+Generate gives each excerpt half-bar slots weighted by its line count. Solve
+introduces the board and the score before they move, so the feasible moment
+means something. Repair gives the breakdown a bar alone, Cordelia four bars,
+each reviewed change a bar and a half.
 
 Every cut is on a downbeat: a glyph-rain wipe over the last half second, a
-flash and a short scanline tear. The SolverForge mark sits in the top-left
-corner throughout and steps aside for the large logo.
+flash, a short scanline tear and copper bars in the new section's colours
+rolling down the frame over the first beat; when an opener hands over to its
+scene a raster line sweeps the frame. The SolverForge mark sits in the
+top-left corner throughout and steps aside for the large logo.
+
+## Captions
+
+Every line of copy is in one table, `src/story.rs`: a narrator telling what
+happens at the depot and to its people, in the third person, each line
+leading into the next. Numbers in captions are filled from the capture
+(`{changed}`, `{unchanged}`, the broken bus, how fast the plans came back).
+`src/script.rs` times them (never two in one place at once, each up for its
+reading window); `src/scenes/captions.rs` draws them through a glyphfx
+entrance, one clip per line so every line is centred. Tests pin the house
+rules (no first person, no em dashes, no marketing words, no rhetorical
+questions).
 
 ## Cordelia
 
-The agent's hero beat. Times come from the script (`scenes/cordelia.rs`,
-`Beat::new`), shared by picture and sound; on the real capture:
+The agent's hero beat. Times come from `Script::cordelia` (`script.rs`),
+shared by picture and sound; on the real capture:
 
 | Time | Beat |
 |---:|---|
-| 56.0 | the bus breaks down: red strike, alarm, band drops to a heartbeat |
-| 56.5 | Cordelia glitches in (row tear, chromatic split) over the score panel's chart, CRT scanlines, name tag `CORDELIA // AGENT`; eyes start charging |
-| 57.5 | eyes ignite (white-hot core, star glint), one beat before the bar |
-| 58.0 | downbeat, the repair enters the running solve: she fires. Beams from both eyes sear across to the board: the left holds the breakdown's own job (red-hot `job-21`), the right rides the changed job to its new slot; sparks at each strike every eighth note |
-| 60.0 | the hook returns: beams cut, she tears out; the panel's chart and change list are back for the rest of the section |
+| 1:50 | the bus breaks down on a bar line: red strike, alarm, band drops to a heartbeat; the board focuses on the broken bus |
+| 1:52 | Cordelia glitches in (row tear, chromatic split) over the score panel's chart, eyes **narrowed** on the problem, as the caption says what happens next |
+| 1:53 | **charge**: the glint becomes a glow (a dissolve on the beat) |
+| 1:54 | **build**: the glow builds |
+| 1:55 | **ignite**: white-hot, star glint, two beats before the bar |
+| 1:56 | the downbeat the repair enters the running solve: **fire** (no beams in the art). The engine's beams sear from her eyes to the board, surging on every beat with the hum: the left holds the breakdown's own job, the right rides each changed job to its new slot; sparks every eighth note |
+| 1:59 | the plan has healed: PLAN HEALED lands |
+| 1:59.5 | beams cut, power-down; she recoils into a **smirk** (glitch accent) |
+| 2:01.5 | she tears out; the change list under her is lit again |
 
-The artwork is three generated keyframes (`assets/cordelia/charge|ignite|fire.png`),
+The artwork is six generated keyframes (`assets/cordelia/narrow|charge|build|ignite|fire|smirk.png`),
 image-to-image edits of the brand direction's approved dark DEFIANCE artwork
 (`solverforge-brand-direction/assets/dark/cordelia-defiance.png`, sha256
 `daa75552e9d2fc524640a6189a43dcad0c1f2d23f75dacb944a0e3a5e6c24a27`) with its
 expression atlas as identity reference, prompts derived from the saved Cordelia
 generation prompts. Exact prompts, model, request ids and sha256 of every frame
-are in `assets/cordelia/provenance.json`. The demo embeds each frame as a
+are in `assets/cordelia/provenance.json`, including the first fire frame
+the current one replaces (that one had beams painted into the art, which
+disagreed with the engine's beams angling to their targets; the new one has
+glowing eyes only). The demo embeds each frame as a
 680x562 binary PPM (`magick <frame>.png -resize 680x562! -depth 8 PPM:<frame>.ppm`)
 parsed by hand. The engine's beams are an effect layer on top: anchored to the
 iris centres measured on each keyframe's pixels, carried through the same
@@ -120,10 +157,25 @@ every typed word clicks; every transcript step blips; every excerpt lands on
 an anvil (an inharmonic FM ring over a thud); every block drop ticks; every
 score improvement pings a note up the scale by how far the score has come;
 feasibility hits the crash, a tonic stab and a sub drop; the disruption sounds
-an alarm on the D sharp / A tritone and drops the band to a heartbeat for two
-bars; Cordelia's charge whine glides B3 -> E5 -> B5 into the downbeat, the zap falls E6 -> E5 over a sub hit, the beam hums on E2 + B2 gated in sixteenths, and a B4 -> E4 power-down closes it as the hook returns (all in E harmonic minor, checked by the pitch test); each changed job whooshes to its slot; the healed plan brings the hook
-back. Under Describe the band is light; Generate and Solve run the full
-groove; the close holds the dominant, then lands on E minor.
+an alarm on the D sharp / A tritone and drops the band to a heartbeat for three
+bars on Am - C - B, through Cordelia's charge; her charge whine glides
+B3 -> E5 -> B5 into the downbeat, which resolves the dominant on Em; the zap
+falls E6 -> E5 over a sub hit, the beam hums on E2 + B2 gated in sixteenths
+with a small E6 -> E5 zap on every beat it surges, and a B4 -> E4 power-down
+closes it as the beams cut (all in E harmonic minor, checked by the pitch
+test); each changed job whooshes to its slot; the healed plan brings the
+hook's answer back on the next bar.
+
+The arrangement follows the 81-bar structure. The intro is ten bars: two
+of pad alone swelling under the stars (a filtered arp creeping in on bar
+two), the banner landing on bar three with a crash, a sub drop and the
+bass, kick building from bar five, the hook's question stated on bar seven
+over the full groove, the snare on bar nine and a snare roll, toms and a
+riser on bar ten into the first downbeat of Describe. Under the prompt the band
+stays light and the answer comes back softly an octave down; Generate states
+question and answer in full and a brass dive; Solve brings the brass
+question back as the plan comes together; the close states the question softly, then the answer
+doubled, and lands on E minor under the logo.
 
 ## Running
 
@@ -192,13 +244,14 @@ src/
 ├── json.rs         a small JSON reader
 ├── capture.rs      the bundle: types, validation, the release guard
 ├── script.rs       the schedule shared by picture and sound
-├── timeline.rs     120 BPM, 45 bars, sections on bar lines
+├── timeline.rs     120 BPM, 81 bars, sections on bar lines
+├── story.rs        every caption, in one table
 ├── board.rs        the technician x day board for both plans
 ├── code.rs         excerpt layout, syntax colours, glyphfx entrance
 ├── gfx.rs          frame, anti-aliased text at any cell size, primitives
 ├── fx.rs           copper bars, river, sparks, steam, starfield, glitch, wipe
 ├── post.rs         bloom, scanlines, vignette
-├── scenes/         boot, describe, generate, solve, repair, cordelia, close, score panel
+├── scenes/         boot, describe, generate, solve, repair, cordelia, close, score panel, captions
 └── audio/          song.rs (the score), mod.rs (playback, WAV)
 ```
 

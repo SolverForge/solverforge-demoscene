@@ -25,15 +25,15 @@ pub enum Section {
 
 /// (section, first bar, end bar)
 pub const SECTIONS: [(Section, f32, f32); 6] = [
-    (Section::Boot, 0.0, 2.0),
-    (Section::Describe, 2.0, 9.0),
-    (Section::Generate, 9.0, 19.0),
-    (Section::Solve, 19.0, 27.0),
-    (Section::Repair, 27.0, 39.0),
-    (Section::Close, 39.0, 45.0),
+    (Section::Boot, 0.0, 10.0),
+    (Section::Describe, 10.0, 20.0),
+    (Section::Generate, 20.0, 36.0),
+    (Section::Solve, 36.0, 51.0),
+    (Section::Repair, 51.0, 68.0),
+    (Section::Close, 68.0, 81.0),
 ];
 
-pub const TOTAL_BARS: f32 = 45.0;
+pub const TOTAL_BARS: f32 = 81.0;
 pub const DURATION: f32 = TOTAL_BARS * BAR;
 
 pub const fn bars(b: f32) -> f32 {
@@ -103,6 +103,7 @@ mod tests {
             end = b1;
         }
         assert_eq!(end, TOTAL_BARS);
-        assert!((85.0..=95.0).contains(&DURATION));
+        // Long enough to read every caption, brisk otherwise.
+        assert!((140.0..=170.0).contains(&DURATION));
     }
 }

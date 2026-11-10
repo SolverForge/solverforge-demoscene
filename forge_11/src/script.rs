@@ -3,9 +3,62 @@
 // excerpt lands on the anvil and feasibility hits the crash on the frame it
 // is drawn. Section windows come from timeline.rs; the capture decides
 // everything inside them.
+use crate::board::Board;
 use crate::capture::{Capture, Point, Solve};
 use crate::gfx::{size, wrap, Size};
+use crate::story::{self, Cap};
 use crate::timeline::{snap_beat, span, Section, BAR, BEAT, STEP};
+
+/// Where a caption sits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Place {
+    /// Centred under the boot banner.
+    Banner,
+    /// A section opener: centred, under the section's large title.
+    Intro,
+    /// A lower third over the running scene.
+    Lower,
+    /// The close: one large sentence at a time.
+    Close,
+}
+
+#[derive(Clone, Debug)]
+pub struct Caption {
+    pub cap: Cap,
+    pub text: String,
+    pub from: f32,
+    pub to: f32,
+    pub place: Place,
+}
+
+/// Cordelia's performance on the demo clock; picture and sound share it.
+#[derive(Clone, Copy, Debug)]
+pub struct Performance {
+    /// She glitches in, eyes narrowed on the problem.
+    pub enter: f32,
+    /// The glint becomes a glow.
+    pub charge: f32,
+    /// The glow builds.
+    pub build: f32,
+    /// White-hot, a beat or two before the fire.
+    pub ignite: f32,
+    /// The downbeat the repair enters the running solve: beams.
+    pub fire: f32,
+    /// The plan has healed: beams cut, a smirk.
+    pub cut: f32,
+    /// She tears out.
+    pub exit: f32,
+}
+
+/// The first beat at or after `t`.
+fn beat_up(t: f32) -> f32 {
+    (t / BEAT - 1e-3).ceil() * BEAT
+}
+
+/// The first bar line at or after `t`.
+fn bar_up(t: f32) -> f32 {
+    (t / BAR - 1e-3).ceil() * BAR
+}
 
 /// The prompt's terminal: text area in pixels.
 pub const PROMPT_BOX: (i32, i32, i32, i32) = (200, 336, 1720, 860);
@@ -122,8 +175,16 @@ pub struct Script {
     /// the section runs out), and for how long.
     pub reviews: Vec<f32>,
     pub review_len: f32,
-    /// Close lines' landings.
+    /// Close sentences' landings, then the logo.
     pub close: [f32; 3],
+    pub logo: f32,
+    /// When each section's opener ends and its scene takes over.
+    pub intros: Vec<(Section, f32)>,
+    /// Every caption, in order.
+    pub captions: Vec<Caption>,
+    /// SOLVE: when the board's axes are introduced.
+    pub axes: f32,
+    pub cordelia: Performance,
     /// (time, 0..1 progress) for every score improvement, both runs.
     pub improvements: Vec<(f32, f32)>,
 }
@@ -147,8 +208,59 @@ pub fn prompt_layout(prompt: &str) -> (Size, Vec<String>) {
 
 impl Script {
     pub fn new(c: &Capture) -> Self {
+        let board = Board::new(c);
+        let mut captions: Vec<Caption> = Vec::new();
+        let mut intros = Vec::new();
+        // Each data section opens on its title and one line saying what
+        // comes next; the scene takes over on the beat after it is read.
+        let mut intro = |sec: Section, cap: Cap, captions: &mut Vec<Caption>| {
+            let (a, _) = span(sec);
+            let text = story::template(cap).to_string();
+            let end = beat_up(a + story::window(&text));
+            captions.push(Caption {
+                cap,
+                text,
+                from: a,
+                to: end,
+                place: Place::Intro,
+            });
+            intros.push((sec, end));
+            end
+        };
+        let (b0, b1) = span(Section::Boot);
+        let boot_text = story::template(Cap::Boot).to_string();
+        captions.push(Caption {
+            cap: Cap::Boot,
+            from: b0 + 6.0 * BAR,
+            to: b1 - BAR,
+            text: boot_text,
+            place: Place::Banner,
+        });
+        let d_in = intro(Section::Describe, Cap::Describe, &mut captions);
+        let g_in = intro(Section::Generate, Cap::Generate, &mut captions);
+        let s_in = intro(Section::Solve, Cap::Solve, &mut captions);
+        let r_in = intro(Section::Repair, Cap::Repair, &mut captions);
+        // A lower third, after the previous one has gone.
+        let lower = |captions: &mut Vec<Caption>, cap: Cap, text: String, at: f32| -> f32 {
+            let prev = captions
+                .iter()
+                .filter(|c| c.place == Place::Lower)
+                .map(|c| c.to)
+                .fold(0.0, f32::max);
+            let from = at.max(prev + 0.1);
+            let to = from + story::window(&text);
+            captions.push(Caption {
+                cap,
+                text,
+                from,
+                to,
+                place: Place::Lower,
+            });
+            to
+        };
+
         // DESCRIBE: words type on the sixteenth-note grid.
-        let (d0, d1) = span(Section::Describe);
+        let (_, d1) = span(Section::Describe);
         let (prompt_size, prompt_lines) = prompt_layout(&c.prompt);
         let mut tokens = Vec::new();
         let mut idx = 0;
@@ -170,7 +282,8 @@ impl Script {
             }
             idx += n;
         }
-        let (ty0, ty1) = (d0 + 1.0, d1 - 3.0);
+        // The last screen of the prompt holds for three seconds.
+        let (ty0, ty1) = (d_in + 0.5, d1 - 3.0);
         let slots = ((ty1 - ty0) / STEP) as usize;
         let per = slots as f32 / tokens.len().max(1) as f32;
         let words = tokens
@@ -189,7 +302,8 @@ impl Script {
         };
 
         // GENERATE: agent steps in transcript order, code on the beat.
-        let (g0, g1) = span(Section::Generate);
+        let (_, g1) = span(Section::Generate);
+        let g0 = g_in;
         let n = c.steps.len();
         let t_last = c.steps.iter().map(|s| s.t_ms).fold(0.0, f64::max).max(1.0);
         let steps = c
@@ -247,25 +361,68 @@ impl Script {
             })
             .collect();
 
-        // SOLVE: the run replays from two seconds in, feasibility on a beat.
-        let (s0, s1) = span(Section::Solve);
-        let mut solve = Replay::new(&c.solve, s0 + 2.0, 8.0, 0.0);
+        // SOLVE: the board's axes first, then what red means, then the run
+        // replays; feasibility lands on a beat and holds.
+        let (_, s1) = span(Section::Solve);
+        let axes = s_in;
+        let board_to = lower(
+            &mut captions,
+            Cap::Board,
+            story::template(Cap::Board).into(),
+            axes,
+        );
+        let score_at = beat_up(board_to);
+        let score_to = lower(
+            &mut captions,
+            Cap::Score,
+            story::template(Cap::Score).into(),
+            score_at,
+        );
+        // The run starts as red is explained, so the number is on screen;
+        // it turns feasible only once that line has been read.
+        let run_from = score_at + BEAT;
+        let mut solve = Replay::new(&c.solve, run_from, 8.0, 0.0);
         let first_ok = |s: &Solve| {
             s.trajectory
                 .iter()
                 .find(|p| p.score.feasible())
                 .map(|p| p.t_ms)
         };
+        let after_feasible = 2.0 * story::window(story::template(Cap::Cost)) + 0.8;
         if let Some(ms) = first_ok(&c.solve) {
-            solve = solve.snap(ms, s1 - s0 - 4.0);
+            let tau = solve.tau(ms).max(0.05);
+            let land = beat_up(score_to + 0.3);
+            if solve.at(ms) < land {
+                solve.len = (land - run_from) / tau;
+            }
+            solve = solve.snap(ms, s1 - run_from - after_feasible);
         }
         let solve_feasible = first_ok(&c.solve).map(|ms| solve.at(ms));
+        if let Some(at) = solve_feasible {
+            let to = lower(
+                &mut captions,
+                Cap::Feasible,
+                story::template(Cap::Feasible).into(),
+                at + 0.25,
+            );
+            lower(
+                &mut captions,
+                Cap::Cost,
+                story::template(Cap::Cost).into(),
+                to + 0.2,
+            );
+        }
         let drop_end = solve_feasible.unwrap_or(solve.from + solve.len * 0.85);
         let drops = spread(c.solve.plan.len(), solve.from + 0.2, drop_end - 0.15, STEP);
 
-        // REPAIR: the event strikes on the second bar; the change replays.
-        let (r0, r1) = span(Section::Repair);
-        let event = r0 + BAR;
+        // REPAIR: the live week, then the event strikes on a bar line; two
+        // bars for the viewer to read it; Cordelia charges for two bars and
+        // fires on the downbeat the change enters the running solve.
+        let (_, r1) = span(Section::Repair);
+        // A bar of the live week after the opener, then the strike.
+        let event = bar_up(r_in + 2.0);
+        let enter = event + BAR;
+        let fire = enter + 2.0 * BAR;
         // The repair's clock starts at its first point: the change went in.
         let origin = c
             .repair
@@ -274,9 +431,13 @@ impl Script {
             .iter()
             .map(|p| p.t_ms)
             .fold(f64::MAX, f64::min);
-        let mut repair = Replay::new(&c.repair.solve, r0 + 2.0 * BAR, 8.0, origin);
+        let mut repair = Replay::new(&c.repair.solve, fire, 8.0, origin);
+        // The heal lands a bar and a half after the fire, on a beat: room
+        // for every changed job to travel while the beams hold.
         if let Some(ms) = first_ok(&c.repair.solve) {
-            repair = repair.snap(ms, r1 - r0 - 12.0);
+            let tau = repair.tau(ms).max(0.05);
+            repair.len = ((3.0 / tau).min(14.0) / BEAT).round().max(1.0) * BEAT;
+            repair = repair.snap(ms, 14.0);
         }
         let repair_feasible = first_ok(&c.repair.solve).map(|ms| repair.at(ms));
         let move_end = repair_feasible.unwrap_or(repair.from + repair.len * 0.85);
@@ -286,21 +447,72 @@ impl Script {
             move_end - 0.5,
             BEAT / 2.0,
         );
-        // Then each change is reviewed in turn, old slot to new, on the beat.
+        let cut = beat_up(move_end.max(fire + BAR) + BEAT);
+        let exit = cut + BAR;
+        let cordelia = Performance {
+            enter,
+            charge: enter + 2.0 * BEAT,
+            build: enter + BAR,
+            ignite: enter + BAR + 2.0 * BEAT,
+            fire,
+            cut,
+            exit,
+        };
+        let tell = story::template(Cap::Tell).to_string();
+        lower(&mut captions, Cap::Tell, tell, enter + 0.3);
+        // Once she is gone: what moved, then each change in turn, old slot
+        // to new, one per bar, then the line that closes the section.
+        let bus = board
+            .struck_bus
+            .clone()
+            .unwrap_or_else(|| "the broken bus".to_string());
+        let moved = story::fill(
+            story::template(Cap::Moved),
+            &[
+                ("changed", c.repair.changed.len().to_string()),
+                ("bus", bus),
+                ("unchanged", c.repair.unchanged_count.to_string()),
+            ],
+        );
+        lower(&mut captions, Cap::Moved, moved, exit + 0.4);
+        let done = story::template(Cap::Done).to_string();
+        let done_at = r1 - story::window(&done) - 0.4;
         let n_rev = c.repair.changed.len();
-        let rev0 = ((move_end + BEAT) / BEAT).ceil() * BEAT;
+        let rev0 = beat_up(exit + 0.5);
         let rev_step = if n_rev > 0 {
-            (((r1 - 1.0 - rev0) / n_rev as f32 / BEAT).floor() * BEAT).clamp(BEAT, BAR)
+            (((done_at - rev0) / n_rev as f32 / BEAT).floor() * BEAT).clamp(BEAT, BAR)
         } else {
             BAR
         };
         let reviews = (0..n_rev)
             .map(|k| rev0 + k as f32 * rev_step)
-            .filter(|&t| t < r1 - 0.5)
+            .filter(|&t| t + rev_step <= done_at + 0.01)
             .collect();
+        lower(&mut captions, Cap::Done, done, done_at);
 
+        // CLOSE: three sentences, one at a time, each up for its reading
+        // window; then the logo and the address hold to the end.
         let (c0, _) = span(Section::Close);
-        let close = [c0, c0 + BAR, c0 + 2.0 * BAR];
+        let speed = story::speed(c.solve.wall_ms.max(c.repair.solve.wall_ms));
+        let mut close = [0.0; 3];
+        let mut at = c0;
+        for (i, cap) in [Cap::Close1, Cap::Close2, Cap::Close3]
+            .into_iter()
+            .enumerate()
+        {
+            let text = story::fill(story::template(cap), &[("speed", speed.clone())]);
+            let to = beat_up(at + story::window(&text) + 0.3);
+            close[i] = at;
+            captions.push(Caption {
+                cap,
+                text,
+                from: at,
+                to,
+                place: Place::Close,
+            });
+            at = to;
+        }
+        let logo = at;
 
         let mut improvements = progress(&c.solve.trajectory, &solve);
         improvements.extend(progress(&c.repair.solve.trajectory, &repair));
@@ -321,8 +533,24 @@ impl Script {
             reviews,
             review_len: rev_step,
             close,
+            logo,
+            intros,
+            captions,
+            axes,
+            cordelia,
             improvements,
         }
+    }
+}
+
+impl Script {
+    /// When a section's opener hands over to its scene (its start if it
+    /// has none).
+    pub fn intro_end(&self, sec: Section) -> f32 {
+        self.intros
+            .iter()
+            .find(|(s, _)| *s == sec)
+            .map_or(span(sec).0, |(_, t)| *t)
     }
 }
 

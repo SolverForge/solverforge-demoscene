@@ -10,10 +10,14 @@ use crate::gfx::{clip, ease_out, mix, smooth, Frame, S1, S2, W};
 use crate::script::Script;
 use crate::timeline::Now;
 
-pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, n: Now) {
+pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, _n: Now) {
     backdrop(f, t);
-    command(f, c, t, n.local);
-    let open = smooth(n.local / 0.5);
+    let local = t - s.axes;
+    if local < 0.0 {
+        return;
+    }
+    command(f, c, t, local);
+    let open = smooth(local / 0.5);
     score::panel(f, &c.solve.trajectory, &s.solve, None, t, open, EMERALD);
     let (x0, _, x1, y1) = PANEL;
     let chart = Chart {
@@ -25,7 +29,22 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, n: No
     score::chart(f, &c.solve.trajectory, &s.solve, t, &chart, open);
 
     let feasible_age = s.solve_feasible.map_or(-1.0, |at| t - at);
-    board.draw_grid(f, smooth((n.local - 0.3) / 0.5), EMERALD, 0.0, t);
+    board.draw_grid(f, smooth((local - 0.3) / 0.5), EMERALD, 0.0, t);
+    axes(f, board, local);
+    // While the score is explained, its panel is the one thing lit.
+    if let Some(cap) = s
+        .captions
+        .iter()
+        .find(|c| c.cap == crate::story::Cap::Score)
+    {
+        let k = smooth((t - cap.from) / 0.3) * (1.0 - smooth((t - cap.to + 0.4) / 0.4));
+        if k > 0.0 {
+            let (x0, y0, x1, _) = PANEL;
+            let pulse = 0.6 + 0.4 * crate::timeline::beat_pulse(t, 4.0);
+            f.frame_rect(x0 - 6, y0 - 6, x1 + 6, y0 + 250, LIME, k * pulse);
+            f.dim(760, 140, W as i32, 1000, 1.0 - 0.45 * k);
+        }
+    }
     for (i, b) in board.blocks.iter().take(board.solved_count).enumerate() {
         let Some(r) = b.solved else { continue };
         let age = t - s.drops[i];
@@ -54,10 +73,64 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, n: No
         fx::sparks(f, cx - 300.0, cy, feasible_age, 31, 60, 1.6);
         fx::sparks(f, cx + 300.0, cy, feasible_age - 0.03, 32, 60, 1.6);
     }
-    chips(f, c, board.bottom() + 22, smooth((n.local - 1.0) / 0.5));
+    chips(f, c, board.bottom() + 22, smooth((local - 1.0) / 0.5));
     super::repair::stamp(f, "FEASIBLE", LIME, feasible_age);
     if (0.0..0.4).contains(&feasible_age) {
         fx::flash(f, LIME, 0.18 * (-feasible_age * 8.0).exp());
+    }
+}
+
+/// The board's axes, introduced before any block lands: each mechanic's
+/// row lights on a beat, then the days light left to right.
+fn axes(f: &mut Frame, board: &Board, local: f32) {
+    let rows = board.techs.len();
+    for i in 0..rows {
+        let age = local - 0.8 - i as f32 * crate::timeline::BEAT;
+        let k = smooth(age / 0.1) * (1.0 - smooth((age - 0.4) / 0.5));
+        if k > 0.0 {
+            let r = board.row_rect(i);
+            f.rect(
+                r.x0 as i32,
+                r.y0 as i32,
+                r.x1 as i32,
+                r.y1 as i32,
+                MINT,
+                0.18 * k,
+            );
+            f.frame_rect(
+                r.x0 as i32,
+                r.y0 as i32,
+                r.x1 as i32,
+                r.y1 as i32,
+                MINT,
+                0.8 * k,
+            );
+        }
+    }
+    let days = board.days.len();
+    let d0 = 0.8 + rows as f32 * crate::timeline::BEAT + 0.3;
+    for i in 0..days {
+        let age = local - d0 - i as f32 * 0.16;
+        let k = smooth(age / 0.08) * (1.0 - smooth((age - 0.3) / 0.5));
+        if k > 0.0 {
+            let r = board.col_rect(i);
+            f.rect(
+                r.x0 as i32,
+                r.y0 as i32,
+                r.x1 as i32,
+                r.y1 as i32,
+                LIME,
+                0.14 * k,
+            );
+            f.frame_rect(
+                r.x0 as i32,
+                r.y0 as i32,
+                r.x1 as i32,
+                r.y1 as i32,
+                LIME,
+                0.7 * k,
+            );
+        }
     }
 }
 
@@ -84,13 +157,13 @@ fn command(f: &mut Frame, c: &Capture, t: f32, local: f32) {
     }
 }
 
-/// What the run did not need: a sign-in, a remote solver.
+/// Where the run happened and what ran it.
 fn chips(f: &mut Frame, c: &Capture, y: i32, a: f32) {
     if a <= 0.0 {
         return;
     }
     let ver = c.version("solverforge").map(|v| format!("SOLVERFORGE {v}"));
-    let mut items = vec!["RUNS ON THIS LAPTOP".to_string(), "NO SIGN-IN".to_string()];
+    let mut items = vec!["ON THIS LAPTOP".to_string()];
     items.extend(ver);
     let mut x = 770;
     for it in items {

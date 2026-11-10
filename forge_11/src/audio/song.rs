@@ -29,8 +29,8 @@ pub struct Cues {
     pub moves: Vec<f32>,
     pub repair_feasible: Option<f32>,
     pub reviews: Vec<f32>,
-    /// Cordelia's beat: enter (charge), ignite, fire, exit.
-    pub cordelia: [f32; 4],
+    /// Cordelia's beat: enter (charge), ignite, fire, cut (beams off), exit.
+    pub cordelia: [f32; 5],
 }
 
 /// Cordelia's laser pitches: the charge glides B3 -> E5 -> B5, the zap
@@ -82,12 +82,18 @@ impl Chord {
 use Chord::*;
 
 /// One chord per bar, per section.
-const BOOT: [Chord; 2] = [Em, B];
-const DESCRIBE: [Chord; 7] = [Em, C, Am, B, Em, C, B];
-const GENERATE: [Chord; 10] = [Em, C, Am, B, Em, C, Am, B, Am, B];
-const SOLVE: [Chord; 8] = [Em, C, Am, B, Em, C, Am, B];
-const REPAIR: [Chord; 12] = [Em, Am, Am, C, C, Am, B, B, Em, C, Am, B];
-const CLOSE: [Chord; 6] = [Em, C, Am, B, B, Em];
+/// The intro: Em and C under the stars, the banner on the progression,
+/// the hook's question stated on bar seven, the dominant at the end of the
+/// build.
+const BOOT: [Chord; 10] = [Em, C, Em, C, Am, B, Em, C, Am, B];
+const DESCRIBE: [Chord; 10] = [Em, C, Am, B, Em, C, Am, B, C, B];
+const GENERATE: [Chord; 16] = [Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B];
+const SOLVE: [Chord; 15] = [Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, Am, B];
+/// The opener and the live week, the alarm on Am, Cordelia's charge on
+/// C - B, the fire resolving to Em, the dominant while the plan heals, the
+/// hook's answer as it lands, then the reviews.
+const REPAIR: [Chord; 17] = [Em, C, Am, B, Am, C, B, Em, B, Em, C, Am, B, Em, C, Am, B];
+const CLOSE: [Chord; 13] = [Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em];
 
 fn chords(section: Section) -> &'static [Chord] {
     match section {
@@ -99,6 +105,9 @@ fn chords(section: Section) -> &'static [Chord] {
         Section::Close => &CLOSE,
     }
 }
+
+/// The repair bar the hook's answer returns on, once the plan has healed.
+const HEAL_BAR: usize = 9;
 
 /// E harmonic minor, E4 up two octaves: the improvement pings climb it.
 const SCALE: [f32; 15] = [
@@ -238,7 +247,7 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
     let event_bar = (cues.event / BAR).round() as usize;
     // The healed plan brings the answer back on the first bar line after
     // feasibility that starts an Em - C - Am - B run in the repair table.
-    let heal_bar = section_first_bar(Section::Repair) + 8;
+    let heal_bar = section_first_bar(Section::Repair) + HEAL_BAR;
     let heal_ok = cues
         .repair_feasible
         .is_some_and(|t| t <= bars(heal_bar as f32) + 0.01);
@@ -258,12 +267,44 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
         let mut pad_gain = 1.0;
         match section {
             Section::Boot => {
-                pad_gain = if k == 0 { 0.6 } else { 0.9 };
+                // Bars 1-2: the pad alone, swelling under the stars, a
+                // filtered arp creeping in on bar two.
+                pad_gain = [0.5, 0.7, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0][k];
                 if k == 1 {
-                    bass(&mut m, t0, prev.root(), chord.root(), Bass::Held, 0.6);
+                    arp(&mut m, t0, chord, 0.2);
+                }
+                // Bar 3: the banner lands; the bass enters held.
+                if k == 2 {
+                    crash(&mut m, t0, 0.8);
+                    boom(&mut m, t0, 0.7);
+                }
+                if (2..6).contains(&k) {
+                    bass(&mut m, t0, prev.root(), chord.root(), Bass::Held, 0.7);
+                    arp(&mut m, t0, chord, 0.5);
+                    kick(&mut m, t0);
+                    if k >= 4 {
+                        kick(&mut m, t0 + 2.5 * BEAT);
+                        hats(&mut m, t0, 2, 0.6);
+                    }
+                }
+                // Bars 7-10: the hook's question over the full groove,
+                // the snare joining on bar nine, a roll into the cut.
+                if k >= 6 {
+                    arp(&mut m, t0, chord, 0.8);
+                    bass(&mut m, t0, prev.root(), chord.root(), Bass::Octaves, 0.9);
+                    four_on_floor(&mut m, t0);
+                    hats(&mut m, t0, if k >= 8 { 4 } else { 2 }, 0.8);
+                    if k == 8 {
+                        gated_snare(&mut m, t0 + BEAT, 0.8);
+                        gated_snare(&mut m, t0 + 3.0 * BEAT, 0.8);
+                    }
+                    if k == 9 {
+                        snare_roll(&mut m, t0);
+                    }
                 }
             }
             Section::Describe => {
+                // Reading: the band stays light under the prompt.
                 arp(&mut m, t0, chord, 0.45);
                 bass(&mut m, t0, prev.root(), chord.root(), Bass::Held, 0.55);
                 if k >= 2 {
@@ -299,8 +340,9 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
                     bass(&mut m, t0, prev.root(), chord.root(), Bass::Eighths, 0.8);
                     four_on_floor(&mut m, t0);
                     hats(&mut m, t0, 2, 0.8);
-                } else if rel < 2 {
-                    // The break: a heartbeat under the alarm.
+                } else if rel < 3 {
+                    // The break: a heartbeat under the alarm, held through
+                    // Cordelia's charge.
                     pad_gain = 0.7;
                     bass(&mut m, t0, prev.root(), chord.root(), Bass::Held, 0.6);
                     kick(&mut m, t0);
@@ -309,12 +351,12 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
                     kick(&mut m, t0 + 2.75 * BEAT);
                 } else {
                     // Building back while the plan heals.
-                    let build = (rel - 2) as f32;
+                    let build = (rel - 3) as f32;
                     arp(&mut m, t0, chord, (0.4 + 0.15 * build).min(1.0));
                     bass(&mut m, t0, prev.root(), chord.root(), Bass::Eighths, 0.9);
                     four_on_floor(&mut m, t0);
-                    hats(&mut m, t0, if rel >= 4 { 4 } else { 2 }, 0.9);
-                    if rel >= 3 {
+                    hats(&mut m, t0, if rel >= 5 { 4 } else { 2 }, 0.9);
+                    if rel >= 4 {
                         gated_snare(&mut m, t0 + BEAT, 0.9);
                         gated_snare(&mut m, t0 + 3.0 * BEAT, 0.9);
                     }
@@ -349,22 +391,28 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
             tom_fill(&mut m, t0);
             riser(&mut m, t0);
         }
-        if k == 0 && matches!(section, Section::Generate | Section::Solve | Section::Close) {
+        if k == 0 && section != Section::Boot {
             crash(&mut m, t0, 0.8);
         }
 
         // Leads.
         match (section, k) {
-            (Section::Generate, 0) => lead(&mut m, t0, &HOOK_Q, 0.0, Osc::Super, 0.9, false),
-            (Section::Generate, 4) => {
+            // The intro states the question; the answer comes back softly
+            // under the prompt, then in full in the forge.
+            (Section::Boot, 6) => lead(&mut m, t0, &HOOK_Q, 0.0, Osc::Super, 0.8, false),
+            (Section::Describe, 4) => lead(&mut m, t0, &HOOK_A, -12.0, Osc::Pulse, 0.45, false),
+            (Section::Generate, 4) => lead(&mut m, t0, &HOOK_Q, 0.0, Osc::Super, 0.9, false),
+            (Section::Generate, 8) => {
                 lead(&mut m, t0, &HOOK_A, 0.0, Osc::Super, 0.9, false);
                 lead(&mut m, t0, &HOOK_A, -12.0, Osc::Pulse, 0.45, false);
             }
-            (Section::Solve, 4) => lead(&mut m, t0, &HOOK_Q, -12.0, Osc::Brass, 0.7, true),
-            (Section::Repair, 8) if heal_ok => {
+            (Section::Generate, 12) => lead(&mut m, t0, &HOOK_Q, -12.0, Osc::Brass, 0.7, true),
+            (Section::Solve, 8) => lead(&mut m, t0, &HOOK_Q, -12.0, Osc::Brass, 0.7, true),
+            (Section::Repair, HEAL_BAR) if heal_ok => {
                 lead(&mut m, t0, &HOOK_A, 0.0, Osc::Super, 0.8, false);
             }
-            (Section::Close, 0) => {
+            (Section::Close, 0) => lead(&mut m, t0, &HOOK_Q, -12.0, Osc::Pulse, 0.5, false),
+            (Section::Close, 4) => {
                 lead(&mut m, t0, &HOOK_A, 0.0, Osc::Super, 1.0, false);
                 lead(&mut m, t0, &HOOK_A, -12.0, Osc::Pulse, 0.5, false);
             }
@@ -852,7 +900,7 @@ fn alarm(m: &mut Mix, at: f32) {
 /// to the fifth into the fire; on the downbeat an FM zap falling an octave
 /// on E with a noise crack and a sub hit; a beam hum on E and B pulsing in
 /// sixteenths while the beams hold; a fall on the exit as the hook returns.
-fn laser(m: &mut Mix, [enter, ignite, fire, exit]: [f32; 4]) {
+fn laser(m: &mut Mix, [enter, ignite, fire, cut, exit]: [f32; 5]) {
     let [b3, e5, b5, e6, e5z, e2, b2, e4] = LASER_NOTES;
     // Charge: one voice, continuous phase, pitch gliding on a curve.
     let len = fire - enter;
@@ -887,8 +935,19 @@ fn laser(m: &mut Mix, [enter, ignite, fire, exit]: [f32; 4]) {
         tone + 0.5 * mm.rnd() * (-t * 40.0).exp()
     });
     boom(m, fire, 0.8);
-    // Beam hum: E2 + B2 pulses, gated in sixteenths, while the beams hold.
-    let hold = exit - fire;
+    // Beam hum: E2 + B2 pulses, gated in sixteenths, while the beams hold;
+    // a smaller zap on every beat the beams surge.
+    let hold = cut - fire;
+    let mut beat_at = fire + BEAT;
+    while beat_at < cut - 0.05 {
+        let mut pc = 0.0f32;
+        m.voice(beat_at, 0.2, 0.05, -0.1, 0.4, move |t, _| {
+            let midi = e5z + 12.0 * (-t * 30.0).exp();
+            pc = (pc + hz(midi) / SR).fract();
+            (TAU * pc).sin() * (-t * 14.0).exp()
+        });
+        beat_at += BEAT;
+    }
     for (k, note) in [e2, b2].into_iter().enumerate() {
         let f = hz(note);
         let mut lp = 0.0f32;
@@ -899,13 +958,42 @@ fn laser(m: &mut Mix, [enter, ignite, fire, exit]: [f32; 4]) {
             lp * gate * smooth(t / 0.05) * smooth((hold - t) / 0.08)
         });
     }
-    // Power-down as she cuts out.
+    // Power-down as the beams cut; a glitch tick as she tears out.
     let mut ph = 0.0f32;
-    m.voice(exit, 0.4, 0.05, 0.0, 0.5, move |t, _| {
+    m.voice(cut, 0.4, 0.05, 0.0, 0.5, move |t, _| {
         let midi = e4 + (b5 - 12.0 - e4) * (-t * 10.0).exp();
         ph = (ph + hz(midi) / SR).fract();
         saw(ph) * (1.0 - t / 0.4)
     });
+    let mut prev = 0.0f32;
+    m.voice(exit, 0.35, 0.08, 0.3, 0.3, move |t, mm| {
+        let n = mm.rnd();
+        let hp = n - prev;
+        prev = n;
+        let gate = if ((t * 40.0) as i32) % 2 == 0 {
+            1.0
+        } else {
+            0.2
+        };
+        hp * gate * (1.0 - t / 0.35)
+    });
+}
+
+/// A snare roll over a bar: eighths, then sixteenths, then thirty-seconds,
+/// rising in level into the downbeat.
+fn snare_roll(m: &mut Mix, t0: f32) {
+    let mut at = t0;
+    while at < t0 + BAR - 0.01 {
+        let k = (at - t0) / BAR;
+        gated_snare(m, at, 0.25 + 0.6 * k);
+        at += if k < 0.5 {
+            BEAT / 2.0
+        } else if k < 0.75 {
+            BEAT / 4.0
+        } else {
+            BEAT / 8.0
+        };
+    }
 }
 
 /// Filtered noise sweeping up and away over a move.
@@ -1002,6 +1090,24 @@ mod tests {
         assert!(ok(83.0 - 12.0));
     }
 
+    /// On the real capture the alarm lands on Am, the fire resolves the
+    /// charge's dominant on Em, and the healed plan is in time for the hook.
+    #[test]
+    fn the_repair_lands_on_its_chords() {
+        let real = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/capture.json");
+        if !std::path::Path::new(real).exists() {
+            return;
+        }
+        let c = crate::capture::Capture::load(real).unwrap();
+        let s = crate::script::Script::new(&c);
+        let r0 = section_first_bar(Section::Repair);
+        let chord = |t: f32| REPAIR[(t / BAR).round() as usize - r0];
+        assert_eq!(chord(s.event), Am);
+        assert_eq!(chord(s.cordelia.fire), Em);
+        assert_eq!(chord(s.cordelia.fire - BAR), B);
+        assert!(s.repair_feasible.unwrap() <= bars((r0 + HEAL_BAR) as f32));
+    }
+
     #[test]
     fn chord_tables_match_the_sections() {
         for &(s, b0, b1) in SECTIONS.iter() {
@@ -1009,11 +1115,15 @@ mod tests {
         }
         // The hook's bars run Em - C - Am - B wherever it plays.
         for (s, k) in [
-            (Section::Generate, 0),
+            (Section::Boot, 6),
+            (Section::Describe, 4),
             (Section::Generate, 4),
-            (Section::Solve, 4),
-            (Section::Repair, 8),
+            (Section::Generate, 8),
+            (Section::Generate, 12),
+            (Section::Solve, 8),
+            (Section::Repair, HEAL_BAR),
             (Section::Close, 0),
+            (Section::Close, 4),
         ] {
             assert_eq!(&chords(s)[k..k + 4], &[Em, C, Am, B], "{s:?} bar {k}");
         }

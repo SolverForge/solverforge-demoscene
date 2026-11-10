@@ -15,7 +15,7 @@ const EDITOR: (i32, i32, i32, i32) = (680, 140, 1860, 970);
 /// Transcript text: a little larger than the 1x grid.
 const TS: Size = size(12, 22);
 
-pub fn draw(f: &mut Frame, c: &Capture, s: &Script, listings: &[Listing], t: f32, n: Now) {
+pub fn draw(f: &mut Frame, c: &Capture, s: &Script, listings: &[Listing], t: f32, _n: Now) {
     f.gradient(&[0x020101, 0x0c0402, 0x1a0803, 0x0a0301]);
     fx::copper(
         f,
@@ -27,7 +27,10 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, listings: &[Listing], t: f32
         0.18,
     );
     furnace(f, t);
-    let open = smooth(n.local / 0.4);
+    let open = smooth((t - s.intro_end(crate::timeline::Section::Generate)) / 0.4);
+    if open <= 0.0 {
+        return;
+    }
     transcript(f, c, s, t, open);
     editor(f, c, s, listings, t, open);
 }

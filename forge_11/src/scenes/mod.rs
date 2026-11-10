@@ -2,6 +2,7 @@
 // plus the chrome every data section shares (section chip, progress rail),
 // the beat-locked cuts between sections and the corner logo.
 mod boot;
+pub mod captions;
 mod close;
 pub mod cordelia;
 mod describe;
@@ -87,6 +88,7 @@ pub struct Demo {
     boot: boot::Boot,
     repair: repair::Repair,
     close: close::Close,
+    captions: captions::Captions,
 }
 
 impl Demo {
@@ -113,6 +115,7 @@ impl Demo {
         let boot = boot::Boot::new();
         let repair = repair::Repair::new(&cap, &script);
         let close = close::Close::new(&cap, &script);
+        let captions = captions::Captions::new(&script, &TITLES);
         Self {
             cap,
             script,
@@ -122,6 +125,7 @@ impl Demo {
             boot,
             repair,
             close,
+            captions,
         }
     }
 
@@ -131,7 +135,7 @@ impl Demo {
         let mut bloom = 0.5;
         let mut corner = 1.0;
         match n.section {
-            Section::Boot => boot::draw(f, &self.boot, t, n),
+            Section::Boot => boot::draw(f, &self.boot, &self.script, t, n),
             Section::Describe => describe::draw(f, &self.cap, &self.script, &self.board, t, n),
             Section::Generate => {
                 bloom = 0.6;
@@ -143,13 +147,15 @@ impl Demo {
             }
             Section::Close => {
                 bloom = 0.55;
-                corner = close::draw(f, &self.cap, &self.close, t, n);
+                corner = close::draw(f, &self.script, &self.close, t, n);
             }
         }
-        if !matches!(n.section, Section::Boot | Section::Close) {
+        let intro = self.captions.intro_at(t);
+        if !matches!(n.section, Section::Boot | Section::Close) && !intro {
             self.chrome(f, t, n.section);
         }
-        cuts(f, t);
+        self.captions.draw(f, t);
+        cuts(f, t, &self.script);
         // The demo fades in from black and out at the very end.
         let fade = (t / 0.6).min(1.0) * ((DURATION - t) / 1.2).clamp(0.0, 1.0);
         if fade < 1.0 {
@@ -215,22 +221,36 @@ impl Demo {
 
 /// The cut into every section: a glyph wipe over the last half second of
 /// the outgoing section, a flash and a short tear on the downbeat.
-fn cuts(f: &mut Frame, t: f32) {
+///
+/// Then copper bars in the new section's colours roll down the frame over
+/// the first beat, revealing it; and when a section's opener hands over to
+/// its scene, a thin raster line sweeps the frame on that beat.
+fn cuts(f: &mut Frame, t: f32, script: &Script) {
     for &(s, b0, _) in SECTIONS.iter().skip(1) {
         let at = b0 * BAR;
+        let col = match s {
+            Section::Repair => RED,
+            Section::Generate => AMBER,
+            _ => LIME,
+        };
         let p = (t - (at - 0.5)) / 0.8;
         if (0.0..1.0).contains(&p) {
-            let col = match s {
-                Section::Repair => RED,
-                Section::Generate => AMBER,
-                _ => LIME,
-            };
             fx::glyph_wipe(f, t, p, col);
         }
         let since = t - at;
         if (0.0..0.5).contains(&since) {
             fx::flash(f, 0xffffff, 0.22 * (-since * 9.0).exp());
             fx::glitch(f, t, 0.5 * (1.0 - since / 0.25).max(0.0), b0 as i32);
+        }
+        let roll = since / crate::timeline::BEAT;
+        if (0.0..1.0).contains(&roll) {
+            fx::copper_wipe(f, roll, &[col, 0xffffff, EMERALD]);
+        }
+    }
+    for &(_, end) in &script.intros {
+        let since = t - end;
+        if (0.0..0.45).contains(&since) {
+            fx::raster_sweep(f, since / 0.45, MINT);
         }
     }
 }

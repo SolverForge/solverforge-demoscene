@@ -297,3 +297,47 @@ pub fn panel(f: &mut Frame, x0: i32, y0: i32, x1: i32, y1: i32, rgb: u32, a: f32
 pub fn heat_glow(f: &mut Frame, cx: f32, cy: f32, r: f32, heat: f32) {
     f.glow(cx, cy, r, ramp(&HOT, 0.35 + 0.5 * heat), 0.25 * heat);
 }
+
+/// Section reveal: a stack of copper bars rolls down the frame at progress
+/// p (0..1); below it the new section is still held dark.
+pub fn copper_wipe(f: &mut Frame, p: f32, colours: &[u32]) {
+    if !(0.0..1.0).contains(&p) {
+        return;
+    }
+    let band = 260.0;
+    let lead = -band + p * (H as f32 + band * 2.0);
+    let below = (lead + band * 0.5) as i32;
+    if below < H as i32 {
+        f.dim(0, below.max(0), W as i32, H as i32, 0.12);
+    }
+    for i in 0..5 {
+        let cy = lead + i as f32 * band / 5.0;
+        let c = colours[i % colours.len()];
+        let half = 18;
+        for dy in -half..=half {
+            let v = 1.0 - (dy as f32 / half as f32).abs();
+            let rgb = ramp(&[0x000000, c, c, 0xffffff], v);
+            add_row(
+                f,
+                cy as i32 + dy,
+                0,
+                W as i32,
+                rgb,
+                0.9 * v.powf(0.6) * (1.0 - p * 0.5),
+            );
+        }
+    }
+}
+
+/// A thin raster line sweeping down the frame with a soft trail.
+pub fn raster_sweep(f: &mut Frame, p: f32, rgb: u32) {
+    if !(0.0..1.0).contains(&p) {
+        return;
+    }
+    let y = (p * H as f32) as i32;
+    for dy in 0..60 {
+        let k = (1.0 - dy as f32 / 60.0).powi(2) * (1.0 - p * 0.6);
+        add_row(f, y - dy, 0, W as i32, rgb, 0.5 * k);
+    }
+    add_row(f, y, 0, W as i32, 0xffffff, 0.8 * (1.0 - p));
+}

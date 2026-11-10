@@ -37,7 +37,7 @@ Audiovisual demos in the tradition of the Amiga/PC demoscene -- built to showcas
 | [`portrait_08/`](portrait_08/) | [Vittorio Distefano](https://vdistefano.studio) -- the person: guitar, worlds, hard problems, home; a vertical 9:16 reel | 140s | Complete |
 | [`hermes_09/`](hermes_09/) | [SolverForge Planner](https://github.com/blackopsrepl/hermes-solverforge-planner) -- a solved week around a live Desktop take, for the Hermes Plugin Hackathon | 84s | Complete |
 | [`routing_10/`](routing_10/) | [SolverForge Routing](https://github.com/blackopsrepl/hermes-solverforge-routing) -- a solved loop around a live Desktop take, for the Hermes Plugin Hackathon | 88s | Complete |
-| [`forge_11/`](forge_11/) | SolverForge -- a real agent session replayed: describe, generate, solve on the laptop, repair the running solve; textmode on glyphfx | 90s | Complete |
+| [`forge_11/`](forge_11/) | SolverForge -- a real agent session replayed: describe, generate, solve on the laptop, repair the running solve; textmode on glyphfx | 2:42 | Complete |
 
 Each demo is a standalone Rust crate. See the README inside each directory for details on scenes, architecture, controls, and rendering.
 

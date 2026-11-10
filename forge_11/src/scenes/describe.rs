@@ -71,7 +71,11 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, n: No
     fx::river(f, t, 978, 5, &[0x041820, 0x1f6f8b, CYAN, 0xffffff], 0.9);
     buses(f, board, t, n.local);
 
-    let open = smooth(n.local / 0.5);
+    // Behind the opener only the road runs.
+    let open = smooth((t - s.intro_end(crate::timeline::Section::Describe)) / 0.5);
+    if open <= 0.0 {
+        return;
+    }
     let (x0, y0, x1, y1) = (170, 200, 1750, 880);
     fx::panel(f, x0, y0, x1, y1, EMERALD, open);
     if open < 0.5 {

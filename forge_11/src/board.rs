@@ -222,6 +222,18 @@ impl Board {
         }
     }
 
+    /// One day's column, header included.
+    pub fn col_rect(&self, i: usize) -> Rect {
+        let (x0, y0, _, _) = AREA;
+        let x = (x0 + LABEL_W) as f32 + i as f32 * self.col_w;
+        Rect {
+            x0: x,
+            y0: y0 as f32,
+            x1: x + self.col_w,
+            y1: self.bottom() as f32,
+        }
+    }
+
     /// The grid: day headers, technician labels, cell rules. `struck` paints
     /// the disrupted row out at strength 0..1.
     pub fn draw_grid(&self, f: &mut Frame, a: f32, accent: u32, struck: f32, t: f32) {

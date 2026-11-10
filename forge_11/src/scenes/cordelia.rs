@@ -1,64 +1,53 @@
 // CORDELIA: the agent's hero beat inside 04 REPAIR. The bus breaks down,
-// the band drops to a heartbeat under the alarm, and Cordelia glitches in
-// over the score panel, defiant. Her eyes charge and ignite on the beats
-// before the bar line; on the downbeat where the repair enters the running
-// solve she fires, and her eye-lasers sear across to the board: one beam
-// holds the breakdown's own job, the other rides the changed job to its new
-// slot. On the next bar the hook returns and she cuts out.
+// the band drops to a heartbeat under the alarm, and two bars later
+// Cordelia glitches in over the score panel. Her performance runs through
+// six generated keyframes on the beat: eyes narrowed on the problem, a
+// glint that becomes a glow, the glow building, white-hot ignition, the
+// fire on the downbeat where the repair enters the running solve (eye-
+// lasers sear across to the board while the changed jobs travel), and a
+// smirk as the plan heals and she tears out.
 //
-// The artwork is three generated keyframes (charge, ignite, fire) built on
-// the brand direction's saved Cordelia prompts; prompts, model and hashes
-// are in assets/cordelia/provenance.json. The beams here are an effect
-// layer over the art, anchored to the iris centres measured on each frame,
-// and carried through the same transform as the picture so they stay
-// locked to her eyes while she breathes, pushes in and jitters.
+// Every keyframe is an image-to-image edit of the brand direction's
+// approved dark DEFIANCE artwork; prompts, model, request ids and hashes are
+// in assets/cordelia/provenance.json. No frame has beams painted in: the
+// beams here are an effect layer, anchored to the iris centres measured on
+// each frame and carried through the same transform as the picture, so
+// they stay locked to her eyes while she breathes, pushes in and recoils.
 use super::{EMERALD, MINT, PAPER};
 use crate::fx;
 use crate::gfx::{mix, smooth, Frame, S1, W};
-use crate::script::Script;
-use crate::timeline::{snap_beat, BAR, BEAT};
+use crate::script::{Performance, Script};
+use crate::timeline::BEAT;
 
+const NARROW: &[u8] = include_bytes!("../../assets/cordelia/narrow.ppm");
 const CHARGE: &[u8] = include_bytes!("../../assets/cordelia/charge.ppm");
+const BUILD: &[u8] = include_bytes!("../../assets/cordelia/build.ppm");
 const IGNITE: &[u8] = include_bytes!("../../assets/cordelia/ignite.ppm");
 const FIRE: &[u8] = include_bytes!("../../assets/cordelia/fire.ppm");
+const SMIRK: &[u8] = include_bytes!("../../assets/cordelia/smirk.ppm");
+
+/// Keyframes in performance order.
+const KEYS: usize = 6;
+const SMIRK_KEY: usize = 5;
 
 /// Iris centres [left, right] in each 680x562 keyframe (provenance.json).
-const EYES: [[(f32, f32); 2]; 3] = [
+const EYES: [[(f32, f32); 2]; KEYS] = [
+    [(437.0, 343.0), (509.0, 370.0)],
     [(437.0, 343.0), (510.0, 371.0)],
+    [(434.0, 346.0), (513.0, 370.0)],
     [(437.0, 343.0), (510.0, 371.0)],
-    [(446.0, 348.0), (510.0, 371.0)],
+    [(440.0, 340.0), (514.0, 363.0)],
+    [(435.0, 315.0), (504.0, 342.0)],
 ];
+
+/// How lit her eyes are on each keyframe (the engine's glow follows it).
+const HEAT: [f32; KEYS] = [0.12, 0.35, 0.6, 0.85, 1.0, 0.3];
 
 /// The panel she occupies: over the score panel's chart and list, the
 /// event line, the score and the board stay in view.
 pub const PANEL: (i32, i32, i32, i32) = (40, 452, 720, 970);
 
-/// When the beat plays, on the demo clock. Picture and sound share it.
-#[derive(Clone, Copy, Debug)]
-pub struct Beat {
-    /// Glitch-in, eyes charging.
-    pub enter: f32,
-    /// Eyes ignite, a beat before the fire.
-    pub ignite: f32,
-    /// The beams fire: the downbeat the repair enters the running solve.
-    pub fire: f32,
-    /// The beams cut and she glitches out, as the hook returns.
-    pub exit: f32,
-}
-
 pub const OUT: f32 = 0.4;
-
-impl Beat {
-    pub fn new(s: &Script) -> Self {
-        let fire = snap_beat(s.repair.from.max(s.event + 2.0 * BEAT));
-        Self {
-            enter: snap_beat(s.event + BEAT),
-            ignite: fire - BEAT,
-            fire,
-            exit: fire + BAR,
-        }
-    }
-}
 
 struct Image {
     w: usize,
@@ -117,8 +106,8 @@ impl Image {
 }
 
 pub struct Cordelia {
-    frames: [Image; 3],
-    pub beat: Beat,
+    frames: Vec<Image>,
+    pub beat: Performance,
 }
 
 /// Where the beams strike, in frame pixels.
@@ -130,8 +119,11 @@ pub struct Targets {
 impl Cordelia {
     pub fn new(s: &Script) -> Self {
         Self {
-            frames: [ppm(CHARGE), ppm(IGNITE), ppm(FIRE)],
-            beat: Beat::new(s),
+            frames: [NARROW, CHARGE, BUILD, IGNITE, FIRE, SMIRK]
+                .iter()
+                .map(|d| ppm(d))
+                .collect(),
+            beat: s.cordelia,
         }
     }
 
@@ -139,21 +131,44 @@ impl Cordelia {
         (self.beat.enter..self.beat.exit + OUT).contains(&t)
     }
 
+    fn starts(&self) -> [f32; KEYS] {
+        let b = self.beat;
+        [b.enter, b.charge, b.build, b.ignite, b.fire, b.cut]
+    }
+
+    /// The keyframe at t, the one before it, and the crossfade between.
+    fn key(&self, t: f32) -> (usize, usize, f32) {
+        let st = self.starts();
+        let k = st.iter().rposition(|&a| t >= a).unwrap_or(0);
+        if k == 0 {
+            return (0, 0, 1.0);
+        }
+        // Dissolves on the beat; the smirk cuts in fast under a glitch.
+        let len = if k == SMIRK_KEY { 0.12 } else { 0.18 };
+        (k, k - 1, smooth((t - st[k]) / len))
+    }
+
     /// The picture transform at t: scale and the source point shown at the
-    /// panel centre. Push-in over the beat, breathing, a kick on the fire.
+    /// panel centre. Push-in over the beat, breathing, a kick on the fire,
+    /// a small recoil on the smirk.
     fn transform(&self, t: f32) -> (f32, f32, f32) {
         let b = self.beat;
-        let p = smooth((t - b.enter) / (b.exit - b.enter));
+        let p = smooth((t - b.enter) / (b.cut - b.enter));
         let kick = if t >= b.fire {
             0.035 * (-(t - b.fire) * 7.0).exp()
         } else {
             0.0
         };
-        let scale = 1.0 + 0.10 * p + kick;
+        let recoil = if t >= b.cut {
+            smooth((t - b.cut) / 0.25)
+        } else {
+            0.0
+        };
+        let scale = 1.0 + 0.10 * p + kick - 0.04 * recoil;
         let breathe = (t * std::f32::consts::TAU / (2.0 * BEAT)).sin();
         // Drift towards her eyes as she pushes in (parallax on the face).
         let cx = 340.0 + 60.0 * p + 2.0 * breathe;
-        let cy = 281.0 + 40.0 * p - 3.0 * breathe;
+        let cy = 281.0 + 40.0 * p - 3.0 * breathe - 14.0 * recoil;
         (scale, cx, cy)
     }
 
@@ -165,21 +180,26 @@ impl Cordelia {
         (pcx + (sx - cx) * scale, pcy + (sy - cy) * scale)
     }
 
-    /// The eyes on screen at t (the fire frame's anchors once firing).
+    /// The eyes on screen at t, following the anchors across a dissolve.
     pub fn eyes(&self, t: f32) -> [(f32, f32); 2] {
-        let k = self.key(t);
-        let e = EYES[k];
+        let (k, prev, blend) = self.key(t);
+        let lerp =
+            |a: (f32, f32), b: (f32, f32)| (a.0 + (b.0 - a.0) * blend, a.1 + (b.1 - a.1) * blend);
+        let e = [
+            lerp(EYES[prev][0], EYES[k][0]),
+            lerp(EYES[prev][1], EYES[k][1]),
+        ];
         [self.to_frame(t, e[0]), self.to_frame(t, e[1])]
     }
 
-    fn key(&self, t: f32) -> usize {
-        if t >= self.beat.fire {
-            2
-        } else if t >= self.beat.ignite {
-            1
-        } else {
-            0
+    fn heat(&self, t: f32) -> f32 {
+        let (k, prev, blend) = self.key(t);
+        let mut h = HEAT[prev] + (HEAT[k] - HEAT[prev]) * blend;
+        if k == SMIRK_KEY {
+            // The afterglow dies away over the bar.
+            h *= (-(t - self.beat.cut) * 1.5).exp();
         }
+        h
     }
 
     pub fn draw(&self, f: &mut Frame, t: f32, targets: &Targets) {
@@ -189,29 +209,37 @@ impl Cordelia {
         let b = self.beat;
         let since = t - b.enter;
         let gone = t - b.exit;
-        // Entrance: rows tear in over 0.3 s; exit: they tear out.
+        // Entrance: rows tear in over 0.3 s; exit: they tear out; a short
+        // glitch accent on the fire and on the smirk.
+        let accent = |at: f32, len: f32| {
+            let a = t - at;
+            if (0.0..len).contains(&a) {
+                0.45 * (1.0 - a / len)
+            } else {
+                0.0
+            }
+        };
         let tear = if since < 0.3 {
             1.0 - since / 0.3
         } else if gone > 0.0 {
             gone / OUT
         } else {
-            0.0
+            accent(b.fire, 0.12).max(accent(b.cut, 0.2))
         };
         let alpha = smooth(since / 0.12) * (1.0 - smooth(gone / OUT));
         let (x0, y0, x1, y1) = PANEL;
         let (scale, cx, cy) = self.transform(t);
         let (pcx, pcy) = ((x0 + x1) as f32 * 0.5, (y0 + y1) as f32 * 0.5);
-        let key = self.key(t);
-        // Crossfade a few frames into each new key.
-        let since_key = t - [b.enter, b.ignite, b.fire][key];
-        let blend = if key > 0 {
-            smooth(since_key / 0.08)
-        } else {
-            1.0
-        };
-        let (img, prev) = (&self.frames[key], &self.frames[key.saturating_sub(1)]);
+        let (key, prev, blend) = self.key(t);
+        let (img, prev) = (&self.frames[key], &self.frames[prev]);
         let jitter_t = (t * 60.0) as i32;
         let inv = 1.0 / scale;
+        // Light from her eyes flickers over hair and face while she fires.
+        let flicker = if (b.fire..b.cut).contains(&t) {
+            0.06 * (0.5 + 0.5 * (t * 37.0).sin() * (t * 23.0).cos())
+        } else {
+            0.0
+        };
         for y in y0..y1 {
             let band = (y - y0) / 6;
             let shift = if tear > 0.0 {
@@ -237,9 +265,12 @@ impl Cordelia {
                     c = mix(prev.sample(sx, sy), c, blend);
                 }
                 if tear > 0.0 {
-                    // Chromatic split while she tears in.
+                    // Chromatic split while she tears.
                     let r = img.sample(sx + 8.0 * tear, sy) & 0xff0000;
                     c = (c & 0x00ffff) | r;
+                }
+                if flicker > 0.0 {
+                    c = crate::gfx::add_rgb(c, EMERALD, flicker);
                 }
                 let c = crate::gfx::scale(c, scan);
                 f.blend(x, y, c, alpha);
@@ -264,17 +295,18 @@ impl Cordelia {
         self.beams(f, t, targets, alpha);
     }
 
-    /// The charge, then the ignition: light pooling in the irises.
+    /// Light pooling in the irises, as hot as the keyframe.
     fn eyes_glow(&self, f: &mut Frame, t: f32, alpha: f32) {
         let b = self.beat;
-        let charge = smooth((t - b.enter) / (b.fire - b.enter));
+        let heat = self.heat(t);
         let flick = 0.85 + 0.15 * (t * 53.0).sin();
+        let firing = (b.fire..b.cut).contains(&t);
         for (i, (ex, ey)) in self.eyes(t).into_iter().enumerate() {
-            let r = 10.0 + 26.0 * charge + if t >= b.fire { 14.0 } else { 0.0 };
-            let k = alpha * (0.25 + 0.75 * charge) * flick;
+            let r = 8.0 + 30.0 * heat + if firing { 14.0 } else { 0.0 };
+            let k = alpha * (0.15 + 0.85 * heat) * flick;
             f.glow(ex, ey, r * 2.2, EMERALD, 0.35 * k);
             f.glow(ex, ey, r, MINT, 0.6 * k);
-            f.glow(ex, ey, r * 0.35, 0xffffff, k);
+            f.glow(ex, ey, r * 0.35, 0xffffff, k * heat);
             // A star glint on the ignite beat.
             let since = t - b.ignite;
             if (0.0..0.5).contains(&since) {
@@ -295,12 +327,12 @@ impl Cordelia {
     fn beams(&self, f: &mut Frame, t: f32, targets: &Targets, alpha: f32) {
         let b = self.beat;
         let age = t - b.fire;
-        if !(0.0..=b.exit - b.fire + 0.05).contains(&age) {
+        if !(0.0..=b.cut - b.fire + 0.12).contains(&age) {
             return;
         }
-        // The beams reach the board over a few frames, then hold.
+        // The beams reach the board over a few frames, hold, and cut.
         let reach = smooth(age / 0.1);
-        let fade = alpha * (1.0 - smooth((t - b.exit + 0.1) / 0.15));
+        let fade = alpha * (1.0 - smooth((t - b.cut) / 0.12));
         let eyes = self.eyes(t);
         let fallback = (W as f32 * 0.66, 560.0);
         let hits = [
@@ -313,7 +345,9 @@ impl Cordelia {
             let j = (fx::h2(i as i32, (t * 60.0) as i32) - 0.5) * 6.0;
             let (tx, ty) = (tx + j * 0.4, ty + j);
             let pulse = 0.85 + 0.15 * (t * 40.0 + i as f32 * 2.0).sin();
-            let w = 1.0 + 0.6 * (-age * 8.0).exp();
+            // Each beat the beams surge with the hum.
+            let surge = 1.0 + 0.25 * crate::timeline::beat_pulse(t, 7.0);
+            let w = (1.0 + 0.6 * (-age * 8.0).exp()) * surge;
             f.line((ex, ey), (tx, ty), 34.0 * w, EMERALD, 0.10 * fade);
             f.line((ex, ey), (tx, ty), 16.0 * w, EMERALD, 0.30 * fade * pulse);
             f.line((ex, ey), (tx, ty), 8.0 * w, MINT, 0.6 * fade * pulse);
@@ -342,7 +376,7 @@ mod tests {
 
     #[test]
     fn keyframes_decode_at_the_anchor_size() {
-        for data in [CHARGE, IGNITE, FIRE] {
+        for data in [NARROW, CHARGE, BUILD, IGNITE, FIRE, SMIRK] {
             let img = ppm(data);
             assert_eq!((img.w, img.h), (680, 562));
             assert_eq!(img.px.len(), 680 * 562);
@@ -351,6 +385,40 @@ mod tests {
             for (x, y) in eyes {
                 assert!((0.0..680.0).contains(&x) && (0.0..562.0).contains(&y));
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod performance {
+    use super::*;
+    use crate::capture::Capture;
+
+    /// The performance runs in order, on the beat, inside REPAIR, and the
+    /// beams are held for at least a bar.
+    #[test]
+    fn the_performance_is_on_the_beat() {
+        let c = Capture::parse(include_str!("../../assets/capture.placeholder.json")).unwrap();
+        let mut caps = vec![c];
+        let real = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/capture.json");
+        if std::path::Path::new(real).exists() {
+            caps.push(Capture::load(real).unwrap());
+        }
+        for c in caps {
+            let s = Script::new(&c);
+            let p = s.cordelia;
+            let seq = [p.enter, p.charge, p.build, p.ignite, p.fire, p.cut, p.exit];
+            for w in seq.windows(2) {
+                assert!(w[0] < w[1], "{seq:?}");
+            }
+            for t in seq {
+                let off = (t / BEAT - (t / BEAT).round()).abs();
+                assert!(off < 1e-3, "{t} off the beat");
+            }
+            assert!(p.cut - p.fire >= crate::timeline::BAR - 1e-3);
+            assert!(p.fire - p.enter >= 2.0 * crate::timeline::BAR - 1e-3);
+            let (r0, r1) = crate::timeline::span(crate::timeline::Section::Repair);
+            assert!(p.enter > r0 && p.exit + OUT < r1);
         }
     }
 }

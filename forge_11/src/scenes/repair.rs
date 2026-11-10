@@ -73,19 +73,16 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
         0.16 + 0.25 * (-since.max(0.0) * 1.5).exp() * alarm,
     );
     fx::river(f, t, 1000, 4, &[0x02140c, 0x0b5a3a, EMERALD, 0xd1fae5], 0.5);
+    if t < s.intro_end(crate::timeline::Section::Repair) {
+        return;
+    }
+    let perf = s.cordelia;
 
-    // Before the strike: the solver keeps running on the published plan.
+    // Before the strike: the week as it runs.
     if since < 0.0 {
         let pulse = 0.6 + 0.4 * (t * 6.0).sin();
         f.text(150, 140, "*", S2, LIME, pulse);
-        f.text(
-            150 + 2 * S2.w,
-            140,
-            "THE PLAN IS LIVE. THE SOLVER KEEPS RUNNING.",
-            S2,
-            MINT,
-            1.0,
-        );
+        f.text(150 + 2 * S2.w, 140, "LIVE PLAN", S2, MINT, 1.0);
     } else {
         r.event.draw(f, t, 150, 124, r.size, 1.0);
         let my = 124 + r.rows * r.size.h + 2;
@@ -103,10 +100,12 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
         let k = ((since - 0.6) / 1.0).clamp(0.0, 1.0);
         let total: usize = lines.iter().map(|l| l.len()).sum();
         let mut left = (k * total as f32).ceil() as usize;
+        // Once typed, the mechanism steps back: the event is what to read.
+        let settle = mix(AMBER, DIM, smooth((since - 2.5) / 1.0));
         for (i, l) in lines.iter().enumerate() {
             let n = left.min(l.len());
             left -= n;
-            f.text(150, my + i as i32 * S1.h, &typed(l, n), S1, AMBER, 1.0);
+            f.text(150, my + i as i32 * S1.h, &typed(l, n), S1, settle, 1.0);
         }
         let kind = clip(&c.repair.kind, 40);
         let last = lines.last().map_or(0, |l| l.len());
@@ -145,6 +144,13 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
     };
     score::chart(f, &c.repair.solve.trajectory, &s.repair, t, &chart, 1.0);
     changes(f, c, s, t, x0 + 24, 740, y1 - 16);
+    // When Cordelia has gone, the change list she covered is lit again.
+    let back = t - perf.exit - super::cordelia::OUT;
+    if (0.0..0.9).contains(&back) {
+        let k = 1.0 - smooth(back / 0.9);
+        f.frame_rect(x0 + 10, 452, x1 - 10, y1 - 8, AMBER, k);
+        f.rect(x0 + 10, 452, x1 - 10, y1 - 8, AMBER, 0.12 * k);
+    }
 
     let struck = smooth(since / 0.5) * alarm;
     board.draw_grid(
@@ -159,7 +165,25 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
         t,
     );
     let feasible_age = s.repair_feasible.map_or(-1.0, |at| t - at);
+    // Focus: while the event is read, everything but the broken bus's work
+    // steps back; while a change is reviewed, everything but that job.
+    let ev_focus = smooth(since / 0.3) * (1.0 - smooth((t - perf.enter) / 0.6)) * alarm;
+    let rev = s
+        .reviews
+        .iter()
+        .position(|&at| (at..at + s.review_len).contains(&t));
+    let rev_focus = match (s.reviews.first(), s.reviews.last()) {
+        (Some(&a), Some(&z)) => {
+            let end = z + s.review_len;
+            smooth((t - a) / 0.3) * (1.0 - smooth((t - end + 0.3) / 0.3))
+        }
+        _ => 0.0,
+    };
     for b in &board.blocks {
+        let mine = rev.is_some() && b.change == rev;
+        let grounded_b = board.struck_bus.as_deref() == Some(b.bus.as_str()) || b.solved.is_none();
+        let keep = (1.0 - 0.7 * ev_focus * (!grounded_b) as i32 as f32)
+            * (1.0 - 0.7 * rev_focus * (!mine) as i32 as f32);
         match (b.solved, b.repaired, b.change) {
             (Some(from), Some(to), Some(k)) => {
                 let p = smooth((t - s.moves[k]) / MOVE);
@@ -178,7 +202,7 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
                     let (cx, cy) = rect.centre();
                     f.glow(cx, cy, 70.0, AMBER, 0.35);
                 }
-                Board::draw_block(f, &rect, b, rgb, 1.0);
+                Board::draw_block(f, &rect, b, rgb, keep);
                 let landed = t - (s.moves[k] + MOVE);
                 let (cx, cy) = to.centre();
                 fx::sparks(f, cx, cy, landed, 400 + k as i32, 24, 1.0);
@@ -199,7 +223,7 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
                     mix(EMERALD, 0x0b5a3a, 0.35 * struck)
                 };
                 let rgb = mix(base, LIME, shimmer * 0.8);
-                Board::draw_block(f, &from, b, rgb, 1.0);
+                Board::draw_block(f, &from, b, rgb, keep);
             }
             (None, Some(to), _) => {
                 // The disruption's own job: it drops in red-hot with the
@@ -218,7 +242,7 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
                     let hot = mix(RED, 0xffffff, 0.5 * (-age * 5.0).exp());
                     let (cx, cy) = r.centre();
                     f.glow(cx, cy, 90.0, RED, 0.4 * (1.0 - cool));
-                    Board::draw_block(f, &r, b, mix(hot, AMBER, cool), smooth(age / 0.1));
+                    Board::draw_block(f, &r, b, mix(hot, AMBER, cool), smooth(age / 0.1) * keep);
                     fx::sparks(f, cx, to.y1, age - 0.25, 777, 50, 1.2);
                 }
             }
@@ -240,15 +264,19 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
     stamp(f, "PLAN HEALED", LIME, feasible_age);
 }
 
-/// A large word over the board for a moment, glyph cells shaking in.
+/// How long a stamp holds over the board.
+pub const STAMP_HOLD: f32 = 3.5;
+
+/// A large word over the board, glyph cells shaking in; it lands, holds
+/// for the viewer, then lifts so the board shows through again.
 pub fn stamp(f: &mut Frame, word: &str, rgb: u32, age: f32) {
-    if !(0.0..1.6).contains(&age) {
+    if !(0.0..STAMP_HOLD).contains(&age) {
         return;
     }
     let size = crate::gfx::size(60, 108);
     let w = word.len() as i32 * size.w;
     let (cx, cy) = (1310, 520);
-    let k = smooth(age / 0.08) * (1.0 - smooth((age - 1.1) / 0.5));
+    let k = smooth(age / 0.08) * (1.0 - smooth((age - STAMP_HOLD + 0.5) / 0.5));
     let jitter = if age < 0.25 {
         ((age * 60.0) as i32 % 3 - 1) * 6
     } else {
@@ -387,7 +415,7 @@ fn counters(f: &mut Frame, c: &Capture, s: &Script, t: f32, added: usize, y: i32
             true,
         ),
         (format!("ADDED {added}"), RED, added > 0),
-        ("NO RESTART".to_string(), MINT, done),
+        ("KEPT RUNNING".to_string(), MINT, done),
     ];
     let mut x = 770;
     for (txt, col, on) in items {
