@@ -58,6 +58,28 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, _n: N
             f.dim(760, 140, W as i32, 1000, 1.0 - 0.45 * k);
         }
     }
+    // "Red counts broken rules": a light runs along the hard score.
+    // "Amber is what's left to trim": along the soft score, and the run's
+    // amber line in the chart beats with it.
+    for (cap, part, rgb) in [
+        (crate::story::Cap::Score, "hard", super::RED),
+        (crate::story::Cap::Cost, "soft", super::AMBER),
+    ] {
+        if let Some(c0) = s.captions.iter().find(|c| c.cap == cap) {
+            let k = smooth((t - c0.from) / 0.3) * (1.0 - smooth((t - c0.to + 0.4) / 0.4));
+            if k > 0.0 {
+                let idle = if cap == crate::story::Cap::Score {
+                    c.solve.trajectory.first()
+                } else {
+                    None
+                };
+                if let Some(span) = score::label_span(&c.solve.trajectory, &s.solve, idle, t, part)
+                {
+                    score::run_light(f, span, rgb, t, k);
+                }
+            }
+        }
+    }
     for (i, b) in board.blocks.iter().take(board.solved_count).enumerate() {
         let Some(r) = b.solved else { continue };
         let age = t - s.drops[i];

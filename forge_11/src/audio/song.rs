@@ -9,9 +9,19 @@
 // (script.rs): every typed word clicks, every code excerpt lands on an
 // anvil, score improvements ping up the scale as the score climbs, the
 // feasible plan hits the crash, the disruption sounds the alarm on a
-// D sharp / A tritone and drops the band out, every changed job whooshes
-// to its new slot, and the healed plan brings the hook back.
-use crate::timeline::{bars, now, Section, BAR, BEAT, DURATION, SECTIONS, TOTAL_BARS};
+// D sharp / A tritone, and from there the music builds bar by bar -- the
+// alarm figure develops, the harmony climbs through F sharp half-diminished
+// and D sharp diminished to the dominant, drums and a two-bar riser pile on
+// -- and, as Cordelia charges, turns defiant: the build pivots on F sharp
+// half-diminished (in both E harmonic and E natural minor) into C - D, the
+// D sharp leaves, and the fire lands on E minor with weight, where the
+// Planner123 lead riff (copied from planner123_06, transposed to E natural
+// minor) drives over Em - C - D - Em. Its last bar, on Em (in both scales),
+// is the pivot back; the hook's answer picks up on Em and the D sharp only
+// returns three bars later, on its B.
+// Every changed job whooshes to its new slot, and the healed plan brings
+// the hook's answer back.
+use crate::timeline::{bars, now, Section, BAR, BEAT, DURATION, SECTIONS, STEP, TOTAL_BARS};
 
 pub const SAMPLE_RATE: u32 = 44_100;
 const SR: f32 = SAMPLE_RATE as f32;
@@ -35,9 +45,25 @@ pub struct Cues {
     pub cordelia: [f32; 5],
 }
 
-/// Cordelia's laser pitches: the charge glides B3 -> E5 -> B5, the zap
-/// falls E6 -> E5, the beam hums on E2 + B2, the power-down falls B4 -> E4.
+/// Cordelia's laser pitches, in the climax's scale: the charge glides
+/// B3 -> E5 -> B5 over C - D, the zap falls E6 -> E5 on the E minor
+/// downbeat, the beam hums on the open fifth E2 + B2, the power-down falls
+/// B4 -> E4.
 const LASER_NOTES: [f32; 8] = [59.0, 76.0, 83.0, 88.0, 76.0, 40.0, 47.0, 64.0];
+
+/// E natural minor (E F# G A B C D): Cordelia's climax, from her entrance
+/// to the healed plan. No D sharp, so no augmented second and no dominant
+/// pulling to a sinister i; still minor, landing on Em.
+const NATURAL: [i32; 7] = [4, 6, 7, 9, 11, 0, 2];
+
+/// Fold a harmonic-minor pitch into the climax's scale (D# -> D).
+fn heroic(n: f32) -> f32 {
+    if NATURAL.contains(&(n as i32).rem_euclid(12)) {
+        n
+    } else {
+        n - 1.0
+    }
+}
 
 fn hz(midi: f32) -> f32 {
     440.0 * 2f32.powf((midi - 69.0) / 12.0)
@@ -58,6 +84,12 @@ enum Chord {
     C,
     Am,
     B,
+    /// F sharp half-diminished (F# A C E): the build's first lift.
+    Fsh,
+    /// D sharp diminished seventh (D# F# A C): the leading tone's chord.
+    Ds,
+    /// The climax's VII: D major, the Aeolian step back up to Em.
+    D,
 }
 
 impl Chord {
@@ -68,15 +100,21 @@ impl Chord {
             Chord::C => 36.0,
             Chord::Am => 33.0,
             Chord::B => 35.0,
+            Chord::Fsh => 42.0,
+            Chord::Ds => 39.0,
+            Chord::D => 38.0,
         }
     }
     /// Pad voicing, voice-led around the common E.
     fn pad(self) -> [f32; 4] {
         match self {
-            Chord::Em => [64.0, 67.0, 71.0, 78.0], // Em add9
-            Chord::C => [64.0, 67.0, 72.0, 76.0],  // C/E
-            Chord::Am => [64.0, 69.0, 72.0, 76.0], // Am/E
-            Chord::B => [63.0, 66.0, 71.0, 75.0],  // B, D sharp leading home
+            Chord::Em => [64.0, 67.0, 71.0, 78.0],  // Em add9
+            Chord::C => [64.0, 67.0, 72.0, 76.0],   // C/E
+            Chord::Am => [64.0, 69.0, 72.0, 76.0],  // Am/E
+            Chord::B => [63.0, 66.0, 71.0, 75.0],   // B, D sharp leading home
+            Chord::Fsh => [64.0, 66.0, 69.0, 72.0], // F#m7b5 around the E
+            Chord::Ds => [63.0, 66.0, 69.0, 72.0],  // D#dim7
+            Chord::D => [66.0, 69.0, 74.0, 78.0],   // D/F#, voice-led to Em's F# and B
         }
     }
 }
@@ -89,23 +127,24 @@ use Chord::*;
 /// build.
 const BOOT: [Chord; 10] = [Em, C, Em, C, Am, B, Em, C, Am, B];
 const DESCRIBE: [Chord; 12] = [Em, C, Am, B, Em, C, Am, B, Em, C, Am, B];
-const GENERATE: [Chord; 28] = [
-    Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am,
-    B,
-];
+/// The forge: the groove under the title and its line, the question as the
+/// code is struck, the leading tone's chord as the code rains into the repo.
+const GENERATE: [Chord; 9] = [Em, C, Am, B, Em, C, Am, B, Ds];
 const SOLVE: [Chord; 22] = [
     Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Am, B,
 ];
-/// The opener and the live week, the alarm on Am, Am - C under the
-/// breakdown's sentence and what the depot does, Cordelia's charge ending
-/// on B, the fire resolving to Em, the dominant while the plan heals, the
-/// hook's answer as it lands, then the recap and the closing line.
-const REPAIR: [Chord; 35] = [
-    Em, C, Am, B, Em, Am, C, Am, C, Am, C, Am, B, Em, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B,
-    Em, C, Am, B, Em, C, Am, B,
+/// The opener and the live week; the alarm on Am; the build climbing
+/// Am - C - Am - F#m7b5 under the breakdown, a new chord every bar; the
+/// F#m7b5 pivots into natural minor, Cordelia charges on C - D (VI - VII)
+/// and fires on Em, the Planner123 riff over Em - C - D - Em; that last Em
+/// is the pivot back, the hook's answer starting on Em as the picture moves
+/// on, the D sharp back on its B; the recap; the closing line.
+const REPAIR: [Chord; 33] = [
+    Em, C, Am, B, Em, Am, C, Am, Fsh, C, D, Em, C, D, Em, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B,
+    Em, C, Am, Em, Fsh, B,
 ];
-const CLOSE: [Chord; 21] = [
-    Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em,
+const CLOSE: [Chord; 20] = [
+    Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, B, Em,
 ];
 
 fn chords(section: Section) -> &'static [Chord] {
@@ -166,6 +205,128 @@ const HOOK_A: [(u8, u8, u8); 16] = [
     (24, 2, 78),
     (26, 2, 75),
     (28, 4, 76),
+];
+
+/// Planner123's lead riff, 16th steps over 4 bars (0 = rest), copied as
+/// written from planner123_06/src/audio/song.rs (C minor, over Cm - Ab -
+/// Bb - G at 125 BPM).
+const PLANNER_RIFF: [u8; 64] = [
+    72, 0, 70, 0, 72, 0, 72, 0, 70, 0, 72, 0, 72, 0, 70, 72, 68, 0, 68, 0, 67, 0, 68, 0, 68, 0, 68,
+    0, 67, 0, 68, 0, 70, 0, 70, 0, 68, 0, 70, 0, 70, 0, 70, 0, 68, 0, 70, 0, 67, 0, 67, 0, 65, 0,
+    67, 0, 67, 0, 70, 0, 70, 0, 70, 72,
+];
+
+/// The riff in E natural minor, over Em - C - D - Em, the original's
+/// Cm - Ab - Bb - (G) functions in E: C minor to E minor is a plain major
+/// third up, every note: C5 -> E5, Bb4 -> D5, Ab4 -> C5, G4 -> B4,
+/// F4 -> A4. Same steps, same rests, same contour, no D sharp.
+fn riff_note(m: u8) -> u8 {
+    m + 4
+}
+
+/// The transposed riff as a phrase on the 16th grid: each note held into
+/// the rest after it, so neighbours glide into each other.
+fn riff_phrase() -> Vec<(u8, u8, u8)> {
+    let mut v = Vec::new();
+    for (i, &m) in PLANNER_RIFF.iter().enumerate() {
+        if m == 0 {
+            continue;
+        }
+        let len = if PLANNER_RIFF.get(i + 1) == Some(&0) {
+            2
+        } else {
+            1
+        };
+        v.push((i as u8, len, riff_note(m)));
+    }
+    v
+}
+
+/// The alarm figure, one bar per bar of the build (16th grid: start,
+/// length, midi). It states the D# / A tritone, moves it down to C / F#,
+/// doubles its speed, turns it into a rising line, sweeps the diminished
+/// chord up two octaves and climbs the dominant to a held D#6 that the
+/// fire resolves to E.
+const ALARM: [&[(u8, u8, u8)]; 6] = [
+    &[
+        (0, 2, 87),
+        (2, 2, 81),
+        (4, 2, 87),
+        (6, 2, 81),
+        (8, 2, 87),
+        (10, 2, 81),
+        (12, 2, 87),
+        (14, 2, 81),
+    ],
+    &[
+        (0, 2, 84),
+        (2, 2, 78),
+        (4, 2, 84),
+        (6, 2, 78),
+        (8, 2, 84),
+        (10, 2, 78),
+        (12, 2, 84),
+        (14, 2, 78),
+    ],
+    &[
+        (0, 2, 87),
+        (2, 2, 81),
+        (4, 2, 87),
+        (6, 2, 81),
+        (8, 1, 87),
+        (9, 1, 81),
+        (10, 1, 87),
+        (11, 1, 81),
+        (12, 1, 87),
+        (13, 1, 81),
+        (14, 1, 87),
+        (15, 1, 81),
+    ],
+    &[
+        (0, 2, 81),
+        (2, 2, 84),
+        (4, 2, 87),
+        (6, 2, 90),
+        (8, 2, 81),
+        (10, 2, 84),
+        (12, 2, 87),
+        (14, 2, 90),
+    ],
+    // Cordelia tears in: the siren becomes a line climbing C - E - G - B
+    // in two octaves and turning back down, in natural minor.
+    &[
+        (0, 1, 72),
+        (1, 1, 76),
+        (2, 1, 79),
+        (3, 1, 83),
+        (4, 1, 84),
+        (5, 1, 83),
+        (6, 1, 79),
+        (7, 1, 76),
+        (8, 1, 72),
+        (9, 1, 76),
+        (10, 1, 79),
+        (11, 1, 83),
+        (12, 2, 88),
+        (14, 1, 86),
+        (15, 1, 84),
+    ],
+    // D climbing to a held D6, the flat seventh the fire lifts to E.
+    &[
+        (0, 1, 74),
+        (1, 1, 78),
+        (2, 1, 81),
+        (3, 1, 86),
+        (4, 1, 74),
+        (5, 1, 78),
+        (6, 1, 81),
+        (7, 1, 86),
+        (8, 1, 81),
+        (9, 1, 84),
+        (10, 1, 83),
+        (11, 1, 81),
+        (12, 4, 86),
+    ],
 ];
 
 struct Mix {
@@ -258,6 +419,9 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
     let mut m = Mix::new(len);
     let total = TOTAL_BARS as usize;
     let event_bar = (cues.event / BAR).round() as usize;
+    let fire_bar = (cues.cordelia[2] / BAR).round() as usize;
+    // The climax: Cordelia's entrance to the healed plan's hook.
+    let climax = climax_span(cues);
     // The healed plan brings the answer back on the first bar line after
     // feasibility that starts an Em - C - Am - B run in the repair table.
     let heal_bar = section_first_bar(Section::Repair) + HEAL_BAR;
@@ -278,6 +442,7 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
 
         let pad_len = if last_bar { 3.8 } else { BAR + 0.35 };
         let mut pad_gain = 1.0;
+        let mut bright = 1.0;
         match section {
             Section::Boot => {
                 // Bars 1-2: the pad alone, swelling under the stars, a
@@ -330,60 +495,170 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
                 }
             }
             Section::Generate => {
-                arp(&mut m, t0, chord, 0.8);
-                bass(&mut m, t0, prev.root(), chord.root(), Bass::Octaves, 1.0);
+                // The forge: the groove under the title, then flat out
+                // while the code is struck, the filter open.
+                let hot = k >= 4;
+                bright = if hot { 1.6 } else { 1.0 };
+                arp(&mut m, t0, chord, if hot { 1.0 } else { 0.7 });
+                let kind = if hot { Bass::Sixteenths } else { Bass::Octaves };
+                bass(&mut m, t0, prev.root(), chord.root(), kind, 1.0);
                 four_on_floor(&mut m, t0);
                 gated_snare(&mut m, t0 + BEAT, 1.0);
                 gated_snare(&mut m, t0 + 3.0 * BEAT, 1.0);
                 hats(&mut m, t0, 4, 1.0);
+                if hot && left > 1 {
+                    // Off-beat kicks push the strikes.
+                    kick(&mut m, t0 + 1.5 * BEAT);
+                    kick(&mut m, t0 + 3.5 * BEAT);
+                }
+                if left == 1 {
+                    snare_roll(&mut m, t0);
+                }
             }
             Section::Solve => {
-                arp(&mut m, t0, chord, 1.0);
-                bass(&mut m, t0, prev.root(), chord.root(), Bass::Sixteenths, 0.9);
+                // Lighter while the board is introduced, full from bar
+                // five; the bass changes gear every four bars.
+                arp(&mut m, t0, chord, if k < 4 { 0.7 } else { 1.0 });
+                let kind = match (k / 4) % 3 {
+                    0 => Bass::Eighths,
+                    1 => Bass::Sixteenths,
+                    _ => Bass::Octaves,
+                };
+                bass(&mut m, t0, prev.root(), chord.root(), kind, 0.9);
                 four_on_floor(&mut m, t0);
-                gated_snare(&mut m, t0 + BEAT, 0.9);
-                gated_snare(&mut m, t0 + 3.0 * BEAT, 0.9);
-                hats(&mut m, t0, 4, 0.9);
+                if k >= 4 {
+                    gated_snare(&mut m, t0 + BEAT, 0.9);
+                    gated_snare(&mut m, t0 + 3.0 * BEAT, 0.9);
+                }
+                hats(&mut m, t0, if k < 4 { 2 } else { 4 }, 0.9);
             }
             Section::Repair => {
                 let rel = b as i32 - event_bar as i32;
+                let fired = b as i32 - fire_bar as i32;
                 if rel < 0 {
                     // The plan is live: the groove runs on, lighter.
                     arp(&mut m, t0, chord, 0.6);
                     bass(&mut m, t0, prev.root(), chord.root(), Bass::Eighths, 0.8);
                     four_on_floor(&mut m, t0);
                     hats(&mut m, t0, 2, 0.8);
-                } else if t0 < cues.cordelia[2] - 0.01 {
-                    // The break: a heartbeat under the alarm, held through
-                    // Cordelia's charge.
-                    pad_gain = 0.7;
-                    bass(&mut m, t0, prev.root(), chord.root(), Bass::Held, 0.6);
-                    kick(&mut m, t0);
-                    kick(&mut m, t0 + 0.75 * BEAT);
-                    kick(&mut m, t0 + 2.0 * BEAT);
-                    kick(&mut m, t0 + 2.75 * BEAT);
-                } else {
-                    // Building back while the plan heals.
-                    let rel = ((t0 - cues.cordelia[2]) / BAR).round() as i32 + 3;
-                    let build = (rel - 3) as f32;
-                    arp(&mut m, t0, chord, (0.4 + 0.15 * build).min(1.0));
-                    bass(&mut m, t0, prev.root(), chord.root(), Bass::Eighths, 0.9);
-                    four_on_floor(&mut m, t0);
-                    hats(&mut m, t0, if rel >= 5 { 4 } else { 2 }, 0.9);
-                    if rel >= 4 {
-                        gated_snare(&mut m, t0 + BEAT, 0.9);
-                        gated_snare(&mut m, t0 + 3.0 * BEAT, 0.9);
+                } else if fired < 0 {
+                    // The build: the band comes back a layer a bar under
+                    // the developing alarm, the filter opening, into the
+                    // fire's downbeat.
+                    let r = rel as usize;
+                    pad_gain = 0.6 + 0.08 * r as f32;
+                    bright = 0.8 + 0.25 * r as f32;
+                    if let Some(fig) = ALARM.get(r) {
+                        alarm_figure(&mut m, t0, fig, 0.8 + 0.06 * r as f32);
                     }
+                    let kind = match r {
+                        0 => Bass::Held,
+                        1 | 2 => Bass::Eighths,
+                        3 => Bass::Octaves,
+                        _ => Bass::Sixteenths,
+                    };
+                    bass(
+                        &mut m,
+                        t0,
+                        prev.root(),
+                        chord.root(),
+                        kind,
+                        0.6 + 0.08 * r as f32,
+                    );
+                    if r == 0 {
+                        // A heartbeat under the strike.
+                        for at in [0.0, 0.75, 2.0, 2.75] {
+                            kick(&mut m, t0 + at * BEAT);
+                        }
+                    } else if r == 1 {
+                        four_on_floor(&mut m, t0);
+                        hats(&mut m, t0, 2, 0.6);
+                    } else {
+                        four_on_floor(&mut m, t0);
+                        hats(
+                            &mut m,
+                            t0,
+                            if r >= 3 { 4 } else { 2 },
+                            0.7 + 0.06 * r as f32,
+                        );
+                        arp(&mut m, t0, chord, 0.25 + 0.12 * r as f32);
+                        if r + 1 < (fire_bar - event_bar) {
+                            gated_snare(&mut m, t0 + BEAT, 0.5 + 0.1 * r as f32);
+                            gated_snare(&mut m, t0 + 3.0 * BEAT, 0.5 + 0.1 * r as f32);
+                        } else {
+                            snare_roll(&mut m, t0);
+                        }
+                        if r >= 4 {
+                            kick(&mut m, t0 + 1.5 * BEAT);
+                            kick(&mut m, t0 + 3.5 * BEAT);
+                        }
+                    }
+                    if r + 2 == fire_bar - event_bar {
+                        riser_len(&mut m, t0, 2.0 * BAR, 0.2);
+                    }
+                } else if fired < 4 {
+                    // Cordelia's fire: the Planner123 riff over a driving
+                    // band -- driving, not louder: the riff takes the
+                    // arp's place, the pad stays dark. The last bar is the
+                    // pivot back: no off-beat kicks, the pad as after it,
+                    // a tom fill across the seam.
+                    let pivot = fired == 3;
+                    pad_gain = if pivot { 1.0 } else { 0.9 };
+                    bright = if pivot { 1.0 } else { 1.2 };
+                    bass(&mut m, t0, prev.root(), chord.root(), Bass::Octaves, 0.9);
+                    four_on_floor(&mut m, t0);
+                    if !pivot {
+                        kick(&mut m, t0 + 1.5 * BEAT);
+                        kick(&mut m, t0 + 3.5 * BEAT);
+                    }
+                    gated_snare(&mut m, t0 + BEAT, 0.8);
+                    gated_snare(&mut m, t0 + 3.0 * BEAT, 0.8);
+                    hats(&mut m, t0, 4, 0.85);
+                    if pivot {
+                        arp(&mut m, t0, chord, 0.5);
+                        tom_fill(&mut m, t0);
+                    }
+                } else {
+                    // The plan has healed: the answer, then the recap on a
+                    // groove that changes gear every four bars; the first
+                    // four keep the climax's octave bass across the seam.
+                    let h = (fired - 4) as usize;
+                    arp(&mut m, t0, chord, 0.8);
+                    let kind = if h < 4 || !(h / 4).is_multiple_of(2) {
+                        Bass::Octaves
+                    } else {
+                        Bass::Eighths
+                    };
+                    bass(&mut m, t0, prev.root(), chord.root(), kind, 0.9);
+                    four_on_floor(&mut m, t0);
+                    hats(
+                        &mut m,
+                        t0,
+                        if (h / 4).is_multiple_of(2) { 4 } else { 2 },
+                        0.9,
+                    );
+                    gated_snare(&mut m, t0 + BEAT, 0.8);
+                    gated_snare(&mut m, t0 + 3.0 * BEAT, 0.8);
                 }
             }
             Section::Close => {
                 if left > 2 {
                     arp(&mut m, t0, chord, 1.0);
-                    bass(&mut m, t0, prev.root(), chord.root(), Bass::Octaves, 1.0);
+                    let kind = match (k / 4) % 3 {
+                        0 => Bass::Octaves,
+                        1 => Bass::Eighths,
+                        _ => Bass::Sixteenths,
+                    };
+                    bass(&mut m, t0, prev.root(), chord.root(), kind, 1.0);
                     four_on_floor(&mut m, t0);
                     gated_snare(&mut m, t0 + BEAT, 1.0);
                     gated_snare(&mut m, t0 + 3.0 * BEAT, 1.0);
-                    hats(&mut m, t0, 4, 1.0);
+                    hats(
+                        &mut m,
+                        t0,
+                        if (k / 4).is_multiple_of(2) { 4 } else { 2 },
+                        1.0,
+                    );
                 } else if left == 2 {
                     // The dominant, held, the band out after the downbeat.
                     kick(&mut m, t0);
@@ -398,7 +673,7 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
                 }
             }
         }
-        pad(&mut m, t0, chord, pad_len, b, pad_gain);
+        pad(&mut m, t0, chord, pad_len, b, pad_gain, bright);
 
         // Toms and a noise riser into every new section.
         if next != section && !last_bar {
@@ -410,27 +685,47 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
         }
 
         // Leads.
+        let e = BEAT / 2.0;
         match (section, k) {
             // The intro states the question; the answer comes back softly
-            // under the prompt, then in full in the forge.
-            (Section::Boot, 6) => lead(&mut m, t0, &HOOK_Q, 0.0, Osc::Super, 0.8, false),
-            (Section::Describe, 4) => lead(&mut m, t0, &HOOK_A, -12.0, Osc::Pulse, 0.45, false),
-            (Section::Generate, 4) => lead(&mut m, t0, &HOOK_Q, 0.0, Osc::Super, 0.9, false),
-            (Section::Generate, 8) => {
-                lead(&mut m, t0, &HOOK_A, 0.0, Osc::Super, 0.9, false);
-                lead(&mut m, t0, &HOOK_A, -12.0, Osc::Pulse, 0.45, false);
+            // under the prompt, the question rings over the forge, and
+            // each later section develops it in a new voice.
+            (Section::Boot, 6) => lead(&mut m, t0, &HOOK_Q, e, 0.0, Osc::Super, 0.8, false),
+            (Section::Describe, 4) => lead(&mut m, t0, &HOOK_A, e, -12.0, Osc::Pulse, 0.45, false),
+            (Section::Generate, 4) => {
+                lead(&mut m, t0, &HOOK_Q, e, 0.0, Osc::Super, 0.95, false);
+                lead(&mut m, t0, &HOOK_Q, e, -12.0, Osc::Brass, 0.45, false);
             }
-            (Section::Generate, 12) => lead(&mut m, t0, &HOOK_Q, -12.0, Osc::Brass, 0.7, true),
-            (Section::Solve, 8) => lead(&mut m, t0, &HOOK_Q, -12.0, Osc::Brass, 0.7, true),
+            (Section::Solve, 4) => lead(&mut m, t0, &HOOK_A, e, -12.0, Osc::Pulse, 0.4, false),
+            (Section::Solve, 8) => lead(&mut m, t0, &HOOK_Q, e, -12.0, Osc::Brass, 0.7, true),
+            (Section::Solve, 16) => lead(&mut m, t0, &HOOK_A, e, -12.0, Osc::Pulse, 0.45, false),
             (Section::Repair, HEAL_BAR) if heal_ok => {
-                lead(&mut m, t0, &HOOK_A, 0.0, Osc::Super, 0.8, false);
+                lead(&mut m, t0, &HOOK_A, e, 0.0, Osc::Super, 0.8, false);
             }
-            (Section::Close, 0) => lead(&mut m, t0, &HOOK_Q, -12.0, Osc::Pulse, 0.5, false),
+            (Section::Repair, k) if k == HEAL_BAR + 4 => {
+                lead(&mut m, t0, &HOOK_Q, e, -12.0, Osc::Pulse, 0.45, false)
+            }
+            (Section::Repair, k) if k == HEAL_BAR + 8 => {
+                lead(&mut m, t0, &HOOK_Q, e, -12.0, Osc::Brass, 0.6, true)
+            }
+            (Section::Close, 0) => lead(&mut m, t0, &HOOK_Q, e, -12.0, Osc::Pulse, 0.5, false),
             (Section::Close, 4) => {
-                lead(&mut m, t0, &HOOK_A, 0.0, Osc::Super, 1.0, false);
-                lead(&mut m, t0, &HOOK_A, -12.0, Osc::Pulse, 0.5, false);
+                lead(&mut m, t0, &HOOK_A, e, 0.0, Osc::Super, 1.0, false);
+                lead(&mut m, t0, &HOOK_A, e, -12.0, Osc::Pulse, 0.5, false);
             }
+            (Section::Close, 8) => lead(&mut m, t0, &HOOK_Q, e, -12.0, Osc::Brass, 0.6, false),
+            (Section::Close, 12) => lead(&mut m, t0, &HOOK_A, e, -12.0, Osc::Pulse, 0.5, true),
             _ => {}
+        }
+        // Cordelia's fire: the Planner123 riff, bold and bright -- three
+        // detuned saws, an octave of pulse under it, a thin octave above.
+        // Cordelia's fire: the Planner123 riff on a dark, gritty lead with
+        // body under it an octave down. Its last phrase runs to the seam and
+        // the hook's answer picks up on the same saw voice.
+        if b == fire_bar && section == Section::Repair {
+            let riff = riff_phrase();
+            lead(&mut m, t0, &riff, STEP, 0.0, Osc::Grit, 0.8, false);
+            lead(&mut m, t0, &riff, STEP, -12.0, Osc::Pulse, 0.45, false);
         }
         prev = chord;
     }
@@ -456,7 +751,11 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
         woodblock(&mut m, at, if i % 2 == 0 { -0.4 } else { 0.4 });
     }
     for &(at, p) in thin_pairs(&cues.improvements, 0.07).iter() {
-        let note = SCALE[((p * (SCALE.len() - 1) as f32).round() as usize).min(SCALE.len() - 1)];
+        let mut note =
+            SCALE[((p * (SCALE.len() - 1) as f32).round() as usize).min(SCALE.len() - 1)];
+        if climax.contains(&at) {
+            note = heroic(note);
+        }
         blip(&mut m, at, hz(note + 12.0), 0.2, 0.05);
     }
     for at in [cues.solve_feasible, cues.repair_feasible]
@@ -464,10 +763,17 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
         .flatten()
     {
         crash(&mut m, at, 1.0);
-        stab(&mut m, at);
-        boom(&mut m, at, 0.6);
+        // The healed plan is hit with a bare E power chord (root, fifth,
+        // octave), the solve with the E minor stab.
+        if climax.contains(&at) {
+            power_stab(&mut m, at, 52.0);
+            boom(&mut m, at, 0.3);
+        } else {
+            stab(&mut m, at, Em);
+            boom(&mut m, at, 0.6);
+        }
     }
-    alarm(&mut m, cues.event);
+    alarm_hit(&mut m, cues.event);
     boom(&mut m, cues.event, 1.0);
     for (k, &at) in cues.moves.iter().enumerate() {
         whoosh(&mut m, at, 0.6, if k % 2 == 0 { -0.5 } else { 0.5 });
@@ -523,8 +829,8 @@ fn thin_pairs(events: &[(f32, f32)], gap: f32) -> Vec<(f32, f32)> {
 
 /// Supersaw pad: three detuned saws per chord tone through a lowpass whose
 /// cutoff breathes over eight bars.
-fn pad(m: &mut Mix, t0: f32, chord: Chord, dur: f32, bar: usize, gain: f32) {
-    let open = 0.03 + 0.035 * (0.5 - 0.5 * (bar as f32 * TAU / 8.0).cos());
+fn pad(m: &mut Mix, t0: f32, chord: Chord, dur: f32, bar: usize, gain: f32, bright: f32) {
+    let open = ((0.03 + 0.035 * (0.5 - 0.5 * (bar as f32 * TAU / 8.0).cos())) * bright).min(0.3);
     for (k, &note) in chord.pad().iter().enumerate() {
         for (d, det) in [-0.12f32, 0.0, 0.12].iter().enumerate() {
             let f = hz(note + det);
@@ -676,9 +982,14 @@ fn tom_fill(m: &mut Mix, t0: f32) {
 
 /// White noise opening up over a bar, into the next section.
 fn riser(m: &mut Mix, t0: f32) {
+    riser_len(m, t0, BAR, 0.12);
+}
+
+/// White noise opening up over `len` seconds.
+fn riser_len(m: &mut Mix, t0: f32, len: f32, gain: f32) {
     let mut lp = 0.0f32;
-    m.voice(t0, BAR, 0.12, 0.0, 0.4, move |t, mm| {
-        let k = t / BAR;
+    m.voice(t0, len, gain, 0.0, 0.4, move |t, mm| {
+        let k = t / len;
         let n = mm.rnd();
         lp += (n - lp) * (0.01 + 0.5 * k * k);
         lp * k * k
@@ -730,14 +1041,31 @@ enum Osc {
     Super,
     Pulse,
     Brass,
+    /// Saw and square an octave down, driven and kept dark: a firm lead
+    /// with grit and body, little sparkle.
+    Grit,
 }
 
 /// A four-bar phrase as one monophonic voice that bends: legato notes glide
 /// into each other, notes after a rest and held notes scoop up from two
 /// semitones below, every note longer than an eighth grows a vibrato, and
 /// with `dive` the last note falls an octave.
-fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: f32, dive: bool) {
-    let eighth = BEAT / 2.0;
+#[allow(clippy::too_many_arguments)]
+fn lead(
+    m: &mut Mix,
+    t0: f32,
+    phrase: &[(u8, u8, u8)],
+    unit: f32,
+    up: f32,
+    osc: Osc,
+    gain: f32,
+    dive: bool,
+) {
+    // On a sixteenth grid (a riff) the glides are quicker and every note
+    // is re-plucked, so the rhythm stays sharp under the bends.
+    let eighth = unit;
+    let riff = unit < BEAT / 2.0 - 1e-3;
+    let glide = if riff { 0.018 } else { 0.045 };
     let notes: Vec<(f32, f32, f32, bool)> = phrase
         .iter()
         .enumerate()
@@ -763,6 +1091,7 @@ fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: 
         Osc::Super => (-0.12, 0.45, 0.075),
         Osc::Pulse => (0.18, 0.4, 0.06),
         Osc::Brass => (0.05, 0.5, 0.085),
+        Osc::Grit => (-0.05, 0.35, 0.08),
     };
     let total = 16.0 * BEAT + if dive { 0.9 } else { 0.3 };
     m.voice(t0, total, level * gain, pan, send, move |t, _| {
@@ -770,7 +1099,7 @@ fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: 
             idx = idx.wrapping_add(1);
             let (_, len, n, legato) = notes[idx];
             if legato && len < 3.0 * eighth {
-                k_glide = coeff(0.045);
+                k_glide = coeff(glide);
             } else {
                 pitch = pitch.min(n - 2.0);
                 if !legato {
@@ -819,8 +1148,21 @@ fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: 
                 let index = 0.5 + 1.8 * (-into * 5.0).exp();
                 (TAU * phases[0] + index * (TAU * mod_phase).sin()).sin()
             }
+            Osc::Grit => {
+                phases[0] = (phases[0] + f / SR).fract();
+                phases[1] = (phases[1] + f * 0.5 * 1.002 / SR).fract();
+                let raw = 0.6 * saw(phases[0]) + 0.5 * pulse(phases[1], 0.5);
+                let drive = (raw * 2.2).tanh();
+                lp += (drive - lp) * (0.08 + 0.1 * (-into * 12.0).exp());
+                lp
+            }
         };
-        s * amp
+        let pluck = if riff {
+            0.72 + 0.28 * (-into * 22.0).exp()
+        } else {
+            1.0
+        };
+        s * amp * pluck
     });
 }
 
@@ -874,9 +1216,16 @@ fn boom(m: &mut Mix, at: f32, gain: f32) {
     });
 }
 
-/// A supersaw stab of the tonic chord.
-fn stab(m: &mut Mix, at: f32) {
-    for (k, &note) in Em.pad().iter().enumerate() {
+/// The climax's span on the demo clock: from the bar Cordelia enters on to
+/// the bar the hook's answer returns on.
+fn climax_span(cues: &Cues) -> std::ops::Range<f32> {
+    let fire_bar = (cues.cordelia[2] / BAR).round();
+    bars(fire_bar - 2.0)..bars(fire_bar + 4.0)
+}
+
+/// A supersaw stab of a chord.
+fn stab(m: &mut Mix, at: f32, chord: Chord) {
+    for (k, &note) in chord.pad().iter().enumerate() {
         let f = hz(note + 12.0);
         let mut lp = 0.0f32;
         m.voice(at, 0.7, 0.05, (k as f32 - 1.5) * 0.3, 0.6, move |t, _| {
@@ -887,23 +1236,22 @@ fn stab(m: &mut Mix, at: f32) {
     }
 }
 
-/// The alarm: a square siren on the D sharp / A tritone, four times.
-fn alarm(m: &mut Mix, at: f32) {
-    for k in 0..8 {
-        let f = hz(if k % 2 == 0 { 87.0 } else { 81.0 });
+/// A dark power-chord stab: root, fifth and octave, low-passed saws.
+fn power_stab(m: &mut Mix, at: f32, root: f32) {
+    for (k, note) in [root, root + 7.0, root + 12.0].into_iter().enumerate() {
+        let f = hz(note);
         let mut lp = 0.0f32;
-        m.voice(
-            at + k as f32 * BEAT / 2.0,
-            BEAT / 2.0,
-            0.07 * (1.0 - k as f32 * 0.08),
-            0.0,
-            0.5,
-            move |t, _| {
-                lp += (pulse(f * t, 0.5) - lp) * 0.2;
-                lp * env(t, 0.005, BEAT / 2.0 - 0.04, 0.03)
-            },
-        );
+        m.voice(at, 0.6, 0.06, (k as f32 - 1.0) * 0.3, 0.4, move |t, _| {
+            let s = saw(f * t) + saw(f * 1.003 * t);
+            lp += (s * 0.5 - lp) * (0.05 + 0.15 * (-t * 10.0).exp());
+            lp * (-t * 4.5).exp()
+        });
     }
+}
+
+/// The strike's crack: a burst of bright noise (the siren is the build's
+/// first alarm figure).
+fn alarm_hit(m: &mut Mix, at: f32) {
     let mut prev = 0.0f32;
     m.voice(at, 0.6, 0.25, 0.0, 0.3, move |t, mm| {
         let n = mm.rnd();
@@ -913,12 +1261,34 @@ fn alarm(m: &mut Mix, at: f32) {
     });
 }
 
+/// One bar of the alarm figure: a square siren on the 16th grid.
+fn alarm_figure(m: &mut Mix, t0: f32, notes: &[(u8, u8, u8)], gain: f32) {
+    for (k, &(s, l, n)) in notes.iter().enumerate() {
+        let f = hz(n as f32);
+        let len = l as f32 * STEP;
+        let mut lp = 0.0f32;
+        m.voice(
+            t0 + s as f32 * STEP,
+            len,
+            0.06 * gain,
+            if k % 2 == 0 { -0.25 } else { 0.25 },
+            0.5,
+            move |t, _| {
+                lp += (pulse(f * t, 0.5) - lp) * 0.2;
+                lp * env(t, 0.004, len - 0.03, 0.025)
+            },
+        );
+    }
+}
+
 /// Cordelia's eye-lasers, in key and on the grid: a charge whine gliding
 /// up the dominant to the tonic from her entrance to the ignite beat and on
 /// to the fifth into the fire; on the downbeat an FM zap falling an octave
 /// on E with a noise crack and a sub hit; a beam hum on E and B pulsing in
 /// sixteenths while the beams hold; a fall on the exit as the hook returns.
 fn laser(m: &mut Mix, [enter, ignite, fire, cut, exit]: [f32; 5]) {
+    // Names from the old E voicing: b3/e5/b5 are the charge's glide
+    // points, e6 -> e5z the zap, e2 + b2 the hum, e4 the power-down's end.
     let [b3, e5, b5, e6, e5z, e2, b2, e4] = LASER_NOTES;
     // Charge: one voice, continuous phase, pitch gliding on a curve.
     let len = fire - enter;
@@ -952,7 +1322,7 @@ fn laser(m: &mut Mix, [enter, ignite, fire, cut, exit]: [f32; 5]) {
         let tone = (TAU * pc + idx * (TAU * pm).sin()).sin() * (-t * 5.0).exp();
         tone + 0.5 * mm.rnd() * (-t * 40.0).exp()
     });
-    boom(m, fire, 0.8);
+    boom(m, fire, 0.45);
     // Beam hum: E2 + B2 pulses, gated in sixteenths, while the beams hold;
     // a smaller zap on every beat the beams surge.
     let hold = cut - fire;
@@ -970,7 +1340,7 @@ fn laser(m: &mut Mix, [enter, ignite, fire, cut, exit]: [f32; 5]) {
         let f = hz(note);
         let mut lp = 0.0f32;
         let pan = if k == 0 { -0.3 } else { 0.3 };
-        m.voice(fire, hold, 0.05, pan, 0.2, move |t, _| {
+        m.voice(fire, hold, 0.035, pan, 0.2, move |t, _| {
             lp += (pulse(f * t, 0.3) - lp) * 0.08;
             let gate = 0.55 + 0.45 * (1.0 - (t / (BEAT / 4.0)).fract());
             lp * gate * smooth(t / 0.05) * smooth((hold - t) / 0.08)
@@ -1083,15 +1453,41 @@ fn mixdown(m: Mix) -> Vec<[f32; 2]> {
 mod tests {
     use super::*;
 
-    /// E harmonic minor: E F# G A B C D#. Every pitch the song writes.
+    /// E harmonic minor (E F# G A B C D#): the whole song, except the climax.
+    const HARMONIC: [i32; 7] = [4, 6, 7, 9, 11, 0, 3];
+
+    /// Every pitch the song writes is in its section's scale: E harmonic
+    /// minor (E F# G A B C D#) everywhere, E natural minor (E F# G A B C D)
+    /// in Cordelia's climax, from her entrance to the hook's answer.
     #[test]
-    fn every_pitch_is_in_e_harmonic_minor() {
-        let scale = [4, 6, 7, 9, 11, 0, 3];
-        let ok = |n: f32| scale.contains(&((n as i32).rem_euclid(12)));
-        for c in [Em, C, Am, B] {
-            assert!(ok(c.root()), "{c:?} root");
+    fn every_pitch_is_in_its_scale() {
+        let in_scale = |sc: &[i32; 7], n: f32| sc.contains(&((n as i32).rem_euclid(12)));
+        let ok = |n: f32| in_scale(&HARMONIC, n);
+        let heroic_ok = |n: f32| in_scale(&NATURAL, n);
+        let real = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/capture.json");
+        let fire = if std::path::Path::new(real).exists() {
+            let c = crate::capture::Capture::load(real).unwrap();
+            let s = crate::script::Script::new(&c);
+            (s.cordelia.fire / BAR).round() as usize
+        } else {
+            usize::MAX - 8
+        };
+        let climax = fire.saturating_sub(2)..fire.saturating_add(4);
+        let bars = SECTIONS
+            .iter()
+            .flat_map(|&(sec, b0, b1)| (b0 as usize..b1 as usize).map(move |b| (b, sec, b0)));
+        for (b, sec, b0) in bars {
+            let c = chords(sec)[b - b0 as usize];
+            let ok_here = |n: f32| {
+                if climax.contains(&b) {
+                    heroic_ok(n)
+                } else {
+                    ok(n)
+                }
+            };
+            assert!(ok_here(c.root()), "bar {b} {c:?} root");
             for n in c.pad() {
-                assert!(ok(n), "{c:?} pad {n}");
+                assert!(ok_here(n), "bar {b} {c:?} pad {n}");
             }
         }
         for &(_, _, n) in HOOK_Q.iter().chain(HOOK_A.iter()) {
@@ -1100,13 +1496,29 @@ mod tests {
         for n in SCALE {
             assert!(ok(n));
         }
-        // The alarm's tritone and the anvil ring's D sharp / E.
-        assert!(ok(87.0) && ok(81.0));
-        // Cordelia's lasers: every glide endpoint and drone.
-        for n in LASER_NOTES {
-            assert!(ok(n), "laser note {n}");
+        // The alarm figures: harmonic minor until Cordelia enters, then
+        // the climax's scale; the riff and the lasers in the climax's.
+        let enter = ALARM.len() - 2;
+        for (i, fig) in ALARM.iter().enumerate() {
+            for &(_, _, n) in fig.iter() {
+                let good = if i < enter {
+                    ok(n as f32)
+                } else {
+                    heroic_ok(n as f32)
+                };
+                assert!(good, "alarm {i} note {n}");
+            }
         }
-        assert!(ok(83.0 - 12.0));
+        for (_, _, n) in riff_phrase() {
+            assert!(heroic_ok(n as f32), "riff note {n}");
+        }
+        assert!(heroic_ok(heroic(75.0)) && heroic(76.0) == 76.0);
+        // Cordelia's lasers: every glide endpoint and drone (the power-down
+        // starts at the charge's top note an octave down).
+        for n in LASER_NOTES {
+            assert!(heroic_ok(n), "laser note {n}");
+        }
+        assert!(heroic_ok(LASER_NOTES[2] - 12.0));
     }
 
     /// On the real capture the alarm lands on Am, the fire resolves the
@@ -1122,9 +1534,69 @@ mod tests {
         let r0 = section_first_bar(Section::Repair);
         let chord = |t: f32| REPAIR[(t / BAR).round() as usize - r0];
         assert_eq!(chord(s.event), Am);
+        // Defiant: the fire lands on Em from D (VII - i), the pivot before
+        // Cordelia's entrance is F#m7b5 (in both scales).
         assert_eq!(chord(s.cordelia.fire), Em);
-        assert_eq!(chord(s.cordelia.fire - BAR), B);
+        assert_eq!(chord(s.cordelia.fire - BAR), D);
+        assert_eq!(chord(s.cordelia.fire - 3.0 * BAR), Fsh);
         assert!(s.repair_feasible.unwrap() <= bars((r0 + HEAL_BAR) as f32));
+        // The build: a new chord every bar from the strike to the fire,
+        // and one alarm figure per bar, each different.
+        let ev = (s.event / BAR).round() as usize - r0;
+        let fire = (s.cordelia.fire / BAR).round() as usize - r0;
+        assert_eq!(fire - ev, ALARM.len(), "one alarm figure per build bar");
+        for w in REPAIR[ev..=fire].windows(2) {
+            assert_ne!(w[0], w[1], "the harmony stands still in the build");
+        }
+        for (i, a) in ALARM.iter().enumerate() {
+            for (j, b) in ALARM.iter().enumerate().skip(i + 1) {
+                assert_ne!(a, b, "alarm figure {i} repeats as {j}");
+            }
+        }
+        // The riff's four bars, i - VI - VII - i, the last Em the pivot
+        // back; the hook's answer starts on Em on the bar the picture moves
+        // on (the "what moved" line), and the D sharp waits for its B.
+        assert_eq!(&REPAIR[fire..fire + 4], &[Em, C, D, Em]);
+        assert_eq!(fire + 4, HEAL_BAR);
+        assert_eq!(&REPAIR[HEAL_BAR..HEAL_BAR + 4], &[Em, C, Am, B]);
+        let moved = s
+            .captions
+            .iter()
+            .find(|c| c.cap == crate::story::Cap::Moved)
+            .unwrap();
+        assert!((moved.from - bars((r0 + HEAL_BAR) as f32)).abs() < 1e-3);
+        // No D sharp anywhere in the climax's chords.
+        for c in &REPAIR[fire - 2..fire + 4] {
+            assert!(
+                c.pad().iter().all(|&n| (n as i32).rem_euclid(12) != 3),
+                "{c:?}"
+            );
+        }
+    }
+
+    /// The Planner123 riff, copied and transposed: the same steps and
+    /// rests, the same contour, every note a major third up (C minor to E
+    /// natural minor).
+    #[test]
+    fn the_riff_keeps_its_rhythm_and_contour() {
+        let p = riff_phrase();
+        let sounding: Vec<(usize, u8)> = PLANNER_RIFF
+            .iter()
+            .enumerate()
+            .filter(|(_, &m)| m != 0)
+            .map(|(i, &m)| (i, m))
+            .collect();
+        assert_eq!(p.len(), sounding.len());
+        for (&(s, _, n), &(i, m)) in p.iter().zip(&sounding) {
+            assert_eq!(s as usize, i);
+            assert_eq!(n, m + 4);
+        }
+        for (w, v) in p.windows(2).zip(sounding.windows(2)) {
+            assert_eq!(
+                (w[1].2 as i32 - w[0].2 as i32).signum(),
+                (v[1].1 as i32 - v[0].1 as i32).signum()
+            );
+        }
     }
 
     #[test]
@@ -1137,12 +1609,16 @@ mod tests {
             (Section::Boot, 6),
             (Section::Describe, 4),
             (Section::Generate, 4),
-            (Section::Generate, 8),
-            (Section::Generate, 12),
+            (Section::Solve, 4),
             (Section::Solve, 8),
+            (Section::Solve, 16),
             (Section::Repair, HEAL_BAR),
+            (Section::Repair, HEAL_BAR + 4),
+            (Section::Repair, HEAL_BAR + 8),
             (Section::Close, 0),
             (Section::Close, 4),
+            (Section::Close, 8),
+            (Section::Close, 12),
         ] {
             assert_eq!(&chords(s)[k..k + 4], &[Em, C, Am, B], "{s:?} bar {k}");
         }

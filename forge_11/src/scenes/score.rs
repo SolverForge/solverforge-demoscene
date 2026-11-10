@@ -74,6 +74,63 @@ pub fn panel(
     f.text(x0 + 24, y0 + 124 + big.h, &clock, S1, PAPER, 0.85);
 }
 
+/// Where one level of the score label sits in the panel (x0, x1, y, h):
+/// "hard" lights the part before the slash, "soft" the part after it.
+pub fn label_span(
+    traj: &[Point],
+    replay: &Replay,
+    idle: Option<&Point>,
+    t: f32,
+    part: &str,
+) -> Option<(f32, f32, f32, f32)> {
+    let (x0, y0, x1, _) = PANEL;
+    let (p, _) = score_at(traj, replay, t).or(idle.map(|p| (p, 9.0)))?;
+    let label = p.score.label();
+    let cw = ((x1 - x0 - 48) / label.len().max(1) as i32).clamp(16, 44);
+    let h = cw * 9 / 5;
+    let slash = label.find('/').unwrap_or(label.len());
+    let (a, b) = if part == "hard" {
+        (0, slash)
+    } else {
+        ((slash + 1).min(label.len()), label.len())
+    };
+    let lx = (x0 + 24) as f32;
+    Some((
+        lx + (a as i32 * cw) as f32,
+        lx + (b as i32 * cw) as f32,
+        (y0 + 56) as f32,
+        h as f32,
+    ))
+}
+
+/// A light running along one level of the score, once a beat, while the
+/// line about it is read.
+pub fn run_light(f: &mut Frame, span: (f32, f32, f32, f32), rgb: u32, t: f32, k: f32) {
+    if k <= 0.0 {
+        return;
+    }
+    let (x0, x1, y, h) = span;
+    let u = (t / crate::timeline::BEAT).fract();
+    let x = x0 + (x1 - x0) * u;
+    f.glow(x, y + h * 0.5, h * 1.4, rgb, 0.5 * k);
+    f.rect(
+        x0 as i32,
+        (y + h + 6.0) as i32,
+        x as i32,
+        (y + h + 10.0) as i32,
+        rgb,
+        0.9 * k,
+    );
+    let pulse = crate::timeline::beat_pulse(t, 5.0);
+    f.glow(
+        (x0 + x1) * 0.5,
+        y + h * 0.5,
+        (x1 - x0) * 0.6,
+        rgb,
+        0.2 * k * pulse,
+    );
+}
+
 /// The trajectory so far: hard in red turning lime at zero, soft in amber,
 /// each level normalised to its own range, on the replay's log clock.
 pub fn chart(f: &mut Frame, traj: &[Point], replay: &Replay, t: f32, c: &Chart, a: f32) {

@@ -202,16 +202,16 @@ pub enum Spot {
     /// A section's large title, then the line under it.
     Title,
     Caption,
-    /// Panel headers (prompt terminal, agent transcript).
+    /// Panel headers (the prompt terminal's; the transcript's is a glance).
     Header,
     /// The prompt as it types: watched, not read word by word.
     Prompt,
-    /// A run of tool calls scrolling in the transcript: a glance.
+    /// GENERATE's texture (glances, never reads): the transcript
+    /// scrolling past, each code excerpt struck on the anvil, and the repo
+    /// assembling from the struck code.
     Log,
-    /// Something the agent said, held in the transcript.
-    Say,
-    /// A code excerpt's title (with its path and count).
     Excerpt,
+    Repo,
     /// The run command typed in SOLVE.
     Command,
     /// FEASIBLE / PLAN HEALED over the board.
@@ -242,6 +242,71 @@ pub struct Read {
 impl Read {
     pub fn to(&self) -> f32 {
         self.from + self.len
+    }
+}
+
+/// Texture: text put on screen to be seen, not read -- the agent's
+/// transcript scrolling past, code struck on the anvil, the repo as it
+/// assembles. Nobody reads generated code at demo speed, so a glance has
+/// no reading time; in exchange it never shares the screen with a read
+/// (`one_text_is_read_at_a_time` pins both).
+#[derive(Clone, Debug)]
+pub struct Glance {
+    pub spot: Spot,
+    pub text: String,
+    pub from: f32,
+    pub len: f32,
+}
+
+impl Glance {
+    pub fn to(&self) -> f32 {
+        self.from + self.len
+    }
+}
+
+/// The breakdown, from the strike to Cordelia's fire: something happens
+/// at least every two seconds, and each line is read while the picture
+/// shows what it says.
+#[derive(Clone, Debug)]
+pub struct Breakdown {
+    /// The lines read about it (text, from, to); the first lands with the
+    /// strike.
+    pub lines: Vec<(String, f32, f32)>,
+    /// The alarm sweeps the broken bus's row.
+    pub sweep: f32,
+    /// The urgent job materialises, as the line that names it is read.
+    pub spawn: f32,
+    /// It drops at a slot inside its deadline and bounces off: (drop,
+    /// impact), twice.
+    pub tries: [(f32, f32); 2],
+    /// It hangs over the board, hot, while the jobs that will move tremble.
+    pub hover: f32,
+    /// The change leaves the board for the running app, and arrives
+    /// (Cordelia tears in on the arrival).
+    pub signal: f32,
+    pub arrive: f32,
+    /// The day the repair is due, from the capture.
+    pub due_day: Option<i64>,
+}
+
+impl Breakdown {
+    /// How long a drop at a slot takes to hit.
+    pub const DROP: f32 = 0.8;
+    /// The alarm's sweep across the row.
+    pub const SWEEP: f32 = 1.2;
+
+    /// Every moment something new happens, strike to fire.
+    pub fn beats(&self, p: &Performance) -> Vec<f32> {
+        let mut v = vec![self.lines.first().map_or(self.sweep, |l| l.1), self.sweep];
+        v.push(self.sweep + Self::SWEEP);
+        v.push(self.spawn);
+        for (drop, hit) in self.tries {
+            v.extend([drop, hit]);
+        }
+        v.extend([self.hover, self.signal, self.arrive]);
+        v.extend([p.enter, p.charge, p.build, p.ignite, p.fire]);
+        v.sort_by(f32::total_cmp);
+        v
     }
 }
 
@@ -388,6 +453,12 @@ pub struct Script {
     pub improvements: Vec<(f32, f32)>,
     /// Every text the viewer reads, one at a time.
     pub reads: Vec<Read>,
+    /// Texture: text that is seen, not read (never during a read).
+    pub glances: Vec<Glance>,
+    /// GENERATE: the struck code assembles into the repo.
+    pub assemble: (f32, f32),
+    /// REPAIR: strike to fire.
+    pub breakdown: Breakdown,
 }
 
 /// The prompt's cell size: the largest that fits the terminal, else a
@@ -564,10 +635,11 @@ impl Script {
             dur: (per * STEP).clamp(0.03, 0.2),
         };
 
-        // GENERATE: the transcript's header; tool calls scroll in as a
-        // glance; what the agent says is held for reading; after "the
-        // constraint bodies", the excerpts land one at a time on the beat
-        // while the transcript stands still.
+        // GENERATE: the title and its line are the only reads. Then the
+        // forge runs flat out as texture: the transcript scrolls up to "the
+        // constraint bodies", every excerpt is struck on the anvil two
+        // beats apart while the rest of the transcript races past, and the
+        // struck code rains into the repo.
         let g_in = intro(
             &mut reads,
             &mut captions,
@@ -577,59 +649,54 @@ impl Script {
             "02 GENERATE",
         );
         let log_head = g_in;
-        let mut at = reads.add(Spot::Header, LOG_HEADER, log_head, need(LOG_HEADER), 0.0);
-        let mut steps = vec![0.0; c.steps.len()];
-        let mut code = Vec::new();
-        // The excerpts follow the first thing the agent says after it has
-        // started writing (or the end of the transcript).
+        let mut glances = Vec::new();
+        let n = c.steps.len();
+        let mut steps = vec![0.0; n];
         let code_after = c
             .steps
             .iter()
             .position(|s| s.kind == "say" && s.text.to_lowercase().contains("constraint"))
             .or_else(|| c.steps.iter().position(|s| s.kind == "file"))
-            .unwrap_or(c.steps.len().saturating_sub(1));
-        let place_code = |reads: &mut Reads, code: &mut Vec<(f32, f32)>, mut at: f32| -> f32 {
-            for x in &c.code {
-                let start = beat_up(at.max(reads.end()));
-                let n = need(&x.title) + 0.6;
-                let end = beat_up(start + n.max(2.0 + 0.15 * x.lines.len() as f32));
-                reads.add(Spot::Excerpt, &x.title, start, n, end - start);
-                code.push((start, end));
-                at = end;
-            }
-            at
-        };
-        let mut i = 0;
-        while i < c.steps.len() {
-            if c.steps[i].kind == "say" {
-                let line = say_line(&c.steps[i].text);
-                steps[i] = at.max(reads.end());
-                at = reads.add(Spot::Say, &line, steps[i], need(&line), 0.0);
-                if i == code_after {
-                    at = place_code(&mut reads, &mut code, at);
-                }
-                i += 1;
-                continue;
-            }
-            // A run of tool calls and files: a quarter second each, then a
-            // second to take the burst in.
-            let j = (i..c.steps.len())
-                .find(|&j| c.steps[j].kind == "say")
-                .unwrap_or(c.steps.len());
-            let from = at.max(reads.end());
-            for (k, s) in steps.iter_mut().enumerate().take(j).skip(i) {
-                *s = from + (k - i) as f32 * 0.25;
-            }
-            let len = (j - i) as f32 * 0.25 + 1.0;
-            at = reads.add(Spot::Log, &c.steps[j - 1].text, from, len, len);
-            if code_after >= i && code_after < j {
-                at = place_code(&mut reads, &mut code, at);
-            }
-            i = j;
+            .unwrap_or(n.saturating_sub(1))
+            .min(n.saturating_sub(1));
+        for (k, s) in steps.iter_mut().enumerate().take(code_after + 1) {
+            *s = g_in + 0.1 + k as f32 * SCROLL;
         }
-        if code.is_empty() {
-            place_code(&mut reads, &mut code, at);
+        let burst_end = steps.get(code_after).map_or(g_in, |t| t + 0.3);
+        glances.push(Glance {
+            spot: Spot::Log,
+            text: LOG_HEADER.to_string(),
+            from: g_in,
+            len: burst_end - g_in,
+        });
+        let first = beat_up(burst_end);
+        let code: Vec<(f32, f32)> = (0..c.code.len())
+            .map(|i| {
+                let a = first + i as f32 * STRIKE;
+                (a, a + STRIKE)
+            })
+            .collect();
+        let code_end = first + c.code.len() as f32 * STRIKE;
+        for ((a, b), x) in code.iter().zip(&c.code) {
+            glances.push(Glance {
+                spot: Spot::Excerpt,
+                text: x.title.clone(),
+                from: *a,
+                len: b - a,
+            });
         }
+        let rest = n - (code_after + 1).min(n);
+        for (j, s) in steps.iter_mut().enumerate().skip(code_after + 1) {
+            let k = (j - code_after - 1) as f32 / rest.max(1) as f32;
+            *s = first + 0.25 + k * (code_end - first - 0.5).max(0.0);
+        }
+        let assemble = (code_end, code_end + ASSEMBLE);
+        glances.push(Glance {
+            spot: Spot::Repo,
+            text: repo_paths(c).join(" "),
+            from: assemble.0,
+            len: ASSEMBLE,
+        });
 
         // SOLVE: the command; the board and its axes; the score panel and
         // what red means; then the run alone; FEASIBLE, read while the
@@ -724,8 +791,15 @@ impl Script {
             need("LIVE PLAN"),
             event - r_in,
         );
-        let label = &c.repair.label;
-        let ev_end = reads.add(Spot::Event, label, event, need(label) + 0.7, 0.0);
+        // The breakdown in short lines, each read alone: what broke lands
+        // with the strike, what it needs with the urgent job appearing.
+        let mut lines = Vec::new();
+        let mut ev_end = event;
+        for l in story::event_lines(&c.repair.label) {
+            let from = ev_end.max(reads.end());
+            ev_end = reads.add(Spot::Event, &l, from, need(&l), 0.0);
+            lines.push((l, from, ev_end));
+        }
         let tell = story::template(Cap::Tell).to_string();
         let tell_to = caption(
             &mut reads,
@@ -733,12 +807,28 @@ impl Script {
             Cap::Tell,
             tell,
             Place::Lower,
-            beat_up(ev_end),
+            ev_end,
         );
-        // The fire lands on a bar line after the line is read, at least
-        // two bars after the event (Cordelia charges for two bars).
-        let fire = bar_up(tell_to.max(event + 3.0 * BAR));
+        // The fire lands on the bar line the depot's line ends on (or the
+        // next); Cordelia tears in two bars before it, as the change
+        // reaches the app.
+        let fire = bar_up(tell_to.max(event + 2.0 * BAR));
         let enter = fire - 2.0 * BAR;
+        let spawn = lines.get(1).map_or(event + 1.5, |l| l.1);
+        let tries = [
+            (spawn + 0.5, spawn + 0.5 + Breakdown::DROP),
+            (spawn + 1.7, spawn + 1.7 + Breakdown::DROP),
+        ];
+        let breakdown = Breakdown {
+            lines,
+            sweep: event + 0.15,
+            spawn,
+            tries,
+            hover: tries[1].1 + 0.4,
+            signal: enter - 1.0,
+            arrive: enter,
+            due_day: story::due_day(&c.repair.label),
+        };
         let origin = c
             .repair
             .solve
@@ -803,7 +893,8 @@ impl Script {
             Cap::Moved,
             moved,
             Place::Lower,
-            beat_up(repair.end().max(exit + super_out())),
+            // On a bar line: the music leaves the climax on this downbeat.
+            bar_up(repair.end().max(exit + super_out())),
         );
         let mut at = moved_to;
         let mut recap = Vec::new();
@@ -903,8 +994,29 @@ impl Script {
             cordelia,
             improvements,
             reads: reads.0,
+            glances,
+            assemble,
+            breakdown,
         }
     }
+}
+
+/// GENERATE: a transcript step every tenth of a second.
+const SCROLL: f32 = 0.1;
+/// GENERATE: an excerpt struck every two beats.
+pub const STRIKE: f32 = 2.0 * BEAT;
+/// GENERATE: the struck code rains into the repo for four beats.
+const ASSEMBLE: f32 = 4.0 * BEAT;
+
+/// The files the struck code lands in, in order, each once.
+pub fn repo_paths(c: &Capture) -> Vec<String> {
+    let mut v: Vec<String> = Vec::new();
+    for x in &c.code {
+        if !v.contains(&x.path) {
+            v.push(x.path.clone());
+        }
+    }
+    v
 }
 
 /// How long Cordelia takes to tear out.
@@ -924,18 +1036,55 @@ impl Script {
             .find(|(s, _)| *s == sec)
             .map_or(span(sec).0, |(_, t)| *t)
     }
+}
 
-    /// 0..1: how much a text of this kind holds the viewer's eyes at t,
-    /// easing in and out over a quarter second (for dimming the rest).
-    pub fn spot_gain(&self, t: f32, spot: Spot) -> f32 {
-        self.reads
-            .iter()
-            .filter(|r| r.spot == spot)
-            .map(|r| {
-                crate::gfx::smooth((t - r.from + 0.25) / 0.25)
-                    * (1.0 - crate::gfx::smooth((t - r.to()) / 0.25))
-            })
-            .fold(0.0, f32::max)
+impl Script {
+    /// Every stretch where the picture is purposefully animated (what the
+    /// scenes draw from these same times): with the reads and glances it
+    /// must cover the whole video, so nothing sits static with nothing new
+    /// to read (`no_dead_air` pins it).
+    pub fn beats(&self) -> Vec<(f32, f32, &'static str)> {
+        let mut v = Vec::new();
+        let (_, boot_end) = span(Section::Boot);
+        v.push((0.0, boot_end, "flight"));
+        if let (Some(a), Some(z)) = (self.typing.words.first(), self.typing.words.last()) {
+            v.push((a.0, z.0 + self.typing.dur, "typing"));
+        }
+        for &(_, b0, _) in crate::timeline::SECTIONS.iter().skip(1) {
+            v.push((b0 * BAR - 0.5, b0 * BAR + BEAT, "cut"));
+        }
+        for &(_, end) in &self.intros {
+            v.push((end, end + 0.45, "raster"));
+        }
+        v.push((self.log_head, self.assemble.1, "forge"));
+        v.push((self.cmd, self.cmd + 1.2, "command"));
+        v.push((self.axes, self.panel_at, "axes"));
+        v.push((self.solve.from, self.solve.end(), "run"));
+        v.push((self.breakdown.sweep - 0.15, self.cordelia.fire, "breakdown"));
+        v.push((self.repair.from, self.repair.end(), "heal"));
+        v.push((
+            self.cordelia.enter,
+            self.cordelia.exit + super_out(),
+            "cordelia",
+        ));
+        for r in &self.recap {
+            v.push((r.at, r.at + r.len, "recap"));
+        }
+        for c in &self.captions {
+            match c.cap {
+                Cap::Moved => v.push((c.from, c.to, "moved")),
+                Cap::Done => v.push((c.from, c.to, "week")),
+                Cap::Score | Cap::Cost => v.push((c.from, c.to, "score")),
+                _ => {}
+            }
+        }
+        v.push((self.logo, self.logo + 1.4, "logo"));
+        v.push((
+            crate::timeline::DURATION - 1.2,
+            crate::timeline::DURATION,
+            "fade",
+        ));
+        v
     }
 }
 
@@ -1082,6 +1231,20 @@ mod tests {
                 }
                 assert!(r.to() <= crate::timeline::DURATION);
             }
+            // Glances are texture: no reading time, never during a read.
+            for g in &s.glances {
+                assert!(matches!(g.spot, Spot::Log | Spot::Excerpt | Spot::Repo));
+                for r in &v {
+                    assert!(
+                        g.to() <= r.from + 1e-3 || g.from >= r.to() - 1e-3,
+                        "glance {:?} ({:.2}..{:.2}) during read {:?}",
+                        g.spot,
+                        g.from,
+                        g.to(),
+                        r.text
+                    );
+                }
+            }
             for cap in &s.captions {
                 assert!(
                     v.iter().any(|r| r.text == cap.text
@@ -1098,6 +1261,12 @@ mod tests {
                     .iter()
                     .filter(|r| r.from >= a && r.from < b)
                     .map(|r| r.to())
+                    .chain(
+                        s.glances
+                            .iter()
+                            .filter(|g| g.from >= a && g.from < b)
+                            .map(|g| g.to()),
+                    )
                     .fold(a, f32::max);
                 // The placeholder's synthetic transcript is wordier than the
                 // real one; it only previews layouts, so only the release
@@ -1105,6 +1274,105 @@ mod tests {
                 if c.is_release() {
                     assert!(last <= b + 1e-3, "{sec:?} overruns");
                     assert!(b - last <= 2.0 * BAR + 1.6, "{sec:?} pads {:.1}s", b - last);
+                }
+            }
+        }
+    }
+
+    /// GENERATE is short and only its title and line are read: the code
+    /// and the transcript are texture, struck and scrolled on the beat.
+    #[test]
+    fn generate_is_a_short_burst() {
+        for c in all() {
+            let s = Script::new(&c);
+            let (a, b) = span(Section::Generate);
+            let read: Vec<&Read> = s
+                .reads
+                .iter()
+                .filter(|r| r.from >= a && r.from < b)
+                .collect();
+            assert_eq!(
+                read.len(),
+                2,
+                "{:?}",
+                read.iter().map(|r| &r.text).collect::<Vec<_>>()
+            );
+            assert!(read
+                .iter()
+                .all(|r| matches!(r.spot, Spot::Title | Spot::Caption)));
+            if c.is_release() {
+                assert!(
+                    (15.0..=20.0).contains(&(b - a)),
+                    "GENERATE runs {:.1}s",
+                    b - a
+                );
+            }
+            for &(x, y) in &s.code {
+                assert!((y - x - STRIKE).abs() < 1e-3);
+                let off = (x / BEAT - (x / BEAT).round()).abs();
+                assert!(off < 1e-3, "strike {x} off the beat");
+            }
+        }
+    }
+
+    /// Nothing sits static with nothing new to read: every moment is a
+    /// read, a glance or an animated beat, with no hole longer than 2 s.
+    #[test]
+    fn no_dead_air() {
+        // Section lengths are cut to the release capture (the placeholder
+        // has fewer excerpts and finishes GENERATE early).
+        for c in all().into_iter().filter(Capture::is_release) {
+            let s = Script::new(&c);
+            let mut v: Vec<(f32, f32)> = s.reads.iter().map(|r| (r.from, r.to())).collect();
+            v.extend(s.glances.iter().map(|g| (g.from, g.to())));
+            v.extend(s.beats().iter().map(|b| (b.0, b.1)));
+            v.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let mut covered = 0.0f32;
+            for (a, b) in v {
+                assert!(
+                    a - covered <= 2.0 + 1e-3,
+                    "dead air {covered:.2}..{a:.2} ({:.2}s)",
+                    a - covered
+                );
+                covered = covered.max(b);
+            }
+            assert!(covered >= crate::timeline::DURATION - 1e-3);
+        }
+    }
+
+    /// Strike to fire: the first line lands with the strike, the urgent job
+    /// appears with the line that names it, something new happens at least
+    /// every two seconds, and the fire is a bar line two bars after
+    /// Cordelia's entrance, which is the change reaching the app.
+    #[test]
+    fn the_breakdown_never_stands_still() {
+        for c in all() {
+            let s = Script::new(&c);
+            let b = &s.breakdown;
+            let p = s.cordelia;
+            assert!((b.lines[0].1 - s.event).abs() < 1e-3);
+            if let Some(l) = b.lines.get(1) {
+                assert!((l.1 - b.spawn).abs() < 1e-3);
+            }
+            assert!((b.arrive - p.enter).abs() < 1e-3);
+            let beats = b.beats(&p);
+            for w in beats.windows(2) {
+                assert!(
+                    w[1] - w[0] <= 2.0 + 1e-3,
+                    "nothing new {:.2}..{:.2}",
+                    w[0],
+                    w[1]
+                );
+            }
+            assert!(beats[0] <= s.event + 0.2);
+            assert!((beats.last().unwrap() - p.fire).abs() < 1e-3);
+            if c.is_release() {
+                // Tight: twelve seconds from the strike to the fire, and
+                // nothing read is held past what it needs.
+                assert!(p.fire - s.event <= 12.0 + 1e-3, "{:.1}s", p.fire - s.event);
+                for r in s.reads.iter().filter(|r| r.spot == Spot::Event) {
+                    assert!(r.len <= r.need + 1e-3);
+                    assert!(r.text.len() <= 50, "{}", r.text);
                 }
             }
         }

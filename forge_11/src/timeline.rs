@@ -27,13 +27,13 @@ pub enum Section {
 pub const SECTIONS: [(Section, f32, f32); 6] = [
     (Section::Boot, 0.0, 10.0),
     (Section::Describe, 10.0, 22.0),
-    (Section::Generate, 22.0, 50.0),
-    (Section::Solve, 50.0, 72.0),
-    (Section::Repair, 72.0, 107.0),
-    (Section::Close, 107.0, 128.0),
+    (Section::Generate, 22.0, 31.0),
+    (Section::Solve, 31.0, 53.0),
+    (Section::Repair, 53.0, 86.0),
+    (Section::Close, 86.0, 106.0),
 ];
 
-pub const TOTAL_BARS: f32 = 128.0;
+pub const TOTAL_BARS: f32 = 106.0;
 pub const DURATION: f32 = TOTAL_BARS * BAR;
 
 pub const fn bars(b: f32) -> f32 {

@@ -53,10 +53,7 @@ pub const CAPTIONS: &[(Cap, &str)] = &[
         "Then, with the plan already running, a bus breaks down.",
     ),
     (Cap::Live, "This is the week as it runs."),
-    (
-        Cap::Tell,
-        "The depot tells the app, and the plan adjusts as it runs.",
-    ),
+    (Cap::Tell, "The depot sends it to the running app."),
     (
         Cap::Moved,
         "{changed} jobs move to make room for {bus}'s repair; the other {unchanged} stay put.",
@@ -75,6 +72,45 @@ pub const CAPTIONS: &[(Cap, &str)] = &[
         "They choose when to upgrade, so nothing shifts behind their back.",
     ),
 ];
+
+/// The breakdown's second line: what the broken bus needs, and by when
+/// (`{skill}` and `{day}` come from the capture's event label).
+pub const EVENT_NEED: &str = "It needs urgent {skill} repair by day {day}.";
+
+/// The breakdown as short lines read one after the other, from the
+/// capture's event label ("Bus 05 breaks down in service: it needs an
+/// urgent electrical repair, parts on hand from day 1, back by day 2"):
+/// what happened, then what it needs and by when. A label without that
+/// shape is read as one line.
+pub fn event_lines(label: &str) -> Vec<String> {
+    let (what, rest) = label
+        .split_once(':')
+        .map_or((label.trim(), ""), |(a, b)| (a.trim(), b.trim()));
+    let skill = rest
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .find(|w| w[1].trim_end_matches(',') == "repair")
+        .map(|w| w[0].to_string());
+    match (skill, due_day(label)) {
+        (Some(skill), Some(day)) => vec![
+            format!("{}.", what.trim_end_matches('.')),
+            fill(EVENT_NEED, &[("skill", skill), ("day", day.to_string())]),
+        ],
+        _ => vec![format!("{}.", label.trim().trim_end_matches('.'))],
+    }
+}
+
+/// The day a breakdown's repair is due, from "by day N" in its label.
+pub fn due_day(label: &str) -> Option<i64> {
+    let i = label.find("by day ")?;
+    label[i + 7..]
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect::<String>()
+        .parse()
+        .ok()
+}
 
 /// The caption template for a moment.
 pub fn template(cap: Cap) -> &'static str {
@@ -157,7 +193,8 @@ mod tests {
             "your ",
         ];
         // A narrator, not a persona: no first person.
-        for (cap, s) in CAPTIONS {
+        let extra = [(Cap::Live, EVENT_NEED)];
+        for (cap, s) in CAPTIONS.iter().chain(extra.iter()) {
             assert!(s.is_ascii(), "{cap:?}");
             assert!(!s.contains('\u{2014}') && !s.contains(" - "), "{cap:?}");
             assert!(!s.contains('?'), "{cap:?} asks a rhetorical question");
@@ -176,6 +213,26 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_breakdown_reads_as_two_short_lines() {
+        let l = event_lines(
+            "Bus 05 breaks down in service: it needs an urgent electrical repair, \
+             parts on hand from day 1, back by day 2",
+        );
+        assert_eq!(
+            l,
+            [
+                "Bus 05 breaks down in service.",
+                "It needs urgent electrical repair by day 2."
+            ]
+        );
+        assert_eq!(
+            event_lines("PH-TECH-C calls in sick"),
+            ["PH-TECH-C calls in sick."]
+        );
+        assert_eq!(due_day("x, back by day 2"), Some(2));
     }
 
     #[test]

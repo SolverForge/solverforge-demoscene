@@ -341,3 +341,80 @@ pub fn raster_sweep(f: &mut Frame, p: f32, rgb: u32) {
     }
     add_row(f, y, 0, W as i32, 0xffffff, 0.8 * (1.0 - p));
 }
+
+/// The camera: zoom the finished frame by `zoom` about (cx, cy) and shift
+/// it by (dx, dy) pixels. A punch-in on a hit is a short zoom that decays;
+/// a shake is a decaying shift. Edges clamp, so nothing black shows.
+pub fn camera(f: &mut Frame, cx: f32, cy: f32, zoom: f32, dx: f32, dy: f32) {
+    if (zoom - 1.0).abs() < 1e-3 && dx.abs() < 0.5 && dy.abs() < 0.5 {
+        return;
+    }
+    let src = f.px.clone();
+    let inv = 1.0 / zoom.max(0.5);
+    let xs: Vec<usize> = (0..W)
+        .map(|x| ((cx + (x as f32 - dx - cx) * inv) as i32).clamp(0, W as i32 - 1) as usize)
+        .collect();
+    for y in 0..H {
+        let sy = ((cy + (y as f32 - dy - cy) * inv) as i32).clamp(0, H as i32 - 1) as usize;
+        let row = &src[sy * W..(sy + 1) * W];
+        let out = &mut f.px[y * W..(y + 1) * W];
+        for (o, &sx) in out.iter_mut().zip(&xs) {
+            *o = row[sx];
+        }
+    }
+}
+
+/// Heat shimmer: the rows of a rectangle wobble sideways, as over a forge.
+pub fn shimmer(f: &mut Frame, x0: i32, y0: i32, x1: i32, y1: i32, t: f32, amp: f32) {
+    if amp < 0.3 {
+        return;
+    }
+    let (x0, x1) = (x0.max(0) as usize, x1.min(W as i32) as usize);
+    let mut row = vec![0u32; x1.saturating_sub(x0)];
+    for y in y0.max(0)..y1.min(H as i32) {
+        let s = (amp
+            * ((y as f32 * 0.09 + t * 23.0).sin() + 0.5 * (y as f32 * 0.031 - t * 11.0).sin()))
+            as i32;
+        if s == 0 {
+            continue;
+        }
+        let base = y as usize * W;
+        row.copy_from_slice(&f.px[base + x0..base + x1]);
+        for x in x0..x1 {
+            let sx = (x as i32 - s).clamp(x0 as i32, x1 as i32 - 1) as usize;
+            f.px[base + x] = row[sx - x0];
+        }
+    }
+}
+
+/// A shockwave ring of radius `r`, `w` pixels thick.
+pub fn ring(f: &mut Frame, cx: f32, cy: f32, r: f32, w: f32, rgb: u32, k: f32) {
+    if k <= 0.01 || r <= 1.0 {
+        return;
+    }
+    let n = ((r * 0.35) as usize).clamp(24, 160);
+    for i in 0..n {
+        let a0 = i as f32 / n as f32 * TAU;
+        let a1 = (i + 1) as f32 / n as f32 * TAU;
+        f.line(
+            (cx + a0.cos() * r, cy + a0.sin() * r * 0.8),
+            (cx + a1.cos() * r, cy + a1.sin() * r * 0.8),
+            w,
+            rgb,
+            k,
+        );
+    }
+}
+
+/// A horizontal copper accent: one bright bar across x0..x1 at y.
+pub fn accent_bar(f: &mut Frame, x0: i32, x1: i32, y: f32, rgb: u32, k: f32) {
+    if k <= 0.01 {
+        return;
+    }
+    let half = 14;
+    for dy in -half..=half {
+        let v = 1.0 - (dy as f32 / half as f32).abs();
+        let c = ramp(&[0x000000, rgb, rgb, 0xffffff], v);
+        add_row(f, y as i32 + dy, x0, x1, c, k * v.powf(0.6) * 0.8);
+    }
+}

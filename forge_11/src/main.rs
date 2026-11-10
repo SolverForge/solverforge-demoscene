@@ -160,6 +160,24 @@ fn print_cues(cap: &Capture) {
     println!("cordelia {:?}", s.cordelia);
     println!("recap {:?}", s.recap);
     println!("close {:?} logo {:.2}", s.close, s.logo);
+    let b = &s.breakdown;
+    println!(
+        "breakdown sweep {:.2} spawn {:.2} tries {:?} hover {:.2} signal {:.2} arrive {:.2} due {:?}",
+        b.sweep, b.spawn, b.tries, b.hover, b.signal, b.arrive, b.due_day
+    );
+    for g in &s.glances {
+        println!(
+            "glance {:7.2}..{:7.2} {:?}: {}",
+            g.from,
+            g.to(),
+            g.spot,
+            g.text.chars().take(60).collect::<String>()
+        );
+    }
+    for (a, z, what) in s.beats() {
+        println!("beat {a:7.2}..{z:7.2} {what}");
+    }
+    println!("breakdown beats {:?}", round(&b.beats(&s.cordelia)));
     for r in &s.reads {
         println!(
             "read {:7.2}..{:7.2} ({:5.2}/{:5.2}) {:?}: {}",
