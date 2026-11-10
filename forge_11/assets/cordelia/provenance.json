@@ -19,6 +19,27 @@
   "embedded": "each <name>.ppm is the <name>.png resized to 680x562 with ImageMagick: magick <name>.png -resize 680x562! -depth 8 PPM:<name>.ppm",
   "eye_anchors_ppm_px": "[left, right] iris centres in the 680x562 PPM, measured on the pixels (brightest emerald cluster + magnified check)",
   "frames": {
+    "narrow": {
+      "png": "narrow.png",
+      "png_sha256": "14a0c4446f55b5712bf268d9c833b1ba8422be580a84d9752f3e1391869d7cd7",
+      "ppm": "narrow.ppm",
+      "ppm_sha256": "d8f2250d2ce2b90ad93bfb74d849d24843f4b8e5c35d9387a2ed21f8fb22ea91",
+      "request_id": "b6779e14-493a-4d37-8d27-0d6b77a2ba8a",
+      "prompt": "Edit the FIRST image (approved SolverForge DARK MODE illustration of CORDELIA, DEFIANCE expression) into an animation keyframe. KEEP EVERYTHING IDENTICAL: same framing and composition, same over-shoulder head turn, same face, same silver-gray high sweeping ponytail with black geometric cyan-seamed hair clips, same black circuit collar, same black leather moto jacket with emerald facet, same engraved ink hatching and semi-realistic anime rendering on the deep emerald-black ground (#07110e) with faint jade circuit-line graphics. Second reference is Cordelia's expression atlas for identity only. KEYFRAME 'NARROW': she has just spotted the problem: eyes NARROWED to a focused squint, brows drawn down and together, lips pressed in a thin determined line; a faint emerald glint has just appeared deep in each pupil, no glow on the skin yet. No beams, no rays. No text, no letters, no logo, no other characters, no red eyes.",
+      "eyes": [
+        [
+          437,
+          343
+        ],
+        [
+          509,
+          370
+        ]
+      ],
+      "generated": "2026-11-10",
+      "tool_output_file": "openai_codex_gpt-image-2-medium_20261110_145203_cfe1a72d.png",
+      "returned_size": "1380x1140"
+    },
     "charge": {
       "png": "charge.png",
       "png_sha256": "dc64f83e6f3427b2b4c08076861fa46cf36a7b6e179b3bfc68629b91e2a0a0c3",
@@ -36,6 +57,27 @@
           371
         ]
       ]
+    },
+    "build": {
+      "png": "build.png",
+      "png_sha256": "bbe65172730cae04d2ccd52907ab91d978e67b71de9ae704bb9f8f3f7db9c713",
+      "ppm": "build.ppm",
+      "ppm_sha256": "3d8d14076a11c0aa94244996c7b9c85a4ba2db69c5c1ab4a7e681e7305110ebb",
+      "request_id": "dd41de58-c3dc-4377-ac83-ea0f21878090",
+      "prompt": "Edit the FIRST image (approved SolverForge DARK MODE illustration of CORDELIA, DEFIANCE expression) into an animation keyframe. KEEP EVERYTHING IDENTICAL: same framing and composition, same over-shoulder head turn, same face, same silver-gray high sweeping ponytail with black geometric cyan-seamed hair clips, same black circuit collar, same black leather moto jacket with emerald facet, same engraved ink hatching and semi-realistic anime rendering on the deep emerald-black ground (#07110e) with faint jade circuit-line graphics. Second reference is Cordelia's expression atlas for identity only. KEYFRAME 'BUILD': the charge is building: brows lowered hard, eye contact locked, jaw set; both irises glow a strong EMERALD-MINT, brighter than a glint but not yet white-hot, a soft green light rim on the lids, lashes and upper cheek, a few hair strands catching green light. No beams, no rays, no streaks. No text, no letters, no logo, no other characters, no red.",
+      "eyes": [
+        [
+          434,
+          346
+        ],
+        [
+          513,
+          370
+        ]
+      ],
+      "generated": "2026-11-10",
+      "tool_output_file": "openai_codex_gpt-image-2-medium_20261110_145202_ba69dc3b.png",
+      "returned_size": "1380x1140"
     },
     "ignite": {
       "png": "ignite.png",
@@ -57,21 +99,60 @@
     },
     "fire": {
       "png": "fire.png",
-      "png_sha256": "604684a8f54e2f0705ee30cd8ad65a1dd8349baac8846da0288c6f00732ba186",
+      "png_sha256": "1758ea9e16657e72deb5c3d72098d8a2292395c757ef9ba3de8d0e189f6525d9",
       "ppm": "fire.ppm",
-      "ppm_sha256": "854b70e636de2342dc9255f27faa3783cfc85418b67ce5cf0c3b9e4ba2763ffd",
-      "request_id": "1b2096c4-0d3f-4eb3-b225-653cf3202aec",
-      "prompt": "Edit the FIRST image (approved SolverForge DARK MODE illustration of CORDELIA, DEFIANCE expression) into an animation keyframe. KEEP EVERYTHING IDENTICAL: same framing and composition, same over-shoulder head turn, same face, same silver-gray high sweeping ponytail with black geometric cyan-seamed hair clips, same black circuit collar, same black leather moto jacket with emerald facet, same engraved ink hatching and semi-realistic anime rendering on the deep emerald-black ground (#07110e) with faint jade circuit-line graphics. Second reference is Cordelia's expression atlas for identity only. KEYFRAME 3 'FIRE': fierce defiance, brows down, mouth parted in a challenge; from BOTH eyes two straight intense laser beams fire toward the RIGHT edge of the frame, white-hot cores with emerald-mint glow, bright flare at each eye, light spilling emerald onto her cheek, nose and hair strands, wind-blown fringe. No text, no letters, no logo, no other characters, no red.",
+      "ppm_sha256": "848243969c763b192b245d439967b6e286531508f3744266deca1cca65f2b748",
+      "request_id": "a5321cd1-520a-4efc-8b3d-7b81d7a50d23",
+      "prompt": "Edit the FIRST image (approved SolverForge DARK MODE illustration of CORDELIA, DEFIANCE expression) into an animation keyframe. KEEP EVERYTHING IDENTICAL: same framing and composition, same over-shoulder head turn, same face, same silver-gray high sweeping ponytail with black geometric cyan-seamed hair clips, same black circuit collar, same black leather moto jacket with emerald facet, same engraved ink hatching and semi-realistic anime rendering on the deep emerald-black ground (#07110e) with faint jade circuit-line graphics. Second reference is Cordelia's expression atlas for identity only. KEYFRAME 3 'FIRE': fierce defiance at full power, brows down hard, mouth parted in a challenge; both eyes BLAZE at maximum: a blinding WHITE-HOT core in each iris inside a large emerald-mint flare, intense emerald light spilling onto her lids, cheek, nose bridge and the nearest hair strands, wind-blown fringe. NO BEAMS, NO LASER LINES, NO RAYS, NO STREAKS leaving the eyes: the light stays at the eyes only (beams are added later as a separate effect). No text, no letters, no logo, no other characters, no red.",
       "eyes": [
         [
-          446,
-          348
+          440,
+          340
         ],
         [
-          510,
-          371
+          514,
+          363
         ]
-      ]
+      ],
+      "generated": "2026-11-10",
+      "tool_output_file": "openai_codex_gpt-image-2-medium_20261110_145109_71ff7a8e.png",
+      "returned_size": "1380x1140",
+      "replaces": {
+        "reason": "the first fire keyframe had horizontal beams painted into the art, which disagreed with the engine beams angling to their targets; regenerated with glowing eyes only",
+        "request_id": "1b2096c4-0d3f-4eb3-b225-653cf3202aec",
+        "png_sha256": "604684a8f54e2f0705ee30cd8ad65a1dd8349baac8846da0288c6f00732ba186",
+        "prompt": "Edit the FIRST image (approved SolverForge DARK MODE illustration of CORDELIA, DEFIANCE expression) into an animation keyframe. KEEP EVERYTHING IDENTICAL: same framing and composition, same over-shoulder head turn, same face, same silver-gray high sweeping ponytail with black geometric cyan-seamed hair clips, same black circuit collar, same black leather moto jacket with emerald facet, same engraved ink hatching and semi-realistic anime rendering on the deep emerald-black ground (#07110e) with faint jade circuit-line graphics. Second reference is Cordelia's expression atlas for identity only. KEYFRAME 3 'FIRE': fierce defiance, brows down, mouth parted in a challenge; from BOTH eyes two straight intense laser beams fire toward the RIGHT edge of the frame, white-hot cores with emerald-mint glow, bright flare at each eye, light spilling emerald onto her cheek, nose and hair strands, wind-blown fringe. No text, no letters, no logo, no other characters, no red."
+      }
+    },
+    "smirk": {
+      "png": "smirk.png",
+      "png_sha256": "b8b8c366777435c2c8d0c813717db2ab253c36b84e5a4b30602e7f18384128e3",
+      "ppm": "smirk.ppm",
+      "ppm_sha256": "8c307b4dd16a9f4be98f86e9250a91d71649bc35acf7a08aa7c2f523b3a21d28",
+      "request_id": "6290c294-491a-4d37-8d27-0d6b77a2ba8a",
+      "prompt": "Edit the FIRST image (approved SolverForge DARK MODE illustration of CORDELIA, DEFIANCE expression) into an animation keyframe. KEEP EVERYTHING IDENTICAL: same framing and composition, same over-shoulder head turn, same face, same silver-gray high sweeping ponytail with black geometric cyan-seamed hair clips, same black circuit collar, same black leather moto jacket with emerald facet, same engraved ink hatching and semi-realistic anime rendering on the deep emerald-black ground (#07110e) with faint jade circuit-line graphics. Second reference is Cordelia's expression atlas for identity only. KEYFRAME 'SMIRK': the job is done: a confident one-sided SMIRK, brows relaxed but still defiant, chin very slightly raised in recoil; the eye glow is fading: irises still a soft emerald with a small afterglow, faint wisps of green light dissipating near the eyes, no beams. No text, no letters, no logo, no other characters, no red.",
+      "eyes": [
+        [
+          435,
+          315
+        ],
+        [
+          504,
+          342
+        ]
+      ],
+      "generated": "2026-11-10",
+      "tool_output_file": "openai_codex_gpt-image-2-medium_20261110_145203_2632b7d7.png",
+      "returned_size": "1380x1140"
     }
-  }
+  },
+  "performance_order": [
+    "narrow",
+    "charge",
+    "build",
+    "ignite",
+    "fire",
+    "smirk"
+  ],
+  "verification": "each new frame checked side by side against the edit input at 690x570 (on-model: face, ponytail, clips, collar, jacket, framing); fire checked for any beam/ray/streak leaving the eyes (none); eye anchors measured as the brightest-emerald cluster centroid on the 680x562 PPM for glowing frames, by magnified crop with marker overlay for narrow and smirk"
 }
