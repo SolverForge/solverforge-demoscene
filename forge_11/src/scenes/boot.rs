@@ -28,7 +28,9 @@ const STOPS: &[&str] = &["--final-gradient-stops", "10b981", "50fc00", "e8ffd6"]
 /// The banner lands on bar five; the highlight passes on bar seven and
 /// again on bar ten.
 const BANNER_AT: f32 = bars(2.0);
-const SHINE: [f32; 2] = [bars(4.5), bars(8.0)];
+/// One shine, before the line under the banner is read (a second one
+/// would animate the banner while the line is being read).
+const SHINE: [f32; 1] = [bars(4.5)];
 const SHINE_LEN: f32 = 1.8;
 
 pub struct Boot {
@@ -51,7 +53,7 @@ impl Boot {
     }
 }
 
-pub fn draw(f: &mut Frame, b: &Boot, _s: &Script, t: f32, n: Now) {
+pub fn draw(f: &mut Frame, b: &Boot, s: &Script, t: f32, n: Now) {
     f.gradient(&[0x000000, 0x02080a, 0x041410, 0x000000]);
     // We fly into the stars: only forward, ever faster, warping into the
     // cut. The starfield is driven by distance travelled, the integral of
@@ -97,7 +99,7 @@ pub fn draw(f: &mut Frame, b: &Boot, _s: &Script, t: f32, n: Now) {
 
     // The verbs land on the last bar's four beats, into the first downbeat.
     let y = 610;
-    let verbs_at = n.len - bars(1.0);
+    let verbs_at = s.verbs;
     let gap = 3 * S2.w;
     let total: i32 = VERBS.iter().map(|v| v.len() as i32 * S2.w).sum::<i32>() + gap * 3;
     let mut vx = (W as i32 - total) / 2;

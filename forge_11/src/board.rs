@@ -201,11 +201,6 @@ impl Board {
         }
     }
 
-    /// Jobs that exist only in the repaired plan (the disruption's own).
-    pub fn added(&self) -> usize {
-        self.blocks.iter().filter(|b| b.solved.is_none()).count()
-    }
-
     /// The board's lower edge in pixels.
     pub fn bottom(&self) -> i32 {
         AREA.1 + HEADER_H + (self.row_h * self.techs.len() as f32) as i32

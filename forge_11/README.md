@@ -8,7 +8,7 @@
       ── DESCRIBE, GENERATE, SOLVE, REPAIR // TEXTMODE ──
 ```
 
-A 2:42, 1920x1080, 60 fps demo for SolverForge. It replays one real
+A 4:16, 1920x1080, 60 fps demo for SolverForge. It replays one real
 agent session: a maintenance problem described in plain language, the model a
 coding agent writes for it with the solverforge-modeling skill, the solve on
 the laptop, and a disruption pushed into the running solve. Your model. Your
@@ -51,35 +51,83 @@ breakdown pushed into the running solve as a problem change and healed in
 ## Scenes
 
 The first cut ran 90 seconds, a limit carried over from a hackathon video
-that does not apply here. This cut spends the extra time on comprehension,
-not on more on screen: one idea per moment, each section opened by a line
-that leads on from the last, each caption held for its reading window and no
-longer, so the whole stays brisk.
+that does not apply here; the second ran 2:42. This cut runs 4:16 because it
+asks the viewer to read only one thing at a time (below): every text that
+used to share the screen with another now waits for it, and each still gets
+its full reading time. Comfortable reading wins over length; nothing is
+rushed to save seconds, and nothing is held longer than it needs (a test
+fails if a section ends more than two bars after its last text).
 
 | Bars | Time | Was | Section | What you see |
 |---:|---|---|---|---|
-| 0-10 | 0:00 | 4 s -> 20 s | Boot | Flight into a warp starfield, always forward and gaining speed; copper bars roll in; the SOLVERFORGE banner is beamed in by glyphfx on bar three and held, a glyphfx highlight runs across it on bars five and nine; one line says this is a real session; the four verbs land on the last bar's beats as the stars warp into the cut |
-| 10-20 | 0:20 | 14 s -> 20 s | 01 Describe | Opener; the prompt typed to the coding agent word by word over 11 s (was 10 s, now after the opener explains what it is), domain words lit, its last screen held for 3 s; the plan's buses drive past on the river road |
-| 20-36 | 0:40 | 20 s -> 32 s | 02 Generate | Opener; the agent transcript scrolls; each constraint excerpt is struck on the anvil and held 3-6 s by its length (was 2-5 s), white-hot glyphfx entrance, quench to syntax colours, steam |
-| 36-51 | 1:12 | 16 s -> 30 s | 03 Solve | Opener; the run command; the board's axes introduced (each mechanic's row lit on a beat, then the days); what red means, with the score panel lit and the board dimmed while the run replays; FEASIBLE lands only after that line is read and holds 3.5 s; what the amber number means |
-| 51-68 | 1:42 | 24 s -> 34 s | 04 Repair | Opener; a bar of the live week; the breakdown strikes on a bar line and everything but the broken bus's work steps back; Cordelia's performance (below); PLAN HEALED holds 3.5 s; the change list she covered is lit again as she leaves; what moved, then each change in turn with the rest of the board dimmed; one closing line |
-| 68-81 | 2:16 | 12 s -> 26 s | 05 Close | Three sentences, one at a time, each with its line from the capture; the ouroboros draws itself in the middle of the frame; solverforge.org holds over the final E minor |
+| 0-10 | 0:00 | 20 s -> 20 s | Boot | Flight into a warp starfield, always forward; copper bars roll in; the SOLVERFORGE banner is beamed in on bar three and shines once on bar five; then the line that says this is a real session; then the four verbs land on the beats |
+| 10-22 | 0:20 | 20 s -> 24 s | 01 Describe | Title, then its line; the terminal's header (who, which agent, when) read alone; then the prompt types word by word, domain words lit, its last screen held 3 s. The buses on the river road no longer carry names, so nothing written moves while the prompt is read |
+| 22-50 | 0:44 | 32 s -> 56 s | 02 Generate | Title, line; the transcript header; the tool calls scroll in as one glance; "Now the constraint bodies." is held; then the six excerpts land one at a time while the transcript stands dimmed; then the rest of the transcript, holding what the agent says ("Compiles clean.", "I built the app and ran a real solve.") |
+| 50-72 | 1:40 | 30 s -> 44 s | 03 Solve | Title, line; the run command types alone; the board and its axes with their line; the score panel with what red means; the run replays with no text on screen; FEASIBLE is read while the numbers stand still, then what zero means; the rest of the run; what amber means |
+| 72-107 | 2:24 | 34 s -> 70 s | 04 Repair | Title, line; LIVE PLAN for a bar; the breakdown's own sentence read alone while the board focuses on the broken bus; what the depot does, as Cordelia charges; the fire and the heal with no text; PLAN HEALED read while the numbers stand still; what moved; then each of the five changes replayed (below); the closing line |
+| 107-128 | 3:34 | 26 s -> 42 s | 05 Close | Three sentences, each read alone, then its line from the capture under it; the ouroboros draws itself; solverforge.org holds over the final E minor |
 
-Why each length: every caption is up for `max(demofx::reading_window, 15
-characters a second + 2 s)` and the next thing starts on the beat after it.
-Boot is ten bars because the song's intro needs two bars of pad, four of
-banner and four of hook to build into the first downbeat. Describe types the
-prompt at a pace where the lit domain words can be followed, then moves on.
-Generate gives each excerpt half-bar slots weighted by its line count. Solve
-introduces the board and the score before they move, so the feasible moment
-means something. Repair gives the breakdown a bar alone, Cordelia four bars,
-each reviewed change a bar and a half.
+### The repair recap
 
-Every cut is on a downbeat: a glyph-rain wipe over the last half second, a
-flash, a short scanline tear and copper bars in the new section's colours
-rolling down the frame over the first beat; when an opener hands over to its
-scene a raster line sweeps the frame. The SolverForge mark sits in the
-top-left corner throughout and steps aside for the large logo.
+After the heal every changed job is replayed so the eye can follow it. The
+card lifts off its new slot, reappears at its old one (outlined red, with a
+dotted arc to the new slot outlined white), its label comes up --
+`job-04: Giulia day 3 -> Marco day 3`, straight from the capture's `changed`
+list -- and it travels along the arc and lands with sparks; the rest of the
+board is dimmed. The first three travel for 1.4 s, the last two for 1.0 s;
+each owns the screen for 4-4.5 s so its label is read in full (`Recap` in
+`script.rs`; `every_recap_moves_and_is_read` pins it).
+
+### One text at a time
+
+`Script::reads` is the reading timeline: every text event in the video
+(banner, verbs, section titles and lines, panel headers, the typing prompt,
+transcript glances and sayings, excerpts, the run command, lower thirds,
+stamps, LIVE PLAN, the breakdown, each recap label, the close sentences and
+their lines, the address) with its start, its reading time and its kind. It
+is built in order, each text placed after the previous one ends, needing at
+least 15 characters a second plus a second (captions: their card reading
+window). `one_text_is_read_at_a_time` fails if two reading windows overlap,
+if any text is up for less than it needs, or if a caption on screen is
+missing from the table. Scenes dim the panel that is not being read
+(transcript versus editor; the board under the score line and during the
+recap).
+
+What changed to get there, from the old cut:
+
+- Boot: the banner's second shine ran under the line; it is gone. The verbs
+  waited for the line.
+- Describe: the agent/date line, the header and "> describe the problem in
+  plain language" appeared together with the start of typing; the last
+  repeated the opener and is dropped, the other two are one header read
+  before typing starts. Bus names drove past under the prompt; dropped.
+- Generate: transcript lines typed in while excerpts landed; now they
+  alternate. The agent's last message shows its first sentence (the rest
+  repeats what Solve shows).
+- Solve: the command typed while the axes lit and the board's line came up,
+  and two chips appeared; serialised, chips dropped (the version is in the
+  close). The run ticked while red was explained; it now starts after. The
+  FEASIBLE stamp and "Zero: ..." overlapped; the run pauses on FEASIBLE
+  (`Replay::hold_at`), then the line, then the rest of the run, then amber.
+- Repair: the breakdown, the typed mechanism line and the event kind came up
+  together; the mechanism (code) and the kind are no longer drawn (the
+  mechanism is still required in the capture). The change list, the four
+  counters (CHANGED / UNTOUCHED / ADDED / KEPT RUNNING) and "what moved" all
+  ran during or right after the heal; the counters and list repeated the
+  "what moved" line and the recap labels and are dropped. PLAN HEALED is
+  read while the run pauses.
+- Close: each sentence's capture line came up 1.2 s into the sentence; it
+  now waits until the sentence has been read.
+- Lower thirds and openers settle in 0.3 s instead of 0.5-0.9 s, so reading
+  starts at once; the close keeps its slower effects (counted in its window).
+
+Why each length: everything above, laid end to end, plus the song's bar
+grid (every section starts on a downbeat, the strike on a bar line, the fire
+on the bar after the depot's line).
+
+The SolverForge mark sits in the top-left corner throughout and steps aside
+for the large logo. Every cut is on a downbeat: a glyph-rain wipe, a flash,
+a short tear and copper bars in the new section's colours.
 
 ## Captions
 
@@ -100,15 +148,15 @@ shared by picture and sound; on the real capture:
 
 | Time | Beat |
 |---:|---|
-| 1:50 | the bus breaks down on a bar line: red strike, alarm, band drops to a heartbeat; the board focuses on the broken bus |
-| 1:52 | Cordelia glitches in (row tear, chromatic split) over the score panel's chart, eyes **narrowed** on the problem, as the caption says what happens next |
-| 1:53 | **charge**: the glint becomes a glow (a dissolve on the beat) |
-| 1:54 | **build**: the glow builds |
-| 1:55 | **ignite**: white-hot, star glint, two beats before the bar |
-| 1:56 | the downbeat the repair enters the running solve: **fire** (no beams in the art). The engine's beams sear from her eyes to the board, surging on every beat with the hum: the left holds the breakdown's own job, the right rides each changed job to its new slot; sparks every eighth note |
-| 1:59 | the plan has healed: PLAN HEALED lands |
-| 1:59.5 | beams cut, power-down; she recoils into a **smirk** (glitch accent) |
-| 2:01.5 | she tears out; the change list under her is lit again |
+| 2:34 | the bus breaks down on a bar line: red strike, alarm, band drops to a heartbeat; the board focuses on the broken bus while its sentence is read |
+| 2:44 | Cordelia glitches in (row tear, chromatic split) over the score panel's chart, eyes **narrowed** on the problem, as the caption says what happens next |
+| 2:45 | **charge**: the glint becomes a glow (a dissolve on the beat) |
+| 2:46 | **build**: the glow builds |
+| 2:47 | **ignite**: white-hot, star glint, two beats before the bar |
+| 2:48 | the downbeat the repair enters the running solve: **fire** (no beams in the art). The engine's beams sear from her eyes to the board, surging on every beat with the hum: the left holds the breakdown's own job, the right rides each changed job to its new slot; sparks every eighth note |
+| 2:51 | the plan has healed: PLAN HEALED lands |
+| 2:51.5 | beams cut, power-down; she recoils into a **smirk** (glitch accent) |
+| 2:53.5 | she tears out |
 
 The artwork is six generated keyframes (`assets/cordelia/narrow|charge|build|ignite|fire|smirk.png`),
 image-to-image edits of the brand direction's approved dark DEFIANCE artwork
@@ -157,16 +205,17 @@ every typed word clicks; every transcript step blips; every excerpt lands on
 an anvil (an inharmonic FM ring over a thud); every block drop ticks; every
 score improvement pings a note up the scale by how far the score has come;
 feasibility hits the crash, a tonic stab and a sub drop; the disruption sounds
-an alarm on the D sharp / A tritone and drops the band to a heartbeat for three
-bars on Am - C - B, through Cordelia's charge; her charge whine glides
+an alarm on the D sharp / A tritone and drops the band to a heartbeat on Am - C
+from the strike until the fire, through Cordelia's charge on B; her charge whine glides
 B3 -> E5 -> B5 into the downbeat, which resolves the dominant on Em; the zap
 falls E6 -> E5 over a sub hit, the beam hums on E2 + B2 gated in sixteenths
 with a small E6 -> E5 zap on every beat it surges, and a B4 -> E4 power-down
 closes it as the beams cut (all in E harmonic minor, checked by the pitch
-test); each changed job whooshes to its slot; the healed plan brings the
+test); each changed job whooshes to its slot (and again as each recap
+travels, under a bell); the healed plan brings the
 hook's answer back on the next bar.
 
-The arrangement follows the 81-bar structure. The intro is ten bars: two
+The arrangement follows the 128-bar structure. The intro is ten bars: two
 of pad alone swelling under the stars (a filtered arp creeping in on bar
 two), the banner landing on bar three with a crash, a sub drop and the
 bass, kick building from bar five, the hook's question stated on bar seven
@@ -244,7 +293,7 @@ src/
 ├── json.rs         a small JSON reader
 ├── capture.rs      the bundle: types, validation, the release guard
 ├── script.rs       the schedule shared by picture and sound
-├── timeline.rs     120 BPM, 81 bars, sections on bar lines
+├── timeline.rs     120 BPM, 128 bars, sections on bar lines
 ├── story.rs        every caption, in one table
 ├── board.rs        the technician x day board for both plans
 ├── code.rs         excerpt layout, syntax colours, glyphfx entrance

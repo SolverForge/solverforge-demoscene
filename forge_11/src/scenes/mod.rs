@@ -9,7 +9,7 @@ mod describe;
 mod generate;
 mod repair;
 mod score;
-mod solve;
+pub mod solve;
 
 use demofx::{Clip, ClipSpec};
 
@@ -253,6 +253,11 @@ fn cuts(f: &mut Frame, t: f32, script: &Script) {
             fx::raster_sweep(f, since / 0.45, MINT);
         }
     }
+}
+
+/// The run command as the screen types it.
+pub fn command_line(c: &Capture) -> Option<String> {
+    run_command(c).map(solve::shell_line)
 }
 
 /// Type `s` progressively: the first `n` characters.

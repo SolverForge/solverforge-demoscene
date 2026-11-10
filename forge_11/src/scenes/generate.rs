@@ -33,6 +33,13 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, listings: &[Listing], t: f32
     }
     transcript(f, c, s, t, open);
     editor(f, c, s, listings, t, open);
+    // One panel at a time: the transcript steps back while an excerpt is
+    // read, the editor while the transcript is.
+    let code = s.spot_gain(t, crate::script::Spot::Excerpt);
+    let (x0, y0, x1, y1) = LOG;
+    f.dim(x0, y0, x1 + 1, y1 + 1, 1.0 - 0.65 * code);
+    let (x0, y0, x1, y1) = EDITOR;
+    f.dim(x0, y0, x1 + 1, y1 + 1, 1.0 - 0.6 * (1.0 - code) * open);
 }
 
 /// Glowing coals along the bottom edge, as characters.
@@ -59,16 +66,8 @@ fn transcript(f: &mut Frame, c: &Capture, s: &Script, t: f32, open: f32) {
     if open < 0.5 {
         return;
     }
-    f.text(x0 + 20, y0 + 22, "AGENT TRANSCRIPT", S1, AMBER, 1.0);
-    let skill = "+ solverforge-modeling skill";
-    f.text(
-        x1 - 20 - skill.len() as i32 * S1.w,
-        y0 + 22,
-        skill,
-        S1,
-        LIME,
-        0.9,
-    );
+    let k = smooth((t - s.log_head) / 0.3);
+    f.text(x0 + 20, y0 + 22, crate::script::LOG_HEADER, S1, AMBER, k);
     f.rect(x0 + 14, y0 + 48, x1 - 14, y0 + 49, AMBER, 0.35);
 
     let cols = ((x1 - x0 - 40) / TS.w) as usize;
@@ -87,7 +86,12 @@ fn transcript(f: &mut Frame, c: &Capture, s: &Script, t: f32, open: f32) {
             _ => (">", PAPER),
         };
         let head = format!("{} {} ", mmss(step.t_ms), mark);
-        let body = wrap(&step.text, cols - head.len());
+        let text = if step.kind == "say" {
+            crate::script::say_line(&step.text)
+        } else {
+            step.text.clone()
+        };
+        let body = wrap(&text, cols - head.len());
         let newest = i + 1 == c.steps.len() || t < s.steps[i + 1];
         // The newest step types itself in.
         let total: usize = body.iter().map(|l| l.chars().count()).sum();

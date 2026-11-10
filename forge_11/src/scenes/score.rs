@@ -86,7 +86,7 @@ pub fn chart(f: &mut Frame, traj: &[Point], replay: &Replay, t: f32, c: &Chart, 
     let Some(last) = replay.index_at(traj, t) else {
         return;
     };
-    let head = ((t - replay.from) / replay.len).clamp(0.0, 1.0);
+    let head = replay.head(t);
     let levels: [(Level, u32, &str); 2] = [
         (|p| p.score.hard, RED, "hard"),
         (|p| p.score.soft, AMBER, "soft"),

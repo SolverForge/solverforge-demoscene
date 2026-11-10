@@ -5,7 +5,7 @@
 // was, and the score climbs back. No restart.
 use super::cordelia::{Cordelia, Targets};
 use super::score::{self, Chart, PANEL};
-use super::{typed, Timed, AMBER, DIM, EMERALD, LIME, MINT, PAPER, RED, RED_STOPS};
+use super::{Timed, AMBER, EMERALD, LIME, MINT, RED, RED_STOPS};
 use crate::board::Board;
 use crate::capture::Capture;
 use crate::fx;
@@ -16,7 +16,6 @@ use crate::timeline::Now;
 pub struct Repair {
     event: Timed,
     size: Size,
-    rows: i32,
     cordelia: Cordelia,
 }
 
@@ -39,11 +38,9 @@ impl Repair {
                 (S1, clip(label, (width / S1.w) as usize))
             }
         };
-        let rows = text.lines().count() as i32;
         Self {
             event: Timed::new("unstable", &text, 1401, RED_STOPS, s.event, 0.7),
             size: sz,
-            rows,
             cordelia: Cordelia::new(s),
         }
     }
@@ -84,44 +81,10 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
         f.text(150, 140, "*", S2, LIME, pulse);
         f.text(150 + 2 * S2.w, 140, "LIVE PLAN", S2, MINT, 1.0);
     } else {
+        // The breakdown's sentence, read alone; the mechanism is in the
+        // README and the capture, not on screen (it is code, and a second
+        // text under this one would compete with it).
         r.event.draw(f, t, 150, 124, r.size, 1.0);
-        let my = 124 + r.rows * r.size.h + 2;
-        // The mechanism, verbatim, wrapped over the full width (at most two
-        // lines), typed in over a second; the event kind sits at the right
-        // end of the last line.
-        let cols = ((W as i32 - 150 - 60) / S1.w) as usize;
-        let mech = format!("pushed into the running solve: {}", c.repair.mechanism);
-        let mut lines = wrap_code(&mech, cols);
-        if lines.len() > 2 {
-            let tail = lines[1..].join(" ");
-            lines.truncate(1);
-            lines.push(clip(&tail, cols));
-        }
-        let k = ((since - 0.6) / 1.0).clamp(0.0, 1.0);
-        let total: usize = lines.iter().map(|l| l.len()).sum();
-        let mut left = (k * total as f32).ceil() as usize;
-        // Once typed, the mechanism steps back: the event is what to read.
-        let settle = mix(AMBER, DIM, smooth((since - 2.5) / 1.0));
-        for (i, l) in lines.iter().enumerate() {
-            let n = left.min(l.len());
-            left -= n;
-            f.text(150, my + i as i32 * S1.h, &typed(l, n), S1, settle, 1.0);
-        }
-        let kind = clip(&c.repair.kind, 40);
-        let last = lines.last().map_or(0, |l| l.len());
-        let ky = if last + kind.len() + 3 <= cols {
-            my + (lines.len() as i32 - 1) * S1.h
-        } else {
-            my - S1.h
-        };
-        f.text(
-            W as i32 - 60 - kind.len() as i32 * S1.w,
-            ky,
-            &kind,
-            S1,
-            DIM,
-            0.9,
-        );
     }
 
     // The score: the solved plan's final score until the change replays.
@@ -135,7 +98,7 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
         1.0,
         if since >= 0.0 { RED } else { EMERALD },
     );
-    let (x0, _, x1, y1) = PANEL;
+    let (x0, _, x1, _) = PANEL;
     let chart = Chart {
         x0: x0 + 30,
         y0: 500,
@@ -143,14 +106,6 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
         y1: 690,
     };
     score::chart(f, &c.repair.solve.trajectory, &s.repair, t, &chart, 1.0);
-    changes(f, c, s, t, x0 + 24, 740, y1 - 16);
-    // When Cordelia has gone, the change list she covered is lit again.
-    let back = t - perf.exit - super::cordelia::OUT;
-    if (0.0..0.9).contains(&back) {
-        let k = 1.0 - smooth(back / 0.9);
-        f.frame_rect(x0 + 10, 452, x1 - 10, y1 - 8, AMBER, k);
-        f.rect(x0 + 10, 452, x1 - 10, y1 - 8, AMBER, 0.12 * k);
-    }
 
     let struck = smooth(since / 0.5) * alarm;
     board.draw_grid(
@@ -167,20 +122,24 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
     let feasible_age = s.repair_feasible.map_or(-1.0, |at| t - at);
     // Focus: while the event is read, everything but the broken bus's work
     // steps back; while a change is reviewed, everything but that job.
-    let ev_focus = smooth(since / 0.3) * (1.0 - smooth((t - perf.enter) / 0.6)) * alarm;
+    let ev_focus = smooth(since / 0.3) * (1.0 - smooth((t - perf.fire) / 0.6)) * alarm;
     let rev = s
-        .reviews
+        .recap
         .iter()
-        .position(|&at| (at..at + s.review_len).contains(&t));
-    let rev_focus = match (s.reviews.first(), s.reviews.last()) {
-        (Some(&a), Some(&z)) => {
-            let end = z + s.review_len;
-            smooth((t - a) / 0.3) * (1.0 - smooth((t - end + 0.3) / 0.3))
+        .position(|r| (r.at..r.at + r.len).contains(&t));
+    let rev_focus = match (s.recap.first(), s.recap.last()) {
+        (Some(a), Some(z)) => {
+            let end = z.at + z.len;
+            smooth((t - a.at) / 0.3) * (1.0 - smooth((t - end + 0.3) / 0.3))
         }
         _ => 0.0,
     };
     for b in &board.blocks {
         let mine = rev.is_some() && b.change == rev;
+        if mine {
+            // The recap draws this one on its replayed path.
+            continue;
+        }
         let grounded_b = board.struck_bus.as_deref() == Some(b.bus.as_str()) || b.solved.is_none();
         let keep = (1.0 - 0.7 * ev_focus * (!grounded_b) as i32 as f32)
             * (1.0 - 0.7 * rev_focus * (!mine) as i32 as f32);
@@ -217,8 +176,15 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
                 };
                 // A grounded bus's blocks flash; the rest dim under the alarm.
                 let grounded = board.struck_bus.as_deref() == Some(b.bus.as_str());
+                // Once healed the flashing stops: nothing blinks while the
+                // recap and its lines are read.
+                let calm = if feasible_age >= 0.0 {
+                    1.0 - smooth(feasible_age / 0.6)
+                } else {
+                    1.0
+                };
                 let base = if grounded {
-                    mix(EMERALD, RED, struck * (0.6 + 0.4 * (t * 14.0).sin()))
+                    mix(EMERALD, RED, struck * (0.6 + 0.4 * calm * (t * 14.0).sin()))
                 } else {
                     mix(EMERALD, 0x0b5a3a, 0.35 * struck)
                 };
@@ -249,8 +215,7 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
             _ => {}
         }
     }
-    counters(f, c, s, t, board.added(), board.bottom() + 16);
-    review(f, c, s, board, t);
+    recap(f, c, s, board, t);
     if r.cordelia.active(t) {
         let targets = beam_targets(s, board, t);
         r.cordelia.draw(f, t, &targets);
@@ -264,12 +229,10 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, r: &Repair, t
     stamp(f, "PLAN HEALED", LIME, feasible_age);
 }
 
-/// How long a stamp holds over the board.
-pub const STAMP_HOLD: f32 = 3.5;
-
 /// A large word over the board, glyph cells shaking in; it lands, holds
 /// for the viewer, then lifts so the board shows through again.
 pub fn stamp(f: &mut Frame, word: &str, rgb: u32, age: f32) {
+    use crate::script::STAMP_HOLD;
     if !(0.0..STAMP_HOLD).contains(&age) {
         return;
     }
@@ -299,58 +262,14 @@ pub fn stamp(f: &mut Frame, word: &str, rgb: u32, age: f32) {
     );
 }
 
-/// The changes so far, one line each: job, from, to.
-fn changes(f: &mut Frame, c: &Capture, s: &Script, t: f32, x: i32, y0: i32, y1: i32) {
-    let shown: Vec<usize> = (0..c.repair.changed.len())
-        .filter(|&k| t >= s.moves[k])
-        .collect();
-    if shown.is_empty() {
-        return;
-    }
-    f.text(x, y0, "CHANGED ASSIGNMENTS", S1, AMBER, 1.0);
-    let pitch = S1.h + 4;
-    let fit = ((y1 - y0 - 30) / pitch).max(1) as usize;
-    let cols = ((PANEL.2 - PANEL.0 - 48) / S1.w) as usize;
-    let skip = shown.len().saturating_sub(fit);
-    for (row, &k) in shown.iter().skip(skip).enumerate() {
-        let ch = &c.repair.changed[k];
-        let line = format!(
-            "{}: {} d{} -> {} d{}",
-            ch.job, ch.from.technician, ch.from.day, ch.to.technician, ch.to.day
-        );
-        let age = t - s.moves[k];
-        let mut col = mix(0xffffff, PAPER, smooth(age / 0.4));
-        let y = y0 + 30 + row as i32 * pitch;
-        if reviewing(s, k, t) {
-            f.rect(x - 6, y - 3, PANEL.2 - 20, y + S1.h + 3, AMBER, 0.3);
-            col = 0xffffff;
-        }
-        f.text(
-            x,
-            y0 + 30 + row as i32 * pitch,
-            &clip(&line, cols),
-            S1,
-            col,
-            1.0,
-        );
-    }
-    if skip > 0 {
-        f.text(x, y1 - S1.h, &format!("(+{skip} earlier)"), S1, DIM, 0.8);
-    }
-}
-
-fn reviewing(s: &Script, k: usize, t: f32) -> bool {
-    s.reviews
-        .get(k)
-        .is_some_and(|&at| (at..at + s.review_len).contains(&t))
-}
-
-/// After the heal, each change in turn: a ghost where the job was, an
-/// arrow to where it went, and the change spelled out beside it.
-fn review(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32) {
-    for (k, &at) in s.reviews.iter().enumerate() {
-        let age = t - at;
-        if !(0.0..s.review_len).contains(&age) {
+/// After the heal, each change replayed so the eye can follow it: the card
+/// lifts off its new slot, reappears at its old one (outlined red) with its
+/// label, travels along the path to its new slot and lands there.
+fn recap(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32) {
+    use crate::script::Recap;
+    for (k, r) in s.recap.iter().enumerate() {
+        let age = t - r.at;
+        if !(0.0..r.len).contains(&age) {
             continue;
         }
         let Some(b) = board.blocks.iter().find(|b| b.change == Some(k)) else {
@@ -359,74 +278,88 @@ fn review(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32) {
         let (Some(from), Some(to)) = (b.solved, b.repaired) else {
             continue;
         };
-        let k_in = smooth(age / 0.2) * (1.0 - smooth((age - s.review_len + 0.25) / 0.25));
-        let (x0, y0, x1, y1) = (
-            from.x0 as i32,
-            from.y0 as i32,
-            from.x1 as i32,
-            from.y1 as i32,
-        );
-        f.rect(x0, y0, x1, y1, 0x200004, 0.6 * k_in);
-        f.frame_rect(x0, y0, x1, y1, RED, k_in);
+        let out = 1.0 - smooth((age - r.len + 0.3) / 0.3);
         let (fx0, fy0) = from.centre();
         let (tx, ty) = to.centre();
-        let p = smooth(age / 0.35);
-        let (hx, hy) = (fx0 + (tx - fx0) * p, fy0 + (ty - fy0) * p);
-        f.line((fx0, fy0), (hx, hy), 3.0, AMBER, k_in);
-        f.glow(hx, hy, 40.0, AMBER, 0.6 * k_in);
-        f.frame_rect(
-            to.x0 as i32 - 3,
-            to.y0 as i32 - 3,
-            to.x1 as i32 + 3,
-            to.y1 as i32 + 3,
-            0xffffff,
-            k_in,
-        );
-        let ch = &c.repair.changed[k];
-        let label = format!(
-            " {}: {} d{} -> {} d{} ",
-            ch.job, ch.from.technician, ch.from.day, ch.to.technician, ch.to.day
-        );
-        let w = label.len() as i32 * S1.w;
-        let lx = ((tx as i32) - w / 2).clamp(crate::board::AREA.0, crate::board::AREA.2 - w);
-        let ly = if to.y0 as i32 - 34 > crate::board::AREA.1 + 30 {
-            to.y0 as i32 - 30
+        let go = Recap::LIFT + Recap::WAIT;
+        // The card: lifting off, back at the old slot, travelling, landed.
+        let (rect, alpha, rgb) = if age < Recap::LIFT {
+            let p = smooth(age / Recap::LIFT);
+            let mut q = to;
+            q.y0 -= 40.0 * p;
+            q.y1 -= 40.0 * p;
+            (q, 1.0 - p, AMBER)
+        } else if age < go {
+            let p = smooth((age - Recap::LIFT) / 0.25);
+            (from, p, mix(RED, AMBER, 0.4))
         } else {
-            to.y1 as i32 + 8
+            let p = smooth((age - go) / r.travel);
+            let mut q = from.lerp(&to, p);
+            let lift = (p * std::f32::consts::PI).sin() * 60.0;
+            q.y0 -= lift;
+            q.y1 -= lift;
+            (q, 1.0, AMBER)
         };
-        f.rect(lx, ly, lx + w, ly + 24, 0x140c02, 0.9 * k_in);
-        f.frame_rect(lx, ly, lx + w, ly + 24, AMBER, k_in);
-        f.text(lx, ly + 3, &label, S1, 0xffffff, k_in);
-    }
-}
-
-/// Under the board: changed and untouched counts, and no restart.
-fn counters(f: &mut Frame, c: &Capture, s: &Script, t: f32, added: usize, y: i32) {
-    if t < s.repair.from {
-        return;
-    }
-    let moved = s.moves.iter().filter(|&&m| t >= m).count();
-    let done = s.repair_feasible.is_some_and(|at| t >= at);
-    let items = [
-        (format!("CHANGED {moved}"), AMBER, true),
-        (
-            format!("UNTOUCHED {}", c.repair.unchanged_count),
-            LIME,
-            true,
-        ),
-        (format!("ADDED {added}"), RED, added > 0),
-        ("KEPT RUNNING".to_string(), MINT, done),
-    ];
-    let mut x = 770;
-    for (txt, col, on) in items {
-        if !on {
-            continue;
+        let shown = age >= Recap::LIFT;
+        if shown {
+            // The old slot, outlined red, and the path to the new one.
+            let k_in = smooth((age - Recap::LIFT) / 0.2) * out;
+            f.rect(
+                from.x0 as i32,
+                from.y0 as i32,
+                from.x1 as i32,
+                from.y1 as i32,
+                0x200004,
+                0.5 * k_in,
+            );
+            f.frame_rect(
+                from.x0 as i32,
+                from.y0 as i32,
+                from.x1 as i32,
+                from.y1 as i32,
+                RED,
+                k_in,
+            );
+            let dots = 24;
+            for i in 0..=dots {
+                let u = i as f32 / dots as f32;
+                let lift = (u * std::f32::consts::PI).sin() * 60.0;
+                let (x, y) = (fx0 + (tx - fx0) * u, fy0 + (ty - fy0) * u - lift);
+                f.glow(x, y, 4.0, AMBER, 0.5 * k_in);
+            }
+            f.frame_rect(
+                to.x0 as i32 - 3,
+                to.y0 as i32 - 3,
+                to.x1 as i32 + 3,
+                to.y1 as i32 + 3,
+                0xffffff,
+                0.6 * k_in,
+            );
         }
-        let w = (txt.len() as i32 + 2) * S2.w;
-        f.rect(x, y, x + w, y + 46, 0x020806, 0.85);
-        f.frame_rect(x, y, x + w, y + 46, col, 0.9);
-        f.text(x + S2.w, y + 5, &txt, S2, col, 1.0);
-        x += w + 18;
+        let (cx, cy) = rect.centre();
+        let moving = age >= go && age < go + r.travel;
+        if moving {
+            f.glow(cx, cy, 70.0, AMBER, 0.4);
+        }
+        Board::draw_block(f, &rect, b, rgb, alpha);
+        let landed = age - go - r.travel;
+        fx::sparks(f, tx, ty, landed, 500 + k as i32, 30, 1.0);
+        // The label rides with the card.
+        if shown {
+            let ch = &c.repair.changed[k];
+            let label = format!(" {} ", crate::script::recap_label(ch));
+            let w = label.len() as i32 * S1.w;
+            let lx = ((cx as i32) - w / 2).clamp(crate::board::AREA.0, crate::board::AREA.2 - w);
+            let ly = if rect.y0 as i32 - 34 > crate::board::AREA.1 {
+                rect.y0 as i32 - 30
+            } else {
+                rect.y1 as i32 + 8
+            };
+            let k_in = smooth((age - Recap::LIFT) / 0.15) * out;
+            f.rect(lx, ly, lx + w, ly + 24, 0x140c02, 0.92 * k_in);
+            f.frame_rect(lx, ly, lx + w, ly + 24, AMBER, k_in);
+            f.text(lx, ly + 3, &label, S1, 0xffffff, k_in);
+        }
     }
 }
 
@@ -454,32 +387,4 @@ fn beam_targets(s: &Script, board: &Board, t: f32) -> Targets {
         }
     }
     Targets { left, right }
-}
-
-/// Wrap a code-ish line at spaces, or hard-break a token longer than a line.
-fn wrap_code(s: &str, cols: usize) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut cur = String::new();
-    for word in s.split(' ') {
-        let mut word = word.to_string();
-        while word.len() > cols {
-            if !cur.is_empty() {
-                out.push(std::mem::take(&mut cur));
-            }
-            let rest = word.split_off(cols);
-            out.push(word);
-            word = rest;
-        }
-        if !cur.is_empty() && cur.len() + 1 + word.len() > cols {
-            out.push(std::mem::take(&mut cur));
-        }
-        if !cur.is_empty() {
-            cur.push(' ');
-        }
-        cur.push_str(&word);
-    }
-    if !cur.is_empty() {
-        out.push(cur);
-    }
-    out
 }

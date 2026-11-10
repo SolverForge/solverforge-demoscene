@@ -5,7 +5,7 @@ use super::{cursor, AMBER, CYAN, DIM, EMERALD, LIME, MINT, PAPER};
 use crate::board::Board;
 use crate::capture::Capture;
 use crate::fx;
-use crate::gfx::{clip, smooth, Frame, S1, S2, W};
+use crate::gfx::{mix, smooth, Frame, S1, S2, W};
 use crate::script::{Script, PROMPT_BOX};
 use crate::timeline::Now;
 
@@ -81,20 +81,22 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, n: No
     if open < 0.5 {
         return;
     }
-    let model = c.version("agent_model").unwrap_or("coding agent");
-    f.text(x0 + 30, y0 + 26, "YOU -> CODING AGENT", S1, MINT, open);
-    let when = c.captured_at.split('T').next().unwrap_or("");
-    let m = clip(&format!("agent: {model}   captured {when}"), 70);
-    f.text(x1 - 30 - m.len() as i32 * S1.w, y0 + 26, &m, S1, DIM, open);
-    f.rect(x0 + 20, y0 + 56, x1 - 20, y0 + 57, EMERALD, 0.4 * open);
-    f.text(
-        x0 + 30,
-        y0 + 76,
-        "> describe the problem in plain language",
-        S2,
+    // The header, read alone before the prompt types; it then steps
+    // back so the prompt is what the eye follows.
+    let head = crate::script::prompt_header(c);
+    let settle = mix(
+        MINT,
         DIM,
-        open,
+        smooth((t - s.typing.words.first().map_or(t, |w| w.0)) / 0.6),
     );
+    let hs = if head.len() as i32 * S2.w <= x1 - x0 - 60 {
+        S2
+    } else {
+        S1
+    };
+    let k = smooth((t - s.header) / 0.3) * open;
+    f.text(x0 + 30, y0 + 40, &head, hs, settle, k);
+    f.rect(x0 + 20, y0 + 90, x1 - 20, y0 + 91, EMERALD, 0.4 * open);
 
     let (bx, by, _, by1) = PROMPT_BOX;
     let size = s.prompt_size;
@@ -126,8 +128,9 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, n: No
     cursor(f, end.0, end.1, size, LIME, t);
 }
 
-/// The plan's buses, each a textmode sprite with its label, driving left
-/// to right in convoy along the river road.
+/// The plan's buses, one textmode sprite per bus, driving left to right in
+/// convoy along the river road. Windows instead of names: moving words
+/// would pull the eye off the prompt.
 fn buses(f: &mut Frame, board: &Board, t: f32, local: f32) {
     let mut names: Vec<&str> = Vec::new();
     for b in &board.blocks {
@@ -139,21 +142,20 @@ fn buses(f: &mut Frame, board: &Board, t: f32, local: f32) {
     let gap = 60;
     let lap = (names.len() as i32 * (width + gap)).max(W as i32 + width);
     let y = 908;
-    for (i, name) in names.iter().enumerate() {
+    for i in 0..names.len() {
         let x = ((local * 170.0) as i32 + i as i32 * (width + gap)).rem_euclid(lap) - width;
         let bob = if ((t * 6.0) as i32 + i as i32) % 2 == 0 {
             0
         } else {
             1
         };
-        let label = format!("{:^18}", clip(name, 18));
         let rows = [
-            " .------------------.".to_string(),
-            format!(" |{label}|"),
-            " '-(o)----------(o)-'".to_string(),
+            " .------------------.",
+            " | [] [] [] [] [] []|",
+            " '-(o)----------(o)-'",
         ];
         for (r, row) in rows.iter().enumerate() {
-            let col = if r == 1 { PAPER } else { CYAN };
+            let col = CYAN;
             f.text(x, y + r as i32 * S1.h - bob, row, S1, col, 0.9);
         }
     }

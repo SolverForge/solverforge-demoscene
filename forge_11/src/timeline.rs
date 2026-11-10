@@ -26,14 +26,14 @@ pub enum Section {
 /// (section, first bar, end bar)
 pub const SECTIONS: [(Section, f32, f32); 6] = [
     (Section::Boot, 0.0, 10.0),
-    (Section::Describe, 10.0, 20.0),
-    (Section::Generate, 20.0, 36.0),
-    (Section::Solve, 36.0, 51.0),
-    (Section::Repair, 51.0, 68.0),
-    (Section::Close, 68.0, 81.0),
+    (Section::Describe, 10.0, 22.0),
+    (Section::Generate, 22.0, 50.0),
+    (Section::Solve, 50.0, 72.0),
+    (Section::Repair, 72.0, 107.0),
+    (Section::Close, 107.0, 128.0),
 ];
 
-pub const TOTAL_BARS: f32 = 81.0;
+pub const TOTAL_BARS: f32 = 128.0;
 pub const DURATION: f32 = TOTAL_BARS * BAR;
 
 pub const fn bars(b: f32) -> f32 {
@@ -103,7 +103,9 @@ mod tests {
             end = b1;
         }
         assert_eq!(end, TOTAL_BARS);
-        // Long enough to read every caption, brisk otherwise.
-        assert!((140.0..=170.0).contains(&DURATION));
+        // Long enough to read every text one at a time (the reading
+        // timeline's tests pin that each section ends within two bars of
+        // its last text, so the length is never padding).
+        assert!((140.0..=260.0).contains(&DURATION));
     }
 }

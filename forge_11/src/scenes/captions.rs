@@ -7,7 +7,7 @@ use super::{Timed, EMERALD, LIME_STOPS, MINT};
 use crate::gfx::{size, smooth, wrap, Frame, Size, H, W};
 use crate::script::{Caption, Place, Script};
 use crate::story::Cap;
-use crate::timeline::{Section, BEAT};
+use crate::timeline::Section;
 
 const CAPTION_STOPS: &[&str] = &["--final-gradient-stops", "d1fae5", "ffffff"];
 pub const INTRO_TITLE: Size = size(44, 80);
@@ -69,13 +69,16 @@ impl Captions {
                     Place::Banner => "slide",
                     Place::Close => ["decrypt", "beams", "laseretch"][i % 3],
                 };
+                // The entrance settles in a third of a second so reading
+                // starts at once; the close keeps its slower effects (their
+                // entrance is counted in the reading window).
                 let window = match c.place {
-                    Place::Lower => 0.5,
+                    Place::Lower | Place::Intro => 0.3,
                     _ => 0.9,
                 };
-                // Openers wait for their title to land.
+                // Openers wait until their title has been read.
                 let from = if c.place == Place::Intro {
-                    c.from + 2.0 * BEAT
+                    c.from + crate::script::TITLE_READ
                 } else {
                     c.from
                 };
@@ -165,7 +168,7 @@ impl Captions {
                         title.draw(f, t, tx, ty, INTRO_TITLE, out);
                     }
                     let ly = ty + INTRO_TITLE.h + 50;
-                    let rule = smooth((t - c.from - 0.3) / 0.6);
+                    let rule = smooth((t - c.from - crate::script::TITLE_READ + 0.4) / 0.4);
                     let half = (W as f32 * 0.32 * rule) as i32;
                     f.rect(
                         W as i32 / 2 - half,

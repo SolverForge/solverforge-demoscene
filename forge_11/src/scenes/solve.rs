@@ -12,13 +12,26 @@ use crate::timeline::Now;
 
 pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, _n: Now) {
     backdrop(f, t);
+    if t < s.cmd {
+        return;
+    }
+    command(f, c, t, t - s.cmd);
     let local = t - s.axes;
     if local < 0.0 {
         return;
     }
-    command(f, c, t, local);
-    let open = smooth(local / 0.5);
-    score::panel(f, &c.solve.trajectory, &s.solve, None, t, open, EMERALD);
+    // The score panel opens with the line that explains it, showing the
+    // run's first point until the run starts.
+    let open = smooth((t - s.panel_at) / 0.5);
+    score::panel(
+        f,
+        &c.solve.trajectory,
+        &s.solve,
+        c.solve.trajectory.first(),
+        t,
+        open,
+        EMERALD,
+    );
     let (x0, _, x1, y1) = PANEL;
     let chart = Chart {
         x0: x0 + 30,
@@ -29,7 +42,7 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, _n: N
     score::chart(f, &c.solve.trajectory, &s.solve, t, &chart, open);
 
     let feasible_age = s.solve_feasible.map_or(-1.0, |at| t - at);
-    board.draw_grid(f, smooth((local - 0.3) / 0.5), EMERALD, 0.0, t);
+    board.draw_grid(f, smooth(local / 0.4), EMERALD, 0.0, t);
     axes(f, board, local);
     // While the score is explained, its panel is the one thing lit.
     if let Some(cap) = s
@@ -73,7 +86,6 @@ pub fn draw(f: &mut Frame, c: &Capture, s: &Script, board: &Board, t: f32, _n: N
         fx::sparks(f, cx - 300.0, cy, feasible_age, 31, 60, 1.6);
         fx::sparks(f, cx + 300.0, cy, feasible_age - 0.03, 32, 60, 1.6);
     }
-    chips(f, c, board.bottom() + 22, smooth((local - 1.0) / 0.5));
     super::repair::stamp(f, "FEASIBLE", LIME, feasible_age);
     if (0.0..0.4).contains(&feasible_age) {
         fx::flash(f, LIME, 0.18 * (-feasible_age * 8.0).exp());
@@ -152,26 +164,8 @@ fn command(f: &mut Frame, c: &Capture, t: f32, local: f32) {
     let line = clip(&line, ((W as i32 - 200) / size.w) as usize);
     let n = ((local / 1.2).min(1.0) * line.len() as f32).ceil() as usize;
     f.text_shadow(150, 140, &typed(&line, n), size, PAPER, 1.0);
-    if n < line.len() || local < 2.0 {
+    if n < line.len() {
         cursor(f, 150 + n as i32 * size.w, 140, size, LIME, t);
-    }
-}
-
-/// Where the run happened and what ran it.
-fn chips(f: &mut Frame, c: &Capture, y: i32, a: f32) {
-    if a <= 0.0 {
-        return;
-    }
-    let ver = c.version("solverforge").map(|v| format!("SOLVERFORGE {v}"));
-    let mut items = vec!["ON THIS LAPTOP".to_string()];
-    items.extend(ver);
-    let mut x = 770;
-    for it in items {
-        let w = (it.len() as i32 + 2) * S1.w;
-        f.rect(x, y, x + w, y + 30, 0x02140c, 0.85 * a);
-        f.frame_rect(x, y, x + w, y + 30, MINT, a * 0.8);
-        f.text(x + S1.w, y + 6, &it, S1, MINT, a);
-        x += w + 16;
     }
 }
 

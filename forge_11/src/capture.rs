@@ -107,7 +107,6 @@ pub struct Repair {
     pub kind: String,
     pub label: String,
     pub detail: Vec<(String, String)>,
-    pub mechanism: String,
     pub solve: Solve,
     pub changed: Vec<Change>,
     pub unchanged_count: usize,
@@ -194,11 +193,13 @@ impl Capture {
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
+        // The mechanism stays required in the bundle (it is the evidence of
+        // how the change went in) but is not drawn: see the README.
+        string(rep, "mechanism")?;
         let repair = Repair {
             kind: string(event, "kind")?,
             label: fold(&string(event, "label")?),
             detail,
-            mechanism: fold(&string(rep, "mechanism")?),
             solve: parse_solve(rep)?,
             changed,
             unchanged_count: number(rep, "unchanged_count")? as usize,

@@ -108,7 +108,12 @@ fn cues(s: &script::Script) -> Cues {
         event: s.event,
         moves: s.moves.clone(),
         repair_feasible: s.repair_feasible,
-        reviews: s.reviews.clone(),
+        reviews: s.recap.iter().map(|r| r.at).collect(),
+        travels: s
+            .recap
+            .iter()
+            .map(|r| r.at + script::Recap::LIFT + script::Recap::WAIT)
+            .collect(),
         cordelia: {
             let b = s.cordelia;
             [b.enter, b.ignite, b.fire, b.cut, b.exit]
@@ -153,12 +158,17 @@ fn print_cues(cap: &Capture) {
     );
     println!("moves {:?}", round(&s.moves));
     println!("cordelia {:?}", s.cordelia);
-    println!("reviews {:?} each {:.2}", round(&s.reviews), s.review_len);
+    println!("recap {:?}", s.recap);
     println!("close {:?} logo {:.2}", s.close, s.logo);
-    for c in &s.captions {
+    for r in &s.reads {
         println!(
-            "caption {:7.2}..{:7.2} {:?} {:?}: {}",
-            c.from, c.to, c.place, c.cap, c.text
+            "read {:7.2}..{:7.2} ({:5.2}/{:5.2}) {:?}: {}",
+            r.from,
+            r.to(),
+            r.len,
+            r.need,
+            r.spot,
+            r.text.chars().take(70).collect::<String>()
         );
     }
 }

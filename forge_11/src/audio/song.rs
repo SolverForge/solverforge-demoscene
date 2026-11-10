@@ -29,6 +29,8 @@ pub struct Cues {
     pub moves: Vec<f32>,
     pub repair_feasible: Option<f32>,
     pub reviews: Vec<f32>,
+    /// When each recapped job starts travelling to its new slot.
+    pub travels: Vec<f32>,
     /// Cordelia's beat: enter (charge), ignite, fire, cut (beams off), exit.
     pub cordelia: [f32; 5],
 }
@@ -86,14 +88,25 @@ use Chord::*;
 /// the hook's question stated on bar seven, the dominant at the end of the
 /// build.
 const BOOT: [Chord; 10] = [Em, C, Em, C, Am, B, Em, C, Am, B];
-const DESCRIBE: [Chord; 10] = [Em, C, Am, B, Em, C, Am, B, C, B];
-const GENERATE: [Chord; 16] = [Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B];
-const SOLVE: [Chord; 15] = [Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, Am, B];
-/// The opener and the live week, the alarm on Am, Cordelia's charge on
-/// C - B, the fire resolving to Em, the dominant while the plan heals, the
-/// hook's answer as it lands, then the reviews.
-const REPAIR: [Chord; 17] = [Em, C, Am, B, Am, C, B, Em, B, Em, C, Am, B, Em, C, Am, B];
-const CLOSE: [Chord; 13] = [Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em];
+const DESCRIBE: [Chord; 12] = [Em, C, Am, B, Em, C, Am, B, Em, C, Am, B];
+const GENERATE: [Chord; 28] = [
+    Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am,
+    B,
+];
+const SOLVE: [Chord; 22] = [
+    Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Am, B,
+];
+/// The opener and the live week, the alarm on Am, Am - C under the
+/// breakdown's sentence and what the depot does, Cordelia's charge ending
+/// on B, the fire resolving to Em, the dominant while the plan heals, the
+/// hook's answer as it lands, then the recap and the closing line.
+const REPAIR: [Chord; 35] = [
+    Em, C, Am, B, Em, Am, C, Am, C, Am, C, Am, B, Em, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B,
+    Em, C, Am, B, Em, C, Am, B,
+];
+const CLOSE: [Chord; 21] = [
+    Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em, C, Am, B, Em,
+];
 
 fn chords(section: Section) -> &'static [Chord] {
     match section {
@@ -107,7 +120,7 @@ fn chords(section: Section) -> &'static [Chord] {
 }
 
 /// The repair bar the hook's answer returns on, once the plan has healed.
-const HEAL_BAR: usize = 9;
+const HEAL_BAR: usize = 15;
 
 /// E harmonic minor, E4 up two octaves: the improvement pings climb it.
 const SCALE: [f32; 15] = [
@@ -340,7 +353,7 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
                     bass(&mut m, t0, prev.root(), chord.root(), Bass::Eighths, 0.8);
                     four_on_floor(&mut m, t0);
                     hats(&mut m, t0, 2, 0.8);
-                } else if rel < 3 {
+                } else if t0 < cues.cordelia[2] - 0.01 {
                     // The break: a heartbeat under the alarm, held through
                     // Cordelia's charge.
                     pad_gain = 0.7;
@@ -351,6 +364,7 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
                     kick(&mut m, t0 + 2.75 * BEAT);
                 } else {
                     // Building back while the plan heals.
+                    let rel = ((t0 - cues.cordelia[2]) / BAR).round() as i32 + 3;
                     let build = (rel - 3) as f32;
                     arp(&mut m, t0, chord, (0.4 + 0.15 * build).min(1.0));
                     bass(&mut m, t0, prev.root(), chord.root(), Bass::Eighths, 0.9);
@@ -461,6 +475,10 @@ pub fn render(cues: &Cues) -> Vec<[f32; 2]> {
     }
 
     laser(&mut m, cues.cordelia);
+
+    for (k, &at) in cues.travels.iter().enumerate() {
+        whoosh(&mut m, at, 0.45, if k % 2 == 0 { -0.4 } else { 0.4 });
+    }
 
     // Each reviewed change rings a bell up the tonic chord.
     for (k, &at) in cues.reviews.iter().enumerate() {

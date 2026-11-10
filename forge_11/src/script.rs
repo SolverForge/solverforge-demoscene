@@ -5,7 +5,7 @@
 // everything inside them.
 use crate::board::Board;
 use crate::capture::{Capture, Point, Solve};
-use crate::gfx::{size, wrap, Size};
+use crate::gfx::{clip, size, wrap, Size};
 use crate::story::{self, Cap};
 use crate::timeline::{snap_beat, span, Section, BAR, BEAT, STEP};
 
@@ -95,6 +95,10 @@ pub struct Replay {
     pub t_max: f64,
     origin: f64,
     t0: f64,
+    /// The replay pauses here for `hold_len` seconds (a verdict is read
+    /// while the numbers stand still), then carries on.
+    pub hold_at: f32,
+    pub hold_len: f32,
 }
 
 impl Replay {
@@ -107,6 +111,8 @@ impl Replay {
             t_max,
             origin,
             t0: (t_max / 200.0).max(0.5),
+            hold_at: f32::INFINITY,
+            hold_len: 0.0,
         }
     }
 
@@ -116,13 +122,44 @@ impl Replay {
     }
 
     pub fn at(&self, t_ms: f64) -> f32 {
-        self.from + self.tau(t_ms) * self.len
+        let raw = self.from + self.tau(t_ms) * self.len;
+        if raw > self.hold_at + 1e-4 {
+            raw + self.hold_len
+        } else {
+            raw
+        }
+    }
+
+    /// Demo time with the hold taken out.
+    fn raw(&self, t: f32) -> f32 {
+        if t <= self.hold_at {
+            t
+        } else if t < self.hold_at + self.hold_len {
+            self.hold_at
+        } else {
+            t - self.hold_len
+        }
+    }
+
+    /// 0..1 through the run at demo time t.
+    pub fn head(&self, t: f32) -> f32 {
+        ((self.raw(t) - self.from) / self.len).clamp(0.0, 1.0)
+    }
+
+    /// When the replay has shown its last point.
+    pub fn end(&self) -> f32 {
+        let e = self.from + self.len;
+        if e > self.hold_at {
+            e + self.hold_len
+        } else {
+            e
+        }
     }
 
     /// Real solver milliseconds since the origin at demo time t (clamped
     /// to the run).
     pub fn ms_at(&self, t: f32) -> f64 {
-        let tau = ((t - self.from) / self.len).clamp(0.0, 1.0) as f64;
+        let tau = self.head(t) as f64;
         self.t0 * ((1.0 + self.t_max / self.t0).powf(tau) - 1.0)
     }
 
@@ -133,7 +170,9 @@ impl Replay {
         }
         let ms = self.ms_at(t);
         traj.iter()
-            .rposition(|p| p.t_ms - self.origin <= ms + 1e-9)
+            // A point that landed exactly on this frame counts as shown
+            // (f32 demo time round-trips the log clock only approximately).
+            .rposition(|p| p.t_ms - self.origin <= ms + 1e-3 * self.t_max.max(1.0))
             .or(Some(0))
     }
 
@@ -154,14 +193,171 @@ impl Replay {
     }
 }
 
+/// What kind of text a reading event is; also where it sits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Spot {
+    /// The SOLVERFORGE banner and the four verbs under it.
+    Banner,
+    Verbs,
+    /// A section's large title, then the line under it.
+    Title,
+    Caption,
+    /// Panel headers (prompt terminal, agent transcript).
+    Header,
+    /// The prompt as it types: watched, not read word by word.
+    Prompt,
+    /// A run of tool calls scrolling in the transcript: a glance.
+    Log,
+    /// Something the agent said, held in the transcript.
+    Say,
+    /// A code excerpt's title (with its path and count).
+    Excerpt,
+    /// The run command typed in SOLVE.
+    Command,
+    /// FEASIBLE / PLAN HEALED over the board.
+    Stamp,
+    /// LIVE PLAN, then the breakdown's own sentence.
+    Live,
+    Event,
+    /// One changed job replayed old slot to new, with its label.
+    Recap,
+    /// A close sentence's supporting line from the capture.
+    Sub,
+    Url,
+}
+
+/// One piece of text the viewer has to read: when it appears, how long it
+/// owns the viewer's eyes, and how long it needs. Nothing else new appears
+/// while it is read.
+#[derive(Clone, Debug)]
+pub struct Read {
+    pub spot: Spot,
+    pub text: String,
+    pub from: f32,
+    pub len: f32,
+    /// The reading time it needs.
+    pub need: f32,
+}
+
+impl Read {
+    pub fn to(&self) -> f32 {
+        self.from + self.len
+    }
+}
+
+/// Reading time for a text: 15 characters a second plus a second.
+pub fn need(text: &str) -> f32 {
+    text.chars().count() as f32 / 15.0 + 1.0
+}
+
+/// One changed job replayed after the heal.
+#[derive(Clone, Copy, Debug)]
+pub struct Recap {
+    /// The card lifts off its new slot here.
+    pub at: f32,
+    /// How long it owns the screen.
+    pub len: f32,
+    /// How long it travels from the old slot to the new one.
+    pub travel: f32,
+}
+
+impl Recap {
+    /// Lift off the new slot, then reappear at the old one.
+    pub const LIFT: f32 = 0.4;
+    /// Sitting at the old slot, label up, before it travels.
+    pub const WAIT: f32 = 0.6;
+}
+
+/// The recap label of a change, from the capture.
+pub fn recap_label(ch: &crate::capture::Change) -> String {
+    format!(
+        "{}: {} day {} -> {} day {}",
+        ch.job, ch.from.technician, ch.from.day, ch.to.technician, ch.to.day
+    )
+}
+
+/// The close sentences' supporting lines, all from the capture.
+pub fn close_subs(c: &Capture) -> [String; 3] {
+    let base = c
+        .workdir
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .to_string();
+    let dir = c
+        .code
+        .first()
+        .and_then(|x| x.path.rsplit_once('/'))
+        .map(|(d, _)| format!("{d}/"))
+        .unwrap_or_default();
+    let model = if base.is_empty() {
+        format!("ordinary Rust: {dir}")
+    } else {
+        format!("ordinary Rust: {base}/{dir}")
+    };
+    let machine = format!(
+        "first plan in {} ms, the repair in {} ms",
+        crate::capture::num(c.solve.wall_ms.round()),
+        crate::capture::num(c.repair.solve.wall_ms.round())
+    );
+    let mut ver = Vec::new();
+    if let Some(v) = c.version("solverforge") {
+        ver.push(format!("solverforge {v}"));
+    }
+    if let Some(v) = c.version("solverforge_cli") {
+        ver.push(format!("solverforge-cli {v}"));
+    }
+    let cols = 100;
+    [
+        clip(&model, cols),
+        clip(&machine, cols),
+        clip(&ver.join("  /  "), cols),
+    ]
+}
+
+/// The describe terminal's header: who talks to whom, with what, when.
+pub fn prompt_header(c: &Capture) -> String {
+    let model = c.version("agent_model").unwrap_or("coding agent");
+    let when = c.captured_at.split('T').next().unwrap_or("");
+    clip(
+        &format!("YOU -> CODING AGENT ({model}, captured {when})"),
+        90,
+    )
+}
+
+/// The transcript's header.
+pub const LOG_HEADER: &str = "AGENT TRANSCRIPT + solverforge-modeling skill";
+
+/// What the transcript shows of something the agent said: its first
+/// sentence (the rest is in the capture; the screen keeps one line short
+/// enough to read in its slot).
+pub fn say_line(text: &str) -> String {
+    match text.find(". ") {
+        Some(i) => text[..=i].to_string(),
+        None => text.to_string(),
+    }
+}
+
+/// How long a section's large title is read before its line appears.
+pub const TITLE_READ: f32 = 4.0 * BEAT;
+
 pub struct Script {
     pub prompt_lines: Vec<String>,
     pub prompt_size: Size,
     pub typing: Typing,
+    /// DESCRIBE: the terminal's header appears.
+    pub header: f32,
+    /// GENERATE: the transcript's header appears.
+    pub log_head: f32,
     /// One time per agent step.
     pub steps: Vec<f32>,
     /// (start, end) per code excerpt; the excerpt lands on `start`.
     pub code: Vec<(f32, f32)>,
+    /// SOLVE: the run command types in.
+    pub cmd: f32,
+    /// SOLVE: the score panel opens (its line is read with it).
+    pub panel_at: f32,
     pub solve: Replay,
     pub solve_feasible: Option<f32>,
     /// Drop time per block of the solved plan, in `board order`.
@@ -169,15 +365,18 @@ pub struct Script {
     pub event: f32,
     pub repair: Replay,
     pub repair_feasible: Option<f32>,
-    /// Start of each changed job's move.
+    /// Start of each changed job's move during the heal.
     pub moves: Vec<f32>,
-    /// When each change is reviewed after the heal (fewer than `moves` if
-    /// the section runs out), and for how long.
-    pub reviews: Vec<f32>,
-    pub review_len: f32,
+    /// After the heal, each change replayed in turn.
+    pub recap: Vec<Recap>,
     /// Close sentences' landings, then the logo.
     pub close: [f32; 3],
+    /// Each close sentence's supporting line and when it appears.
+    pub subs: [(String, f32); 3],
     pub logo: f32,
+    pub url: f32,
+    /// BOOT: the four verbs start landing.
+    pub verbs: f32,
     /// When each section's opener ends and its scene takes over.
     pub intros: Vec<(Section, f32)>,
     /// Every caption, in order.
@@ -187,6 +386,8 @@ pub struct Script {
     pub cordelia: Performance,
     /// (time, 0..1 progress) for every score improvement, both runs.
     pub improvements: Vec<(f32, f32)>,
+    /// Every text the viewer reads, one at a time.
+    pub reads: Vec<Read>,
 }
 
 /// The prompt's cell size: the largest that fits the terminal, else a
@@ -206,60 +407,122 @@ pub fn prompt_layout(prompt: &str) -> (Size, Vec<String>) {
     (s, wrap(prompt, (w / s.w) as usize - 2))
 }
 
+/// Builds the reading timeline: every text is placed after the previous
+/// one has had its time.
+#[derive(Default)]
+struct Reads(Vec<Read>);
+
+impl Reads {
+    fn end(&self) -> f32 {
+        self.0.last().map_or(0.0, |r| r.to())
+    }
+    /// Place a text at `at` (never before the last one ends), up for at
+    /// least `len` and at least what it needs; returns its end.
+    fn add(&mut self, spot: Spot, text: &str, at: f32, need: f32, len: f32) -> f32 {
+        let from = at.max(self.end());
+        self.0.push(Read {
+            spot,
+            text: text.to_string(),
+            from,
+            len: len.max(need),
+            need,
+        });
+        from + len.max(need)
+    }
+}
+
 impl Script {
     pub fn new(c: &Capture) -> Self {
         let board = Board::new(c);
         let mut captions: Vec<Caption> = Vec::new();
         let mut intros = Vec::new();
-        // Each data section opens on its title and one line saying what
-        // comes next; the scene takes over on the beat after it is read.
-        let mut intro = |sec: Section, cap: Cap, captions: &mut Vec<Caption>| {
-            let (a, _) = span(sec);
-            let text = story::template(cap).to_string();
-            let end = beat_up(a + story::window(&text));
-            captions.push(Caption {
-                cap,
-                text,
-                from: a,
-                to: end,
-                place: Place::Intro,
-            });
-            intros.push((sec, end));
-            end
-        };
-        let (b0, b1) = span(Section::Boot);
-        let boot_text = story::template(Cap::Boot).to_string();
-        captions.push(Caption {
-            cap: Cap::Boot,
-            from: b0 + 6.0 * BAR,
-            to: b1 - BAR,
-            text: boot_text,
-            place: Place::Banner,
-        });
-        let d_in = intro(Section::Describe, Cap::Describe, &mut captions);
-        let g_in = intro(Section::Generate, Cap::Generate, &mut captions);
-        let s_in = intro(Section::Solve, Cap::Solve, &mut captions);
-        let r_in = intro(Section::Repair, Cap::Repair, &mut captions);
-        // A lower third, after the previous one has gone.
-        let lower = |captions: &mut Vec<Caption>, cap: Cap, text: String, at: f32| -> f32 {
-            let prev = captions
-                .iter()
-                .filter(|c| c.place == Place::Lower)
-                .map(|c| c.to)
-                .fold(0.0, f32::max);
-            let from = at.max(prev + 0.1);
-            let to = from + story::window(&text);
+        let mut reads = Reads::default();
+        // A caption: its own reading event, up for its window and ending on
+        // a beat.
+        let caption = |reads: &mut Reads,
+                       captions: &mut Vec<Caption>,
+                       cap: Cap,
+                       text: String,
+                       place: Place,
+                       at: f32|
+         -> f32 {
+            let from = at.max(reads.end());
+            let to = beat_up(from + story::window(&text));
+            reads.add(Spot::Caption, &text, from, story::window(&text), to - from);
             captions.push(Caption {
                 cap,
                 text,
                 from,
                 to,
-                place: Place::Lower,
+                place,
             });
             to
         };
+        // Each data section opens on its title, read alone, then one line
+        // saying what comes next; the scene takes over on the beat after.
+        let intro = |reads: &mut Reads,
+                     captions: &mut Vec<Caption>,
+                     intros: &mut Vec<(Section, f32)>,
+                     sec: Section,
+                     cap: Cap,
+                     title: &str| {
+            let (a, _) = span(sec);
+            reads.add(Spot::Title, title, a, need(title), TITLE_READ);
+            let text = story::template(cap).to_string();
+            let end = caption(reads, captions, cap, text, Place::Intro, a + TITLE_READ);
+            // The caption's record spans the title too, for drawing.
+            if let Some(last) = captions.last_mut() {
+                last.from = a;
+            }
+            intros.push((sec, end));
+            end
+        };
 
-        // DESCRIBE: words type on the sixteenth-note grid.
+        // BOOT: the banner beams in and shines once; the line; the verbs.
+        let banner_at = 2.0 * BAR;
+        reads.add(
+            Spot::Banner,
+            "SOLVERFORGE",
+            banner_at,
+            need("SOLVERFORGE"),
+            6.8,
+        );
+        let boot_text = story::template(Cap::Boot).to_string();
+        let (_, b1) = span(Section::Boot);
+        let from = 5.5 * BAR;
+        let to = beat_up(from + story::window(&boot_text));
+        reads.add(
+            Spot::Caption,
+            &boot_text,
+            from,
+            story::window(&boot_text),
+            to - from,
+        );
+        captions.push(Caption {
+            cap: Cap::Boot,
+            from,
+            to,
+            text: boot_text,
+            place: Place::Banner,
+        });
+        let verbs_text = "DESCRIBE / GENERATE / SOLVE / REPAIR";
+        let verbs = to;
+        reads.add(Spot::Verbs, verbs_text, verbs, need(verbs_text), b1 - verbs);
+
+        // DESCRIBE: the opener, the terminal's header, then the prompt
+        // types word by word on the sixteenth-note grid; its last screen
+        // holds for three seconds.
+        let d_in = intro(
+            &mut reads,
+            &mut captions,
+            &mut intros,
+            Section::Describe,
+            Cap::Describe,
+            "01 DESCRIBE",
+        );
+        let head_text = prompt_header(c);
+        let header = d_in;
+        let ty0 = beat_up(reads.add(Spot::Header, &head_text, header, need(&head_text), 0.0));
         let (_, d1) = span(Section::Describe);
         let (prompt_size, prompt_lines) = prompt_layout(&c.prompt);
         let mut tokens = Vec::new();
@@ -282,8 +545,8 @@ impl Script {
             }
             idx += n;
         }
-        // The last screen of the prompt holds for three seconds.
-        let (ty0, ty1) = (d_in + 0.5, d1 - 3.0);
+        let ty1 = d1 - 3.0;
+        reads.add(Spot::Prompt, &c.prompt, ty0, 8.0, d1 - ty0);
         let slots = ((ty1 - ty0) / STEP) as usize;
         let per = slots as f32 / tokens.len().max(1) as f32;
         let words = tokens
@@ -301,129 +564,181 @@ impl Script {
             dur: (per * STEP).clamp(0.03, 0.2),
         };
 
-        // GENERATE: agent steps in transcript order, code on the beat.
-        let (_, g1) = span(Section::Generate);
-        let g0 = g_in;
-        let n = c.steps.len();
-        let t_last = c.steps.iter().map(|s| s.t_ms).fold(0.0, f64::max).max(1.0);
-        let steps = c
+        // GENERATE: the transcript's header; tool calls scroll in as a
+        // glance; what the agent says is held for reading; after "the
+        // constraint bodies", the excerpts land one at a time on the beat
+        // while the transcript stands still.
+        let g_in = intro(
+            &mut reads,
+            &mut captions,
+            &mut intros,
+            Section::Generate,
+            Cap::Generate,
+            "02 GENERATE",
+        );
+        let log_head = g_in;
+        let mut at = reads.add(Spot::Header, LOG_HEADER, log_head, need(LOG_HEADER), 0.0);
+        let mut steps = vec![0.0; c.steps.len()];
+        let mut code = Vec::new();
+        // The excerpts follow the first thing the agent says after it has
+        // started writing (or the end of the transcript).
+        let code_after = c
             .steps
             .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                let real = (s.t_ms / t_last) as f32;
-                let even = if n > 1 {
-                    i as f32 / (n - 1) as f32
-                } else {
-                    0.0
-                };
-                g0 + 0.4 + (0.5 * real + 0.5 * even) * (g1 - g0 - 2.4)
-            })
-            .collect();
-        // Half-bar slots shared by reading weight (lines + a base), at least
-        // a bar each; the spare halves go to the largest remainders. With
-        // more excerpts than bars, one beat each.
-        let k = c.code.len().max(1);
-        let half = BAR / 2.0;
-        let units = ((g1 - g0) / half).round() as usize;
-        let lens: Vec<usize> = if 2 * k <= units {
-            let w: Vec<f32> = c.code.iter().map(|x| x.lines.len() as f32 + 4.0).collect();
-            let total: f32 = w.iter().sum();
-            let share: Vec<f32> = w.iter().map(|v| v / total * units as f32).collect();
-            let mut lens: Vec<usize> = share.iter().map(|s| (*s as usize).max(2)).collect();
-            while lens.iter().sum::<usize>() > units {
-                let i = (0..k)
-                    .filter(|&i| lens[i] > 2)
-                    .max_by_key(|&i| lens[i])
-                    .unwrap();
-                lens[i] -= 1;
+            .position(|s| s.kind == "say" && s.text.to_lowercase().contains("constraint"))
+            .or_else(|| c.steps.iter().position(|s| s.kind == "file"))
+            .unwrap_or(c.steps.len().saturating_sub(1));
+        let place_code = |reads: &mut Reads, code: &mut Vec<(f32, f32)>, mut at: f32| -> f32 {
+            for x in &c.code {
+                let start = beat_up(at.max(reads.end()));
+                let n = need(&x.title) + 0.6;
+                let end = beat_up(start + n.max(2.0 + 0.15 * x.lines.len() as f32));
+                reads.add(Spot::Excerpt, &x.title, start, n, end - start);
+                code.push((start, end));
+                at = end;
             }
-            while lens.iter().sum::<usize>() < units {
-                let i = (0..k)
-                    .max_by(|&a, &b| {
-                        (share[a] - lens[a] as f32).total_cmp(&(share[b] - lens[b] as f32))
-                    })
-                    .unwrap();
-                lens[i] += 1;
-            }
-            lens
-        } else {
-            vec![1; k]
+            at
         };
-        let unit = if 2 * k <= units { half } else { BEAT };
-        let mut at = g0;
-        let code = lens
-            .iter()
-            .map(|&n| {
-                let slot = (at, (at + n as f32 * unit).min(g1));
-                at += n as f32 * unit;
-                slot
-            })
-            .collect();
+        let mut i = 0;
+        while i < c.steps.len() {
+            if c.steps[i].kind == "say" {
+                let line = say_line(&c.steps[i].text);
+                steps[i] = at.max(reads.end());
+                at = reads.add(Spot::Say, &line, steps[i], need(&line), 0.0);
+                if i == code_after {
+                    at = place_code(&mut reads, &mut code, at);
+                }
+                i += 1;
+                continue;
+            }
+            // A run of tool calls and files: a quarter second each, then a
+            // second to take the burst in.
+            let j = (i..c.steps.len())
+                .find(|&j| c.steps[j].kind == "say")
+                .unwrap_or(c.steps.len());
+            let from = at.max(reads.end());
+            for (k, s) in steps.iter_mut().enumerate().take(j).skip(i) {
+                *s = from + (k - i) as f32 * 0.25;
+            }
+            let len = (j - i) as f32 * 0.25 + 1.0;
+            at = reads.add(Spot::Log, &c.steps[j - 1].text, from, len, len);
+            if code_after >= i && code_after < j {
+                at = place_code(&mut reads, &mut code, at);
+            }
+            i = j;
+        }
+        if code.is_empty() {
+            place_code(&mut reads, &mut code, at);
+        }
 
-        // SOLVE: the board's axes first, then what red means, then the run
-        // replays; feasibility lands on a beat and holds.
-        let (_, s1) = span(Section::Solve);
-        let axes = s_in;
-        let board_to = lower(
+        // SOLVE: the command; the board and its axes; the score panel and
+        // what red means; then the run alone; FEASIBLE, read while the
+        // numbers stand still; what it means; the rest of the run; amber.
+        let s_in = intro(
+            &mut reads,
+            &mut captions,
+            &mut intros,
+            Section::Solve,
+            Cap::Solve,
+            "03 SOLVE",
+        );
+        let cmd = s_in;
+        let line = crate::scenes::command_line(c).unwrap_or_default();
+        let cmd_end = reads.add(Spot::Command, &line, cmd, need(&line) + 1.2, 0.0);
+        let axes = beat_up(cmd_end);
+        let board_to = caption(
+            &mut reads,
             &mut captions,
             Cap::Board,
             story::template(Cap::Board).into(),
+            Place::Lower,
             axes,
         );
-        let score_at = beat_up(board_to);
-        let score_to = lower(
+        let panel_at = board_to;
+        let score_to = caption(
+            &mut reads,
             &mut captions,
             Cap::Score,
             story::template(Cap::Score).into(),
-            score_at,
+            Place::Lower,
+            panel_at,
         );
-        // The run starts as red is explained, so the number is on screen;
-        // it turns feasible only once that line has been read.
-        let run_from = score_at + BEAT;
-        let mut solve = Replay::new(&c.solve, run_from, 8.0, 0.0);
+        let run_from = score_to + BEAT;
         let first_ok = |s: &Solve| {
             s.trajectory
                 .iter()
                 .find(|p| p.score.feasible())
                 .map(|p| p.t_ms)
         };
-        let after_feasible = 2.0 * story::window(story::template(Cap::Cost)) + 0.8;
+        let mut solve = Replay::new(&c.solve, run_from, 8.0, 0.0);
         if let Some(ms) = first_ok(&c.solve) {
+            // Feasible about three seconds into the run, on a beat.
             let tau = solve.tau(ms).max(0.05);
-            let land = beat_up(score_to + 0.3);
-            if solve.at(ms) < land {
-                solve.len = (land - run_from) / tau;
-            }
-            solve = solve.snap(ms, s1 - run_from - after_feasible);
+            solve.len = (3.0 / tau).clamp(3.0, 10.0);
+            solve = solve.snap(ms, 10.0);
         }
         let solve_feasible = first_ok(&c.solve).map(|ms| solve.at(ms));
+        let mut cursor = solve.end();
         if let Some(at) = solve_feasible {
-            let to = lower(
+            let stamp_end = reads.add(Spot::Stamp, "FEASIBLE", at, need("FEASIBLE"), STAMP_HOLD);
+            let ok_to = caption(
+                &mut reads,
                 &mut captions,
                 Cap::Feasible,
                 story::template(Cap::Feasible).into(),
-                at + 0.25,
+                Place::Lower,
+                stamp_end,
             );
-            lower(
-                &mut captions,
-                Cap::Cost,
-                story::template(Cap::Cost).into(),
-                to + 0.2,
-            );
+            solve.hold_at = at;
+            solve.hold_len = beat_up(ok_to) - at;
+            cursor = solve.end();
         }
+        caption(
+            &mut reads,
+            &mut captions,
+            Cap::Cost,
+            story::template(Cap::Cost).into(),
+            Place::Lower,
+            cursor + BEAT,
+        );
         let drop_end = solve_feasible.unwrap_or(solve.from + solve.len * 0.85);
         let drops = spread(c.solve.plan.len(), solve.from + 0.2, drop_end - 0.15, STEP);
 
-        // REPAIR: the live week, then the event strikes on a bar line; two
-        // bars for the viewer to read it; Cordelia charges for two bars and
-        // fires on the downbeat the change enters the running solve.
-        let (_, r1) = span(Section::Repair);
-        // A bar of the live week after the opener, then the strike.
+        // REPAIR: the opener; a bar of the live week; the breakdown strikes
+        // on a bar line and its sentence is read; then what the depot does,
+        // while Cordelia charges; she fires on the downbeat after; the plan
+        // heals; PLAN HEALED is read while the numbers stand still.
+        let r_in = intro(
+            &mut reads,
+            &mut captions,
+            &mut intros,
+            Section::Repair,
+            Cap::Repair,
+            "04 REPAIR",
+        );
         let event = bar_up(r_in + 2.0);
-        let enter = event + BAR;
-        let fire = enter + 2.0 * BAR;
-        // The repair's clock starts at its first point: the change went in.
+        reads.add(
+            Spot::Live,
+            "LIVE PLAN",
+            r_in,
+            need("LIVE PLAN"),
+            event - r_in,
+        );
+        let label = &c.repair.label;
+        let ev_end = reads.add(Spot::Event, label, event, need(label) + 0.7, 0.0);
+        let tell = story::template(Cap::Tell).to_string();
+        let tell_to = caption(
+            &mut reads,
+            &mut captions,
+            Cap::Tell,
+            tell,
+            Place::Lower,
+            beat_up(ev_end),
+        );
+        // The fire lands on a bar line after the line is read, at least
+        // two bars after the event (Cordelia charges for two bars).
+        let fire = bar_up(tell_to.max(event + 3.0 * BAR));
+        let enter = fire - 2.0 * BAR;
         let origin = c
             .repair
             .solve
@@ -432,8 +747,6 @@ impl Script {
             .map(|p| p.t_ms)
             .fold(f64::MAX, f64::min);
         let mut repair = Replay::new(&c.repair.solve, fire, 8.0, origin);
-        // The heal lands a bar and a half after the fire, on a beat: room
-        // for every changed job to travel while the beams hold.
         if let Some(ms) = first_ok(&c.repair.solve) {
             let tau = repair.tau(ms).max(0.05);
             repair.len = ((3.0 / tau).min(14.0) / BEAT).round().max(1.0) * BEAT;
@@ -458,10 +771,20 @@ impl Script {
             cut,
             exit,
         };
-        let tell = story::template(Cap::Tell).to_string();
-        lower(&mut captions, Cap::Tell, tell, enter + 0.3);
-        // Once she is gone: what moved, then each change in turn, old slot
-        // to new, one per bar, then the line that closes the section.
+        if let Some(at) = repair_feasible {
+            let stamp_end = reads.add(
+                Spot::Stamp,
+                "PLAN HEALED",
+                at,
+                need("PLAN HEALED"),
+                STAMP_HOLD,
+            );
+            repair.hold_at = at;
+            repair.hold_len = stamp_end - at;
+        }
+        // Once she is gone: what moved; then each change replayed, the
+        // card back at its old slot travelling to its new one; then the
+        // line that closes the section.
         let bus = board
             .struck_bus
             .clone()
@@ -474,35 +797,61 @@ impl Script {
                 ("unchanged", c.repair.unchanged_count.to_string()),
             ],
         );
-        lower(&mut captions, Cap::Moved, moved, exit + 0.4);
+        let moved_to = caption(
+            &mut reads,
+            &mut captions,
+            Cap::Moved,
+            moved,
+            Place::Lower,
+            beat_up(repair.end().max(exit + super_out())),
+        );
+        let mut at = moved_to;
+        let mut recap = Vec::new();
+        for (k, ch) in c.repair.changed.iter().enumerate() {
+            // The first three travel slowly; the rest a little faster, but
+            // every one moves and every label gets its reading time.
+            let travel = if k < 3 { 1.4 } else { 1.0 };
+            let label = recap_label(ch);
+            let n = need(&label);
+            let len = beat_up(Recap::LIFT + (Recap::WAIT + travel + 0.6).max(n) + 0.3);
+            let from = at.max(reads.end());
+            reads.add(
+                Spot::Recap,
+                &label,
+                from + Recap::LIFT,
+                n,
+                len - Recap::LIFT,
+            );
+            recap.push(Recap {
+                at: from,
+                len,
+                travel,
+            });
+            at = from + len;
+        }
         let done = story::template(Cap::Done).to_string();
-        let done_at = r1 - story::window(&done) - 0.4;
-        let n_rev = c.repair.changed.len();
-        let rev0 = beat_up(exit + 0.5);
-        let rev_step = if n_rev > 0 {
-            (((done_at - rev0) / n_rev as f32 / BEAT).floor() * BEAT).clamp(BEAT, BAR)
-        } else {
-            BAR
-        };
-        let reviews = (0..n_rev)
-            .map(|k| rev0 + k as f32 * rev_step)
-            .filter(|&t| t + rev_step <= done_at + 0.01)
-            .collect();
-        lower(&mut captions, Cap::Done, done, done_at);
+        caption(&mut reads, &mut captions, Cap::Done, done, Place::Lower, at);
 
-        // CLOSE: three sentences, one at a time, each up for its reading
-        // window; then the logo and the address hold to the end.
+        // CLOSE: three sentences, one at a time, each read alone, then its
+        // line from the capture under it; then the logo and the address.
         let (c0, _) = span(Section::Close);
         let speed = story::speed(c.solve.wall_ms.max(c.repair.solve.wall_ms));
+        let sub_text = close_subs(c);
         let mut close = [0.0; 3];
+        let mut subs: [(String, f32); 3] = Default::default();
         let mut at = c0;
         for (i, cap) in [Cap::Close1, Cap::Close2, Cap::Close3]
             .into_iter()
             .enumerate()
         {
             let text = story::fill(story::template(cap), &[("speed", speed.clone())]);
-            let to = beat_up(at + story::window(&text) + 0.3);
+            let w = story::window(&text);
+            let read_to = beat_up(at + w);
+            reads.add(Spot::Caption, &text, at, w, read_to - at);
+            let sub = sub_text[i].clone();
+            let to = beat_up(reads.add(Spot::Sub, &sub, read_to, need(&sub) + 0.4, 0.0) + 0.4);
             close[i] = at;
+            subs[i] = (sub, read_to);
             captions.push(Caption {
                 cap,
                 text,
@@ -513,6 +862,14 @@ impl Script {
             at = to;
         }
         let logo = at;
+        let url = logo + BAR;
+        reads.add(
+            Spot::Url,
+            "solverforge.org",
+            url,
+            need("solverforge.org"),
+            0.0,
+        );
 
         let mut improvements = progress(&c.solve.trajectory, &solve);
         improvements.extend(progress(&c.repair.solve.trajectory, &repair));
@@ -521,8 +878,12 @@ impl Script {
             prompt_lines,
             prompt_size,
             typing,
+            header,
+            log_head,
             steps,
             code,
+            cmd,
+            panel_at,
             solve,
             solve_feasible,
             drops,
@@ -530,18 +891,29 @@ impl Script {
             repair,
             repair_feasible,
             moves,
-            reviews,
-            review_len: rev_step,
+            recap,
             close,
+            subs,
             logo,
+            url,
+            verbs,
             intros,
             captions,
             axes,
             cordelia,
             improvements,
+            reads: reads.0,
         }
     }
 }
+
+/// How long Cordelia takes to tear out.
+fn super_out() -> f32 {
+    crate::scenes::cordelia::OUT
+}
+
+/// How long a stamp holds over the board.
+pub const STAMP_HOLD: f32 = 3.5;
 
 impl Script {
     /// When a section's opener hands over to its scene (its start if it
@@ -551,6 +923,19 @@ impl Script {
             .iter()
             .find(|(s, _)| *s == sec)
             .map_or(span(sec).0, |(_, t)| *t)
+    }
+
+    /// 0..1: how much a text of this kind holds the viewer's eyes at t,
+    /// easing in and out over a quarter second (for dimming the rest).
+    pub fn spot_gain(&self, t: f32, spot: Spot) -> f32 {
+        self.reads
+            .iter()
+            .filter(|r| r.spot == spot)
+            .map(|r| {
+                crate::gfx::smooth((t - r.from + 0.25) / 0.25)
+                    * (1.0 - crate::gfx::smooth((t - r.to()) / 0.25))
+            })
+            .fold(0.0, f32::max)
     }
 }
 
@@ -646,16 +1031,99 @@ mod tests {
             }
             inside(s.solve_feasible.unwrap(), Section::Solve);
             inside(s.event, Section::Repair);
-            for &t in s.moves.iter().chain(&s.reviews) {
+            for &t in s.moves.iter().chain(s.recap.iter().map(|r| &r.at)) {
                 inside(t, Section::Repair);
             }
             inside(s.repair_feasible.unwrap(), Section::Repair);
             let (_, s1) = span(Section::Solve);
-            assert!(s.solve.from + s.solve.len <= s1);
+            assert!(s.solve.end() <= s1);
             let (_, r1) = span(Section::Repair);
-            assert!(s.repair.from + s.repair.len <= r1 - 4.0);
-            for &t in &s.reviews {
-                assert!(t + s.review_len <= r1);
+            assert!(s.repair.end() <= r1 - 4.0);
+            for r in &s.recap {
+                assert!(r.at + r.len <= r1);
+            }
+        }
+    }
+
+    /// One text at a time: no two reading windows overlap anywhere in the
+    /// video, each text is up for at least the time it needs (15 chars a
+    /// second plus a second for anything meant to be read), and every
+    /// caption on screen is on the reading timeline.
+    #[test]
+    fn one_text_is_read_at_a_time() {
+        for c in all() {
+            let s = Script::new(&c);
+            let mut v = s.reads.clone();
+            v.sort_by(|a, b| a.from.total_cmp(&b.from));
+            for w in v.windows(2) {
+                assert!(
+                    w[1].from >= w[0].to() - 1e-3,
+                    "{:?} {:?} ({:.2}..{:.2}) overlaps {:?} {:?} ({:.2}..)",
+                    w[0].spot,
+                    w[0].text,
+                    w[0].from,
+                    w[0].to(),
+                    w[1].spot,
+                    w[1].text,
+                    w[1].from
+                );
+            }
+            for r in &v {
+                assert!(r.len >= r.need - 1e-3, "{:?} {:?} rushed", r.spot, r.text);
+                // Glances (a scrolling log, the typing prompt) declare
+                // their own time; everything else must meet the rule.
+                if !matches!(r.spot, Spot::Log | Spot::Prompt) {
+                    assert!(
+                        r.need >= need(&r.text) - 1e-3,
+                        "{:?} {:?} needs more",
+                        r.spot,
+                        r.text
+                    );
+                }
+                assert!(r.to() <= crate::timeline::DURATION);
+            }
+            for cap in &s.captions {
+                assert!(
+                    v.iter().any(|r| r.text == cap.text
+                        && r.from >= cap.from - 1e-3
+                        && r.to() <= cap.to + 1e-3),
+                    "{:?} is not on the reading timeline",
+                    cap.cap
+                );
+            }
+            // Brisk: every section ends within two bars of its last text.
+            for &(sec, _, _) in crate::timeline::SECTIONS.iter() {
+                let (a, b) = span(sec);
+                let last = v
+                    .iter()
+                    .filter(|r| r.from >= a && r.from < b)
+                    .map(|r| r.to())
+                    .fold(a, f32::max);
+                // The placeholder's synthetic transcript is wordier than the
+                // real one; it only previews layouts, so only the release
+                // capture must fit the sections exactly.
+                if c.is_release() {
+                    assert!(last <= b + 1e-3, "{sec:?} overruns");
+                    assert!(b - last <= 2.0 * BAR + 1.6, "{sec:?} pads {:.1}s", b - last);
+                }
+            }
+        }
+    }
+
+    /// Each recapped job visibly travels and its label is read.
+    #[test]
+    fn every_recap_moves_and_is_read() {
+        for c in all() {
+            let s = Script::new(&c);
+            assert_eq!(s.recap.len(), c.repair.changed.len());
+            for (r, ch) in s.recap.iter().zip(&c.repair.changed) {
+                assert!(r.travel >= 1.0);
+                let label = recap_label(ch);
+                assert!(r.len - Recap::LIFT >= need(&label) - 1e-3);
+                assert!(r.len >= Recap::LIFT + Recap::WAIT + r.travel + 0.5);
+            }
+            for w in s.recap.windows(2) {
+                assert!(w[1].at >= w[0].at + w[0].len - 1e-3);
             }
         }
     }
