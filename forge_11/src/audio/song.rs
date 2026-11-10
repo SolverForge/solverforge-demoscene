@@ -1042,7 +1042,8 @@ fn mixdown(m: Mix) -> Vec<[f32; 2]> {
         out[i][1] += 0.3 * r[i];
     }
 
-    // Soft clip, then normalise to a fixed peak below full scale.
+    // Soft clip, then normalise to 0.7 (about -3 dBFS): AAC encoding overshoots
+    // a -2 dBFS master to about -0.7 dB, so the master leaves that headroom.
     let mut peak = 0.0f32;
     for frame in out.iter_mut() {
         for s in frame.iter_mut() {
@@ -1050,7 +1051,7 @@ fn mixdown(m: Mix) -> Vec<[f32; 2]> {
             peak = peak.max(s.abs());
         }
     }
-    let g = if peak > 0.0 { 0.8 / peak } else { 1.0 };
+    let g = if peak > 0.0 { 0.7 / peak } else { 1.0 };
     for (i, frame) in out.iter_mut().enumerate() {
         let t = i as f32 / SR;
         let fade = (t / 0.3).min(1.0) * ((DURATION - t) / 1.5).clamp(0.0, 1.0);
