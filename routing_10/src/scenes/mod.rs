@@ -1,10 +1,9 @@
 // The picture: one function per section, all drawing into the same frame,
 // then the story cards and the corner logo on top.
-mod intro;
 mod live;
 mod outro;
 
-pub use live::HOLE;
+pub use live::{DIALOG, HOLE, PORTRAIT};
 
 use demofx::Cards;
 
@@ -19,8 +18,7 @@ pub const MINT: u32 = 0x6ee7b7;
 pub const PAPER: u32 = 0xecfdf5;
 
 pub struct Demo {
-    /// When each task block lands in the intro's week (the song plays a blip
-    /// at the same times).
+    /// Kept empty: only the real workflow supplies action cues.
     pub landings: Vec<f32>,
     cards: Cards,
     statue: Statue,
@@ -29,7 +27,7 @@ pub struct Demo {
 impl Demo {
     pub fn new() -> Self {
         Self {
-            landings: intro::landings(),
+            landings: Vec::new(),
             cards: story::cards(),
             statue: Statue::load(),
         }
@@ -38,19 +36,21 @@ impl Demo {
     pub fn frame(&mut self, f: &mut Frame, t: f32) {
         let n = now(t);
         let corner = match n.section {
-            Section::Intro => intro::draw(f, &self.statue, n, t),
-            Section::Live => live::draw(f, &self.statue, n, t),
+            Section::Intro | Section::Live => live::draw(
+                f,
+                &self.statue,
+                crate::timeline::Now {
+                    section: Section::Live,
+                    local: t,
+                    len: crate::timeline::LIVE_TO,
+                },
+                t,
+            ),
             Section::Outro => outro::draw(f, n),
         };
         self.cards.draw(f, t, 1.0);
         demofx::logo::corner(f, t, corner);
     }
-}
-
-/// The part of `s` typed so far, at `cps` characters a second from `start`.
-pub fn typed(s: &str, start: f32, cps: f32, t: f32) -> String {
-    let k = ((t - start) * cps).max(0.0) as usize;
-    s.chars().take(k).collect()
 }
 
 /// A faint dot every 40 pixels: the graph paper the scenes sit on.

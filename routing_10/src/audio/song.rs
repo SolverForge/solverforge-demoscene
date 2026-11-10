@@ -1,17 +1,10 @@
-// HERMES_09 soundtrack: synthwave at 120 BPM in D harmonic minor,
-// Dm - Bb - Gm - A, one chord per bar. Detuned supersaw pads, gliding octave
-// bass, a gated snare, tom fills and noise risers, and leads that bend in the
-// tracker style of the One Must Fall soundtrack: legato notes slide into each
-// other, held notes scoop up from below and grow a vibrato, and phrase
-// endings dive an octave.
-//
-// The arrangement follows the picture's sections bar for bar (see
-// timeline.rs). The intro builds to the drop; under the live take the band
-// steps back to pads, a held bass and light hats so the narration sits on
-// top; the outro brings the groove and the hook back. Every task block that
-// lands in the intro's week is a blip in the mix. Every note is rendered once
-// into buffers at startup; live playback and the WAV export read the same
-// samples.
+// ROUTING_10 — "Switchback", 120 BPM, F harmonic minor.
+// Eight-bar sentence: a four-bar question, its recognisable repeated opening,
+// then a shorter dominant answer resolving to F. The rhythm section shares a
+// straight eighth-note grid; no octave bass jumps, scoops or pitch dives.
+// Only the opening two bars are foreground; the rest is a restrained statement.
+// The live section loops a speech bed and the outro recalls the opening before
+// its dominant/tonic cadence. Section lengths come from the existing timeline.
 use crate::timeline::{bars, now, Section, BAR, BEAT, DURATION, TOTAL_BARS};
 
 pub const SAMPLE_RATE: u32 = 44_100;
@@ -32,53 +25,76 @@ fn smooth(x: f32) -> f32 {
     x * x * (3.0 - 2.0 * x)
 }
 
-// F harmonic minor (E natural, never E flat): Fm - Db - Ab - C, the C major
-// chord pulling back to Fm every four bars.
-const ROOTS: [f32; 4] = [41.0, 37.0, 44.0, 36.0];
+// Close-position voices: each pad part moves by at most three semitones.
+// Stable pitches are F G Ab Bb C Db E; roots stay in a single bass register.
+const ROOTS: [f32; 4] = [41.0, 37.0, 34.0, 36.0];
 const PADS: [[f32; 4]; 4] = [
-    [65.0, 68.0, 72.0, 79.0], // Fm add9
-    [61.0, 65.0, 68.0, 72.0], // Dbmaj7
-    [68.0, 72.0, 75.0, 79.0], // Ab
-    [67.0, 71.0, 72.0, 76.0], // C7
+    [60.0, 65.0, 68.0, 72.0], // Fm
+    [61.0, 65.0, 68.0, 72.0], // Dbmaj7: three common tones
+    [61.0, 65.0, 70.0, 73.0], // Bbm
+    [60.0, 64.0, 67.0, 72.0], // C: E rises to F at the resolution
 ];
+const STATEMENT: [usize; 8] = [0, 1, 2, 3, 0, 1, 3, 0];
+const BED: [usize; 8] = [0, 1, 2, 3, 0, 1, 3, 0];
 
-/// Two four-bar phrases on an eighth-note grid: (start, length, midi).
-const HOOK_A: [(u8, u8, u8); 18] = [
-    (0, 2, 72),
-    (2, 1, 77),
-    (3, 1, 79),
-    (4, 2, 84),
-    (6, 2, 80),
-    (8, 3, 75),
-    (11, 1, 72),
-    (12, 4, 68),
-    (16, 2, 72),
-    (18, 1, 77),
-    (19, 1, 80),
-    (20, 2, 84),
-    (22, 2, 82),
-    (24, 2, 80),
-    (26, 1, 77),
-    (27, 1, 76),
-    (28, 3, 72),
-    (31, 1, 75),
+// (sixteenth onset, duration, MIDI). This is a composed eight-bar sentence,
+// not shuffled hooks. A and B share their first two bars exactly; the second
+// ending contracts the rhythm and resolves E to F instead of adding a fill.
+const HOOK_A: [(u8, u8, u8); 15] = [
+    (0, 4, 72),
+    (4, 4, 77),
+    (8, 2, 79),
+    (10, 4, 80),
+    (16, 6, 80),
+    (22, 2, 79),
+    (24, 6, 77),
+    (32, 4, 77),
+    (36, 4, 80),
+    (40, 2, 79),
+    (42, 4, 77),
+    (48, 4, 76),
+    (52, 4, 79),
+    (56, 4, 76),
+    (60, 4, 72),
 ];
-const HOOK_B: [(u8, u8, u8); 14] = [
-    (0, 3, 82),
-    (3, 1, 80),
-    (4, 2, 77),
-    (6, 2, 80),
-    (8, 2, 84),
-    (10, 2, 80),
-    (12, 4, 75),
-    (16, 2, 72),
-    (18, 1, 75),
-    (19, 1, 76),
-    (20, 4, 77),
-    (24, 2, 72),
-    (26, 2, 68),
-    (28, 4, 72),
+const HOOK_B: [(u8, u8, u8); 12] = [
+    (0, 4, 72),
+    (4, 4, 77),
+    (8, 2, 79),
+    (10, 4, 80),
+    (16, 6, 80),
+    (22, 2, 79),
+    (24, 6, 77),
+    (32, 4, 76),
+    (36, 4, 77),
+    (40, 4, 79),
+    (44, 4, 76),
+    (48, 12, 77),
 ];
+const CODA: [(u8, u8, u8); 4] = [(0, 4, 76), (4, 4, 79), (8, 6, 76), (16, 12, 77)];
+
+fn harmony(section: Section, local_bar: usize) -> usize {
+    match section {
+        Section::Intro => STATEMENT[local_bar % STATEMENT.len()],
+        Section::Live => {
+            if local_bar + 1 == section_bars(section) {
+                3 // A single dominant bar prepares the returning F-minor hook.
+            } else {
+                BED[local_bar % BED.len()]
+            }
+        }
+        Section::Outro => {
+            let length = section_bars(section);
+            if local_bar + 2 == length {
+                3
+            } else if local_bar + 1 == length {
+                0
+            } else {
+                STATEMENT[local_bar % STATEMENT.len()]
+            }
+        }
+    }
+}
 
 struct Mix {
     dry: Vec<[f32; 2]>,
@@ -162,79 +178,61 @@ pub fn render(landings: &[f32]) -> Vec<[f32; 2]> {
     for b in 0..TOTAL_BARS as usize {
         let t0 = bars(b as f32);
         let section = now(t0 + 0.01).section;
-        let next = now(t0 + BAR + 0.01).section;
-        let chord = b % 4;
-        let prev_root = ROOTS[(b + 3) % 4];
-        let last_bar = b + 1 == TOTAL_BARS as usize;
         let k = b - first_bar(section);
+        let chord = harmony(section, k);
         let left = section_bars(section) - k;
-
-        pad(
-            &mut m,
-            t0,
-            chord,
-            if last_bar { 3.5 } else { BAR + 0.35 },
-            b,
-        );
+        pad(&mut m, t0, chord, BAR + 0.30, b);
         match section {
             Section::Intro => {
-                arp(&mut m, t0, chord, if k >= 2 { 1.0 } else { 0.6 });
-                if k >= 2 {
-                    bass(&mut m, t0, prev_root, ROOTS[chord], Bass::Eighths, 0.8);
-                    kick(&mut m, t0);
-                    kick(&mut m, t0 + 2.5 * BEAT);
-                    gated_snare(&mut m, t0 + 2.0 * BEAT, 0.8);
+                // Two-bar opening, then step back rather than escalating an intro.
+                let foreground = k < 2;
+                let gain = if foreground { 0.85 } else { 0.42 };
+                bass(&mut m, t0, chord, Bass::Drive, gain);
+                groove(&mut m, t0, gain);
+                arp(&mut m, t0, chord, if foreground { 0.32 } else { 0.12 });
+                if k.is_multiple_of(8) {
+                    lead(&mut m, t0, &HOOK_A, 0.0, Osc::Brass, 0.65);
                 }
-                if k >= 4 {
-                    four_on_floor(&mut m, t0);
-                    hats(&mut m, t0, 2);
+                if k % 8 == 4 {
+                    lead(&mut m, t0, &HOOK_B, 0.0, Osc::Brass, 0.48);
                 }
             }
             Section::Live => {
-                // Under the voice: pads, a held bass, quiet hats. No lead, no snare.
-                arp(&mut m, t0, chord, 0.35);
-                bass(&mut m, t0, prev_root, ROOTS[chord], Bass::Held, 0.5);
-                if k >= 1 && left > 1 {
-                    hats(&mut m, t0, 2);
+                // Preserve the pulse below speech, without a competing melody.
+                bass(&mut m, t0, chord, Bass::Drive, 0.38);
+                hats(&mut m, t0, 0.12);
+                arp(&mut m, t0, chord, 0.10);
+                // A single restrained pickup, only at the return of the hook.
+                if left == 1 {
+                    tom_fill(&mut m, t0);
+                    riser(&mut m, t0 + BAR * 0.5);
                 }
             }
             Section::Outro => {
-                arp(&mut m, t0, chord, 1.0);
                 if left > 2 {
-                    bass(&mut m, t0, prev_root, ROOTS[chord], Bass::Octaves, 1.0);
-                    four_on_floor(&mut m, t0);
-                    gated_snare(&mut m, t0 + BEAT, 1.0);
-                    gated_snare(&mut m, t0 + 3.0 * BEAT, 1.0);
-                    hats(&mut m, t0, 4);
-                } else if !last_bar {
-                    bass(&mut m, t0, prev_root, ROOTS[chord], Bass::Held, 0.8);
+                    bass(&mut m, t0, chord, Bass::Drive, 0.85);
+                    groove(&mut m, t0, 0.85);
+                    arp(&mut m, t0, chord, 0.25);
+                    if k.is_multiple_of(8) {
+                        lead(&mut m, t0, &HOOK_A, 0.0, Osc::Super, 0.85);
+                    } else if k % 8 == 4 && left >= 4 {
+                        lead(&mut m, t0, &HOOK_B, 0.0, Osc::Super, 0.85);
+                    }
+                } else {
+                    bass(&mut m, t0, chord, Bass::Held, 0.65);
+                    if left == 2 {
+                        lead(&mut m, t0, &CODA, 0.0, Osc::Pulse, 0.85);
+                    } else {
+                        kick(&mut m, t0, 0.65);
+                    }
                 }
             }
         }
-        // Toms and a noise riser into every new section.
-        if next != section && b + 1 < TOTAL_BARS as usize {
-            tom_fill(&mut m, t0);
-            riser(&mut m, t0);
-        }
-
-        // Leads: the intro's last bars tease the hook an octave down; the
-        // outro plays it in full.
-        match section {
-            Section::Intro if k == 2 => lead(&mut m, t0, &HOOK_B, -12.0, Osc::Brass, 0.6, true),
-            Section::Outro if k == 0 => {
-                lead(&mut m, t0, &HOOK_A, 0.0, Osc::Super, 1.0, false);
-                lead(&mut m, t0, &HOOK_A, -12.0, Osc::Pulse, 0.5, false);
-            }
-            _ => {}
-        }
     }
 
-    // A blip for every task block landing in the intro's week.
-    for (i, &at) in landings.iter().enumerate() {
-        let chord = ((at / BAR) as usize) % 4;
-        let note = PADS[chord][i % 4] + 24.0;
-        blip(&mut m, at, hz(note), if i % 2 == 0 { -0.5 } else { 0.5 });
-    }
+    // Keep the API but do not turn arbitrary UI event times into random musical
+    // accents: the workflow edit supplies its own clicks, not a second melody.
+    let _ = landings;
 
     mixdown(m)
 }
@@ -288,10 +286,10 @@ fn pad(m: &mut Mix, t0: f32, chord: usize, dur: f32, bar: usize) {
 
 fn arp(m: &mut Mix, t0: f32, chord: usize, gain: f32) {
     let notes = PADS[chord];
-    let order = [0, 1, 2, 3, 2, 1, 0, 1];
-    for step in 0..16 {
-        let note = notes[order[step % 8]] + if step >= 8 { 12.0 } else { 0.0 };
-        let f = hz(note + 12.0);
+    // Quiet two-note offbeat reply, in a fixed register below the lead.
+    for (step, tone) in [(6, 1), (14, 2)] {
+        let note = notes[tone];
+        let f = hz(note);
         let at = t0 + step as f32 * BEAT / 4.0;
         let mut lp = 0.0f32;
         m.voice(
@@ -303,7 +301,7 @@ fn arp(m: &mut Mix, t0: f32, chord: usize, gain: f32) {
             move |t, _| {
                 let raw = pulse(f * t, 0.25);
                 lp += (raw - lp) * 0.25;
-                lp * (-t * 18.0).exp()
+                lp * env(t, 0.004, 0.14, 0.06) * (-t * 18.0).exp()
             },
         );
     }
@@ -311,68 +309,53 @@ fn arp(m: &mut Mix, t0: f32, chord: usize, gain: f32) {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Bass {
-    /// Eighths on the root.
-    Eighths,
-    /// Eighths jumping root / octave, sliding between them.
-    Octaves,
-    /// One long note.
+    Drive,
     Held,
 }
 
-/// One bar of bass as a single gliding voice: it slides in from the last
-/// bar's root, and in Octaves it slides up and down every eighth.
-fn bass(m: &mut Mix, t0: f32, from: f32, root: f32, kind: Bass, gain: f32) {
-    let eighth = BEAT / 2.0;
-    let mut pitch = from + 12.0;
+// The bass reinforces each kick and the offbeat hats on the same eighth grid.
+// Root-only articulation is intentional: harmonic movement is between bars,
+// not a competing tune or a seven-event root/fifth/octave pattern.
+fn bass(m: &mut Mix, t0: f32, chord: usize, kind: Bass, gain: f32) {
+    let root = ROOTS[chord];
     let mut phase = 0.0f32;
     let mut lp = 0.0f32;
-    let k_bar = coeff(0.035);
-    let k_oct = coeff(0.012);
-    m.voice(t0, BAR + 0.02, 0.17 * gain, 0.0, 0.0, move |t, _| {
-        let step = (t / eighth) as usize;
-        let up = if kind == Bass::Octaves && step % 2 == 1 {
-            12.0
-        } else {
-            0.0
-        };
-        let target = root + 12.0 + up;
-        pitch += (target - pitch) * if t < 0.1 { k_bar } else { k_oct };
-        phase += hz(pitch) / SR;
+    m.voice(t0, BAR, 0.22 * gain, 0.0, 0.0, move |t, _| {
         let local = if kind == Bass::Held {
             t
         } else {
-            t - step as f32 * eighth
+            t % (BEAT / 2.0)
         };
-        let pluck = if kind == Bass::Held {
-            (-t * 0.8).exp()
+        phase = (phase + hz(root) / SR).fract();
+        let pluck = (-local * 13.0).exp();
+        let raw = 0.45 * saw(phase) + 0.55 * (TAU * phase).sin();
+        lp += (raw - lp) * (0.045 + 0.12 * pluck);
+        let duration = if kind == Bass::Held {
+            BAR
         } else {
-            (-local * 9.0).exp()
+            BEAT / 2.0 - 0.03
         };
-        let raw = 0.65 * saw(phase) + 0.35 * pulse(phase, 0.5);
-        lp += (raw - lp) * (0.03 + 0.22 * pluck);
-        let gate = if kind == Bass::Held {
-            env(t, 0.01, BAR - 0.1, 0.1)
-        } else {
-            env(local, 0.003, eighth - 0.03, 0.02)
-        };
-        lp * gate * (0.55 + 0.45 * pluck)
+        lp * env(local, 0.008, duration - 0.035, 0.035) * (0.6 + 0.4 * pluck)
     });
 }
 
-fn kick(m: &mut Mix, at: f32) {
+fn kick(m: &mut Mix, at: f32, gain: f32) {
     m.kicks.push(at);
     let mut phase = 0.0f32;
-    m.voice(at, 0.45, 0.55, 0.0, 0.0, move |t, _| {
+    m.voice(at, 0.45, 0.45 * gain, 0.0, 0.0, move |t, _| {
         let f = 46.0 + 120.0 * (-t * 30.0).exp();
         phase += f / SR;
-        (phase * TAU).sin() * (-t * 6.5).exp() + 0.3 * (-t * 300.0).exp()
+        (phase * TAU).sin() * env(t, 0.001, 0.35, 0.10) * (-t * 9.0).exp()
     });
 }
 
-fn four_on_floor(m: &mut Mix, t0: f32) {
+fn groove(m: &mut Mix, t0: f32, gain: f32) {
     for beat in 0..4 {
-        kick(m, t0 + beat as f32 * BEAT);
+        kick(m, t0 + beat as f32 * BEAT, gain);
     }
+    gated_snare(m, t0 + BEAT, 0.65 * gain);
+    gated_snare(m, t0 + 3.0 * BEAT, 0.65 * gain);
+    hats(m, t0, gain * 0.65);
 }
 
 /// The 80s gated snare: a crack, then a dense noise tail that stops dead.
@@ -391,17 +374,13 @@ fn gated_snare(m: &mut Mix, at: f32, gain: f32) {
     });
 }
 
-/// Six toms down the kit over the last two beats of a bar.
+/// One two-tom pickup, not a fill superimposed on each four-bar phrase.
 fn tom_fill(m: &mut Mix, t0: f32) {
-    for k in 0..6 {
-        let at = t0 + 2.0 * BEAT + k as f32 * BEAT / 3.0;
-        let base = 210.0 - k as f32 * 22.0;
-        let pan = 0.6 - k as f32 * 0.24;
+    for (beat, base, pan) in [(3.0, 147.0, -0.2), (3.5, 110.0, 0.2)] {
         let mut phase = 0.0f32;
-        m.voice(at, 0.4, 0.3, pan, 0.2, move |t, mm| {
-            let f = base * (1.0 + 0.6 * (-t * 22.0).exp());
-            phase += f / SR;
-            (phase * TAU).sin() * (-t * 7.0).exp() + 0.15 * mm.rnd() * (-t * 40.0).exp()
+        m.voice(t0 + beat * BEAT, 0.24, 0.12, pan, 0.12, move |t, _| {
+            phase += base / SR;
+            (phase * TAU).sin() * env(t, 0.003, 0.16, 0.08) * (-t * 15.0).exp()
         });
     }
 }
@@ -409,39 +388,30 @@ fn tom_fill(m: &mut Mix, t0: f32) {
 /// White noise opening up over a bar, into the next section.
 fn riser(m: &mut Mix, t0: f32) {
     let mut lp = 0.0f32;
-    m.voice(t0, BAR, 0.12, 0.0, 0.4, move |t, mm| {
-        let k = t / BAR;
+    let duration = if now(t0).section == Section::Live {
+        crate::timeline::LIVE_TO - t0
+    } else {
+        BAR
+    };
+    m.voice(t0, duration, 0.035, 0.0, 0.4, move |t, mm| {
+        let k = t / duration;
         let n = mm.rnd();
         lp += (n - lp) * (0.01 + 0.5 * k * k);
-        lp * k * k
+        lp * k * k * env(t, 0.05, duration - 0.04, 0.04)
     });
 }
 
-fn hats(m: &mut Mix, t0: f32, per_beat: usize) {
-    let steps = 4 * per_beat;
-    for k in 0..steps {
-        if per_beat == 2 && k % 2 == 0 {
-            continue;
-        }
-        let at = t0 + k as f32 * BEAT / per_beat as f32;
-        // An open hat on every off-beat eighth of the 16th pattern.
-        let open = per_beat == 4 && k % 4 == 2;
-        let accent = if k % 2 == 1 { 0.7 } else { 1.0 };
-        let decay = if open { 14.0 } else { 70.0 };
+fn hats(m: &mut Mix, t0: f32, gain: f32) {
+    for k in 0..8 {
+        let at = t0 + k as f32 * BEAT / 2.0;
+        let accent = if k % 2 == 1 { 1.0 } else { 0.45 };
         let mut prev = 0.0f32;
-        m.voice(
-            at,
-            if open { 0.25 } else { 0.06 },
-            0.075 * accent,
-            0.3,
-            0.0,
-            move |t, mm| {
-                let n = mm.rnd();
-                let hp = n - prev;
-                prev = n;
-                hp * (-t * decay).exp()
-            },
-        );
+        m.voice(at, 0.07, 0.045 * accent * gain, 0.25, 0.0, move |t, mm| {
+            let n = mm.rnd();
+            let hp = n - prev;
+            prev = n;
+            hp * env(t, 0.001, 0.04, 0.03) * (-t * 65.0).exp()
+        });
     }
 }
 
@@ -455,12 +425,11 @@ enum Osc {
     Brass,
 }
 
-/// A four-bar phrase as one monophonic voice that bends: legato notes glide
-/// into each other, notes after a rest and held notes scoop up from two
-/// semitones below, every note longer than an eighth grows a vibrato, and
-/// with `dive` the last note falls an octave.
-fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: f32, dive: bool) {
-    let eighth = BEAT / 2.0;
+/// Continuous oscillator phase, but stable note attacks: no scoop or dive.
+/// Only adjacent legato scale steps receive a six-millisecond portamento;
+/// delayed five-cent vibrato is colour, not a second pitch contour.
+fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: f32) {
+    let eighth = BEAT / 4.0;
     let notes: Vec<(f32, f32, f32, bool)> = phrase
         .iter()
         .enumerate()
@@ -475,32 +444,32 @@ fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: 
         .collect();
     let last = notes.len() - 1;
     let mut idx = usize::MAX;
-    let mut pitch = notes[0].2 - 2.0;
-    let mut k_glide = coeff(0.05);
+    let mut pitch = notes[0].2;
+    let mut k_glide = coeff(0.006);
     let mut phases = [0.0f32; 3];
     let mut mod_phase = 0.0f32;
+    let mut fm_index = 0.5f32;
     let mut lp = 0.0f32;
     let mut amp = 0.0f32;
-    let (k_on, k_off) = (coeff(0.004), coeff(0.08));
+    let (k_on, k_off) = (coeff(0.004), coeff(0.018));
     let (pan, send, level) = match osc {
         Osc::Super => (-0.12, 0.45, 0.075),
         Osc::Pulse => (0.18, 0.4, 0.06),
         Osc::Brass => (0.05, 0.5, 0.085),
     };
-    let total = 16.0 * BEAT + if dive { 0.9 } else { 0.3 };
+    let &(end_start, end_len, _) = phrase.last().expect("nonempty lead phrase");
+    let phrase_duration = (end_start + end_len) as f32 * eighth + 0.15;
+    let clock = now(t0);
+    let total = phrase_duration.min(clock.len - clock.local);
     m.voice(t0, total, level * gain, pan, send, move |t, _| {
         while idx.wrapping_add(1) <= last && notes[idx.wrapping_add(1)].0 <= t {
             idx = idx.wrapping_add(1);
-            let (_, len, n, legato) = notes[idx];
-            if legato && len < 3.0 * eighth {
-                k_glide = coeff(0.045);
+            let (_, _, n, legato) = notes[idx];
+            if legato && (pitch - n).abs() <= 2.0 {
+                k_glide = coeff(0.006);
             } else {
-                // Scoop up into the note.
-                pitch = pitch.min(n - 2.0);
-                if !legato {
-                    pitch = n - 2.0;
-                }
-                k_glide = coeff(if len >= 3.0 * eighth { 0.09 } else { 0.05 });
+                pitch = n;
+                k_glide = 1.0;
             }
         }
         if idx == usize::MAX {
@@ -509,15 +478,10 @@ fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: 
         let (start, len, n, _) = notes[idx];
         let into = t - start;
         let next_legato = idx < last && notes[idx + 1].3;
-        let mut gate = into < len - if next_legato { 0.0 } else { 0.02 };
-        let mut target = n;
-        if dive && idx == last {
-            let from = len * 0.5;
-            target -= 12.0 * smooth((into - from) / (len - from + 0.6));
-            gate = into < len + 0.6;
-        }
+        let gate = into < len - if next_legato { 0.0 } else { 0.035 };
+        let target = n;
         pitch += (target - pitch) * k_glide;
-        let vib = 0.3 * (TAU * 5.6 * into).sin() * smooth((into - 0.18) / 0.3);
+        let vib = 0.05 * (TAU * 5.6 * into).sin() * smooth((into - 0.18) / 0.3);
         let f = hz(pitch + vib);
         amp += ((gate as i32 as f32) - amp) * if gate { k_on } else { k_off };
         let s = match osc {
@@ -541,16 +505,11 @@ fn lead(m: &mut Mix, t0: f32, phrase: &[(u8, u8, u8)], up: f32, osc: Osc, gain: 
                 phases[0] = (phases[0] + f / SR).fract();
                 mod_phase = (mod_phase + 2.0 * f / SR).fract();
                 let index = 0.5 + 1.8 * (-into * 5.0).exp();
-                (TAU * phases[0] + index * (TAU * mod_phase).sin()).sin()
+                fm_index += (index - fm_index) * coeff(0.004);
+                (TAU * phases[0] + fm_index * (TAU * mod_phase).sin()).sin()
             }
         };
-        s * amp
-    });
-}
-
-fn blip(m: &mut Mix, at: f32, f: f32, pan: f32) {
-    m.voice(at, 0.14, 0.05, pan, 0.4, move |t, _| {
-        (TAU * f * t).sin() * (-t * 30.0).exp()
+        s * amp * smooth((total - t) / 0.04)
     });
 }
 
@@ -590,6 +549,20 @@ fn mixdown(m: Mix) -> Vec<[f32; 2]> {
         out[i][1] += 0.32 * r[i];
     }
 
+    // DC blocker also removes residual low-frequency bias from finite saw notes.
+    let mut previous_in = [0.0f32; 2];
+    let mut previous_out = [0.0f32; 2];
+    let pole = (-TAU * 15.0 / SR).exp();
+    for frame in &mut out {
+        for ch in 0..2 {
+            let input = frame[ch];
+            let high = input - previous_in[ch] + pole * previous_out[ch];
+            previous_in[ch] = input;
+            previous_out[ch] = high;
+            frame[ch] = high;
+        }
+    }
+
     // Soft clip, then normalise to a fixed peak.
     let mut peak = 0.0f32;
     for frame in out.iter_mut() {
@@ -602,8 +575,86 @@ fn mixdown(m: Mix) -> Vec<[f32; 2]> {
     for (i, frame) in out.iter_mut().enumerate() {
         let t = i as f32 / SR;
         let fade = (t / 0.3).min(1.0) * ((DURATION - t) / 1.5).clamp(0.0, 1.0);
-        frame[0] *= g * fade;
-        frame[1] *= g * fade;
+        // Explicit broadband speech duck also catches delay and transition tails.
+        let speech = if (crate::timeline::LIVE_FROM..crate::timeline::LIVE_TO).contains(&t) {
+            0.30
+        } else if t < crate::timeline::LIVE_FROM {
+            let end = crate::timeline::LIVE_FROM.min(2.0 * BAR);
+            let start = (end - BAR).max(0.0);
+            1.0 - 0.70 * smooth((t - start) / (end - start).max(0.001))
+        } else {
+            0.30 + 0.70 * smooth((t - crate::timeline::LIVE_TO) / (BEAT * 0.5))
+        };
+        frame[0] *= g * fade * speech;
+        frame[1] *= g * fade * speech;
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn score_has_legal_pitches_space_and_a_tonic_cadence() {
+        let scale = [0, 1, 4, 5, 7, 8, 10]; // F harmonic minor, absolute pitch classes
+        for note in ROOTS.iter().chain(PADS.iter().flatten()) {
+            assert!(scale.contains(&(*note as u8 % 12)), "pitch {note}");
+        }
+        for phrase in [&HOOK_A[..], &HOOK_B[..], &CODA[..]] {
+            for &(start, length, note) in phrase {
+                assert!(length > 0 && start + length <= 64);
+                assert!(scale.contains(&(note % 12)));
+            }
+            for pair in phrase.windows(2) {
+                assert!(pair[0].0 + pair[0].1 <= pair[1].0);
+                assert!((pair[0].2 as i16 - pair[1].2 as i16).abs() <= 5);
+            }
+            assert!(phrase.windows(2).any(|p| p[0].0 + p[0].1 < p[1].0));
+        }
+        assert_eq!(&HOOK_A[..7], &HOOK_B[..7]);
+        assert_eq!(HOOK_B.last().unwrap().2 % 12, 5);
+        assert_eq!(CODA.last().unwrap().2 % 12, 5);
+        for progression in [&STATEMENT[..], &BED[..]] {
+            for pair in progression.windows(2).chain(std::iter::once(&[3, 0][..])) {
+                for voice in 0..4 {
+                    assert!((PADS[pair[0]][voice] - PADS[pair[1]][voice]).abs() <= 3.0);
+                }
+                assert!((ROOTS[pair[0]] - ROOTS[pair[1]]).abs() <= 7.0);
+            }
+        }
+        // Include phrase joins, not only intervals inside independent tables.
+        let whole: Vec<_> = HOOK_A.iter().chain(HOOK_B.iter()).collect();
+        for pair in whole.windows(2) {
+            assert!((pair[0].2 as i16 - pair[1].2 as i16).abs() <= 5);
+        }
+        assert_eq!(harmony(Section::Outro, section_bars(Section::Outro) - 2), 3);
+        assert_eq!(harmony(Section::Outro, section_bars(Section::Outro) - 1), 0);
+    }
+
+    #[test]
+    fn complete_render_is_finite_repeatable_and_ducked() {
+        let events = [1.0, 7.5, 15.5, 20.0, 45.0];
+        let a = render(&events);
+        let b = render(&events);
+        assert_eq!(a, b);
+        assert_eq!(a.len(), (DURATION * SR) as usize + 1);
+        assert!(a
+            .iter()
+            .flatten()
+            .all(|s| s.is_finite() && s.abs() <= 0.891));
+        let rms = |start: f32, end: f32| {
+            let frames = &a[(start * SR) as usize..(end * SR) as usize];
+            (frames.iter().flatten().map(|s| s * s).sum::<f32>() / (frames.len() * 2) as f32).sqrt()
+        };
+        let live_start = crate::timeline::LIVE_FROM + BAR;
+        let live_end = crate::timeline::LIVE_TO - BAR;
+        if live_end > live_start && section_bars(Section::Outro) > 2 {
+            let bed = rms(live_start, live_end);
+            let hook = rms(crate::timeline::LIVE_TO + BEAT, DURATION - 2.0 * BAR);
+            assert!(bed < hook * 0.50);
+            assert!(bed > 0.0005);
+        }
+        assert!(a.last().unwrap().iter().all(|s| s.abs() < 0.0001));
+    }
 }

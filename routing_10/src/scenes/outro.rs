@@ -11,7 +11,7 @@ pub fn draw(f: &mut Frame, n: Now) -> f32 {
     f.gradient(&[0x020503, 0x04140c, 0x020503]);
     dot_grid(f, EMERALD, 0.2 * smooth(n.local / 0.8));
 
-    let grow = smooth(n.local / 3.0);
+    let grow = smooth(n.local / 0.7);
     let end = smooth((n.len - n.local) / 1.2);
     f.glow(W as f32 / 2.0, 560.0, 360.0, LIME, 0.10 * grow * end);
     logo(
@@ -19,7 +19,7 @@ pub fn draw(f: &mut Frame, n: Now) -> f32 {
         &LogoState::sized(W as f32 / 2.0, 560.0, 230.0, grow, end),
     );
 
-    let addr = smooth((n.local - 2.5) / 0.6) * end;
+    let addr = smooth((n.local - 0.35) / 0.4) * end;
     f.text_centered(
         W as i32 / 2,
         860,
@@ -28,7 +28,7 @@ pub fn draw(f: &mut Frame, n: Now) -> f32 {
         PAPER,
         addr,
     );
-    let tag = smooth((n.local - 3.5) / 0.6) * end;
+    let tag = smooth((n.local - 0.7) / 0.4) * end;
     f.text_centered(
         W as i32 / 2,
         920,

@@ -8,15 +8,15 @@
 pub const BPM: f32 = 120.0;
 pub const BEAT: f32 = 60.0 / BPM;
 pub const BAR: f32 = BEAT * 4.0;
-pub const INTRO_BARS: f32 = 8.0;
-pub const LIVE_BARS: f32 = 14.0;
-pub const OUTRO_BARS: f32 = 6.0;
+pub const INTRO_BARS: f32 = 2.0;
+pub const LIVE_BARS: f32 = 40.0;
+pub const OUTRO_BARS: f32 = 2.0;
 pub const TOTAL_BARS: f32 = INTRO_BARS + LIVE_BARS + OUTRO_BARS;
 pub const DURATION: f32 = TOTAL_BARS * BAR;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Section {
-    /// The install line, then a trip sketch solved into one loop.
+    /// The opening music over the real Desktop take, never a separate animation.
     Intro,
     /// The live Desktop take, framed.
     Live,
@@ -36,7 +36,7 @@ pub const fn bars(b: f32) -> f32 {
 }
 
 /// Where the live take starts and ends on the demo clock.
-pub const LIVE_FROM: f32 = bars(INTRO_BARS);
+pub const LIVE_FROM: f32 = 0.0;
 pub const LIVE_TO: f32 = bars(INTRO_BARS + LIVE_BARS);
 
 #[derive(Clone, Copy, Debug)]

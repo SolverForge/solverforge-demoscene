@@ -10,9 +10,11 @@ use crate::gfx::{mix, Frame, H, W};
 use crate::statue::Statue;
 use crate::timeline::{smooth, Now, BEAT};
 
-/// The take's window on the 1920x1080 frame: 1488x800, the captured pane's
-/// 1908x1026 aspect.
-pub const HOLE: (i32, i32, i32, i32) = (48, 140, 1536, 940);
+/// The take retains the capture's aspect; the right column belongs to the
+/// speaking Nous Girl and her timed dialog, as in the planner demo.
+pub const HOLE: (i32, i32, i32, i32) = (48, 158, 1488, 932);
+pub const PORTRAIT: (i32, i32, i32, i32) = (1528, 135, 1880, 503);
+pub const DIALOG: (i32, i32, i32, i32) = (1528, 543, 1880, 945);
 
 const COPPER: [u32; 4] = [0x50fc00, 0x10b981, 0x0ea5e9, 0x6ee7b7];
 
@@ -40,15 +42,18 @@ pub fn draw(f: &mut Frame, statue: &Statue, n: Now, t: f32) -> f32 {
         }
     }
 
-    // The bezel grows open from its middle; the hole stays black.
+    // Open the footage and advisor boxes on their own clocks.
     bezel(f, HOLE, open);
+    let side = smooth((n.local - 0.4) / 0.8) * smooth((n.len - n.local) / 0.8);
+    bezel(f, PORTRAIT, side);
+    bezel(f, DIALOG, side);
 
     // Under the window: what this is.
     let label = smooth((n.local - 0.8) / 0.5) * smooth((n.len - n.local) / 0.8);
     f.text_centered(
         (x0 + x1) / 2,
         y1 + 24,
-        "LIVE IN HERMES DESKTOP  //  NOTHING STAGED",
+        "PLAN YOUR TRIP. CHANGE YOUR PLANS.",
         2,
         MINT,
         label,

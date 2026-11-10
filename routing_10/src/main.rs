@@ -5,7 +5,6 @@ mod scenes;
 mod statue;
 mod story;
 mod timeline;
-mod trip;
 
 use std::env;
 use std::io::{self, Write};
@@ -37,7 +36,11 @@ fn main() -> io::Result<()> {
         // For the compose step: when the live section runs, and where the
         // take, the advisor's portrait and her dialog box go.
         println!("live {} {}", timeline::LIVE_FROM, timeline::LIVE_TO);
-        let windows = [("take", scenes::HOLE)];
+        let windows = [
+            ("take", scenes::HOLE),
+            ("portrait", scenes::PORTRAIT),
+            ("dialog", scenes::DIALOG),
+        ];
         for (name, (x0, y0, x1, y1)) in windows {
             println!("{name} {x0} {y0} {} {}", x1 - x0, y1 - y0);
         }

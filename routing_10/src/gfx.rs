@@ -72,32 +72,6 @@ impl Frame {
         }
     }
 
-    /// One-pixel additive segment: the trip sketch draws its roads and its
-    /// polylines with it.
-    pub fn line(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, rgb: u32, a: f32) {
-        let dx = (x1 - x0).abs();
-        let dy = -(y1 - y0).abs();
-        let sx = if x0 < x1 { 1 } else { -1 };
-        let sy = if y0 < y1 { 1 } else { -1 };
-        let mut err = dx + dy;
-        let (mut x, mut y) = (x0, y0);
-        loop {
-            self.add(x, y, rgb, a);
-            if x == x1 && y == y1 {
-                break;
-            }
-            let twice = err * 2;
-            if twice >= dy {
-                err += dy;
-                x += sx;
-            }
-            if twice <= dx {
-                err += dx;
-                y += sy;
-            }
-        }
-    }
-
     /// One-pixel outline.
     pub fn frame_rect(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, rgb: u32, a: f32) {
         self.rect(x0, y0, x1, y0 + 1, rgb, a);
@@ -177,9 +151,4 @@ pub fn ramp(stops: &[u32], t: f32) -> u32 {
 
 pub fn mix(a: u32, b: u32, t: f32) -> u32 {
     lerp_rgb(a, b, t)
-}
-
-pub fn ease_out(x: f32) -> f32 {
-    let x = x.clamp(0.0, 1.0);
-    1.0 - (1.0 - x).powi(3)
 }
