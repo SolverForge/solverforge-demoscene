@@ -24,7 +24,9 @@ Hermes Agent. 1920x1080, 60 fps, 101 bars at 125 BPM (193.9 s):
 The soundtrack remixes the latest Planner123 tune (planner123_06). It keeps
 the tune's loop, its riff on the supersaw stab, its solo and its basses, and
 reads them in C Phrygian (the loop becomes Cm - Ab - Bbm - Db, each turn
-falling from Db onto C minor) and rearranges them into a form with an arc:
+falling from Db onto C minor) and rearranges them into a form with an arc. Each part gives the guitar its own
+technique: the bent motif, held crying bends, tremolo picking under a twin
+guitar in thirds, slide-ins and wide bends, tapped arpeggios:
 
 1. a taiko intro
 2. a verse of santur, frame drums and duduk

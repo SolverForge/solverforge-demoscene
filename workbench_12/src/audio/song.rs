@@ -92,13 +92,24 @@ const PLANNER_RIFF: [u8; 64] = [
 
 // ── The guitar's lines ──────────────────────────────────────────────────────
 /// Plain note, bent up a whole step into pitch, or diving an octave at its end.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Art {
+    /// Picked plainly.
     N,
+    /// Fretted a whole step low and bent up into pitch.
     B,
+    /// Ends diving an octave.
     D,
+    /// Re-picked on every 16th for its whole length: tremolo picking.
+    T,
+    /// Slid into from a fourth below.
+    S,
+    /// Bent a step and a half up into pitch: the wide bend.
+    W,
+    /// Hammered or tapped: no pick, sliding straight from the last note.
+    H,
 }
-use Art::{B, D, N};
+use Art::{B, D, H, N, S, T, W};
 
 /// A melodic line: (midi, beats, articulation), 0 for a rest.
 type Line = [(f32, f32, Art)];
@@ -193,6 +204,107 @@ const BREAK_LINE: [(f32, f32, Art); 7] = [
     (79.0, 4.0, D),
 ];
 
+/// The second drop's line, low on the neck: the motif's chord tones as half
+/// notes, tremolo-picked, with a twin guitar a third below (bars 1-4); then
+/// each bar slid into from a fourth below, and a wide bend before the dive.
+const TREMOLO: [(f32, f32, Art); 19] = [
+    (67.0, 2.0, T),
+    (63.0, 2.0, T),
+    (68.0, 2.0, T),
+    (72.0, 2.0, T),
+    (70.0, 2.0, T),
+    (73.0, 2.0, T),
+    (77.0, 3.0, T),
+    (75.0, 1.0, N),
+    (79.0, 2.0, S),
+    (75.0, 1.0, N),
+    (72.0, 1.0, N),
+    (80.0, 2.0, S),
+    (75.0, 1.0, N),
+    (72.0, 1.0, N),
+    (82.0, 2.0, S),
+    (77.0, 1.0, N),
+    (73.0, 1.0, N),
+    (80.0, 2.0, W),
+    (77.0, 2.0, D),
+];
+
+/// The half-time calls over Cm - Ab: one slid in and pushed up by a wide
+/// bend, the other tremolo-picked; the duduk answers each over Bbm - Db.
+const HALF_CALL: [(f32, f32, Art); 8] = [
+    (72.0, 1.0, S),
+    (75.0, 0.5, N),
+    (77.0, 0.5, N),
+    (79.0, 2.0, W),
+    (80.0, 1.0, S),
+    (79.0, 0.5, N),
+    (75.0, 0.5, N),
+    (72.0, 2.0, N),
+];
+const HALF_TREM: [(f32, f32, Art); 4] = [
+    (67.0, 2.0, T),
+    (63.0, 2.0, T),
+    (68.0, 2.0, T),
+    (72.0, 2.0, T),
+];
+
+/// The final drop's bars 3-4, after two bars of tapping: the top F pushed by
+/// a wide bend, then Db held and F bent; the answer's last four bars follow.
+const FINAL_PEAK: [(f32, f32, Art); 4] = [
+    (89.0, 3.0, W),
+    (85.0, 1.0, N),
+    (85.0, 2.0, N),
+    (89.0, 2.0, B),
+];
+
+/// Tapped arpeggios: 16ths up and down the chord two octaves over the pad,
+/// one chord per bar of the loop from `bar`.
+fn taps(out: &mut Vec<LNote>, bar: f32, count: usize, vel: f32) {
+    for k in 0..count {
+        let tones = PAD_VOICINGS[LOOP[k % 4]].map(|m| m + 24.0);
+        for (i, idx) in [0usize, 1, 2, 3, 4, 3, 2, 1, 0, 1, 2, 3, 4, 3, 2, 1]
+            .iter()
+            .enumerate()
+        {
+            out.push(LNote {
+                start: bars(bar + k as f32) + i as f32 * STEP,
+                dur: STEP,
+                midi: tones[*idx],
+                art: H,
+                vel,
+            });
+        }
+    }
+}
+
+/// A twin guitar's line: each note a third below in the mode.
+fn twin(notes: &[LNote], key: f32) -> Vec<LNote> {
+    notes
+        .iter()
+        .map(|n| LNote {
+            midi: diatonic_below(n.midi, 2, key),
+            vel: n.vel * 0.75,
+            ..*n
+        })
+        .collect()
+}
+
+/// `steps` notes of the mode below `m`.
+fn diatonic_below(m: f32, steps: usize, key: f32) -> f32 {
+    let k = key as i32;
+    let mut x = m as i32;
+    let mut n = 0;
+    while n < steps {
+        x -= 1;
+        if C_PHRYGIAN.contains(&(x - k).rem_euclid(12)) {
+            n += 1;
+        }
+    }
+    x as f32
+}
+
+const C_PHRYGIAN: [i32; 7] = [0, 1, 3, 5, 7, 8, 10];
+
 /// The motif as the duduk states it, before the guitar takes it: long chord
 /// tones, the mode's Db turning onto C each time.
 const DUDUK: [(f32, f32, Art); 14] = [
@@ -283,6 +395,14 @@ impl Mono {
             if n.art == B {
                 self.pitch = n.midi - 2.0;
                 self.k_glide = coeff(0.02);
+            } else if n.art == W {
+                self.pitch = n.midi - 3.0;
+                self.k_glide = coeff(0.02);
+            } else if n.art == S {
+                self.pitch = n.midi - 5.0;
+                self.k_glide = coeff(0.05);
+            } else if n.art == H {
+                self.k_glide = coeff(0.004);
             } else if phrase_start {
                 self.pitch = n.midi - 2.0;
                 self.k_glide = coeff(0.03);
@@ -308,17 +428,19 @@ impl Mono {
         match n.art {
             // Fretted low, bent up over a fifth of the note after a short hold.
             B => target -= 2.0 * (1.0 - smooth((into - 0.06) / (0.18 * n.dur + 0.06))),
+            W => target -= 3.0 * (1.0 - smooth((into - 0.08) / (0.25 * n.dur + 0.08))),
             D => {
                 let from = n.dur * 0.45;
                 target -= 12.0 * smooth((into - from) / (n.dur - from + 0.7));
                 gate = into < n.dur + 0.7;
             }
-            N => {}
+            N | T | S | H => {}
         }
         self.pitch += (target - self.pitch) * self.k_glide;
         let vib = 0.32
             * (TAU * 5.6 * into).sin()
             * smooth((into - 0.22) / 0.3)
+            * (n.art != T && n.art != H) as i32 as f32
             * (n.dur > 0.4) as i32 as f32;
         let k = if gate { coeff(0.004) } else { coeff(0.06) };
         self.amp += ((gate as i32 as f32) * n.vel - self.amp) * k;
@@ -326,6 +448,67 @@ impl Mono {
             return None;
         }
         Some((self.pitch + vib, self.amp, into, n))
+    }
+}
+
+/// The electric guitar: two saws and a square, picked (re-picked every 16th
+/// when tremolo-picked, not at all when hammered), driven through tanh into a
+/// cabinet, with a feedback octave growing on held notes.
+struct Guitar {
+    line: Mono,
+    phase: [f32; 3],
+    lo: Svf,
+    hi: Svf,
+    peak: Svf,
+    level: f32,
+}
+
+impl Guitar {
+    fn new(notes: Vec<LNote>, level: f32) -> Self {
+        Self {
+            line: Mono::new(notes),
+            phase: [0.0; 3],
+            lo: Svf::default(),
+            hi: Svf::default(),
+            peak: Svf::default(),
+            level,
+        }
+    }
+
+    fn tick(&mut self, t: f32, noise: &mut Noise) -> f32 {
+        let Some((pitch, amp, into, n)) = self.line.tick(t) else {
+            return 0.0;
+        };
+        let sr = SAMPLE_RATE as f32;
+        let fq = hz(pitch);
+        self.phase[0] = wrap(self.phase[0] + fq / sr);
+        self.phase[1] = wrap(self.phase[1] + fq * 1.004 / sr);
+        self.phase[2] = wrap(self.phase[2] + fq * 2.0 / sr);
+        let (pick_age, trem) = if n.art == T {
+            let a = into % STEP;
+            (a, 0.55 + 0.45 * (-a * 30.0).exp())
+        } else {
+            (into, 1.0)
+        };
+        let pick = if n.art == H {
+            0.0
+        } else {
+            noise.next() * (-pick_age * 90.0).exp() * 0.5
+        };
+        let feed = sine(self.phase[2])
+            * 0.6
+            * smooth((into - 0.7) / 0.8)
+            * (n.dur > 1.0 && n.art != T) as i32 as f32;
+        let x = saw(self.phase[0]) * 0.55
+            + saw(self.phase[1]) * 0.45
+            + pulse(self.phase[0], 0.5) * 0.25
+            + pick
+            + feed;
+        let driven = (x * 7.0).tanh();
+        let lo = self.lo.run(driven, 2900.0, 0.8).0;
+        let body = self.hi.run(lo, 140.0, 0.7).2;
+        let (_, peak, _) = self.peak.run(body, 1500.0, 1.3);
+        (body + 0.5 * peak) * amp * trem * self.level
     }
 }
 
@@ -554,6 +737,8 @@ struct Events {
     arp: Vec<Note>,
     bell: Vec<Note>,
     guitar: Vec<LNote>,
+    /// The twin guitar, a third below the lead where it plays.
+    harmony: Vec<LNote>,
     duduk: Vec<LNote>,
 }
 
@@ -811,32 +996,41 @@ fn score(fm: &[Bar]) -> Events {
             }
             Part::Drop2 => {
                 riff_full(&mut e.stab, from, to - 1.0, 2.0, 1.0);
-                let t = lay(&mut e.guitar, bars(from), &solo(), 2.0, 1.0, 1.0);
+                // Tremolo with the twin a third below, then the answer, twinned.
+                let mut lead = Vec::new();
+                let t = lay(&mut lead, bars(from), &TREMOLO, 2.0, 1.0, 1.0);
+                let twinned: Vec<LNote> = lead.iter().copied().filter(|n| n.art == T).collect();
+                e.harmony.extend(twin(&twinned, 2.0));
                 if t + bars(8.0) <= bars(to - 1.0) + 0.01 {
-                    lay(&mut e.guitar, t, &ANSWER, 2.0, 1.0, 0.95);
+                    let mut answer = Vec::new();
+                    lay(&mut answer, t, &ANSWER, 2.0, 1.0, 0.95);
+                    e.harmony.extend(twin(&answer, 2.0));
+                    lead.extend(answer);
                 }
+                e.guitar.extend(lead);
             }
             Part::Half => {
-                // Call and answer: the guitar plays two bars of the solo, the
-                // duduk echoes them an octave lower, and on to the next two.
+                // Two-bar calls over Cm - Ab, the duduk answering over Bbm - Db:
+                // slide and wide bend first, tremolo the next time round.
                 riff_stab(&mut e.stab, from, to, 0.0, 0.7);
-                let whole = solo();
                 let mut p = from;
                 let mut k = 0;
                 while p + 2.0 <= to + 0.01 {
-                    let pair = &whole[(k / 2 % 2) * 8..(k / 2 % 2) * 8 + 8];
-                    if k % 2 == 0 {
-                        lay(&mut e.guitar, bars(p), pair, 0.0, 1.0, 0.9);
-                    } else {
-                        lay(&mut e.duduk, bars(p), pair, -12.0, 1.0, 0.85);
+                    match k % 4 {
+                        0 => _ = lay(&mut e.guitar, bars(p), &HALF_CALL, 0.0, 1.0, 0.9),
+                        2 => _ = lay(&mut e.guitar, bars(p), &HALF_TREM, 0.0, 1.0, 0.9),
+                        _ => _ = lay(&mut e.duduk, bars(p), &DUDUK[8..], 0.0, 1.0, 0.85),
                     }
                     p += 2.0;
                     k += 1;
                 }
             }
             Part::Final => {
+                // Tapping, the wide-bent peak, and the answer's climb and dive.
                 riff_full(&mut e.stab, from, to, 0.0, 1.0);
-                lay(&mut e.guitar, bars(from), &ANSWER, 0.0, 1.0, 1.0);
+                taps(&mut e.guitar, from, 2, 0.85);
+                let t = lay(&mut e.guitar, bars(from + 2.0), &FINAL_PEAK, 0.0, 1.0, 1.0);
+                lay(&mut e.guitar, t, &ANSWER[16..], 0.0, 1.0, 1.0);
             }
             Part::Outro => {
                 // The last held bend, singing over the cadence, and the dive.
@@ -1118,10 +1312,9 @@ pub fn render() -> Vec<[f32; 2]> {
         [Svf::default(), Svf::default(), Svf::default()],
         [Svf::default(), Svf::default(), Svf::default()],
     ];
-    let mut f = [(); 16].map(|_| Svf::default());
+    let mut f = [(); 13].map(|_| Svf::default());
     let mut pad_phase = [[0.0f32; 2]; 5];
     let mut bass_phase = 0.0f32;
-    let mut gtr_phase = [0.0f32; 3];
     let mut duduk_phase = 0.0f32;
     let mut echo_l = Delay::new(BEAT * 0.75);
     let mut echo_r = Delay::new(BEAT * 0.75);
@@ -1129,7 +1322,8 @@ pub fn render() -> Vec<[f32; 2]> {
 
     let mut santur = Strings::new(12, std::mem::take(&mut ev.santur));
     let mut tanpura = Strings::new(4, std::mem::take(&mut ev.tanpura));
-    let mut guitar = Mono::new(std::mem::take(&mut ev.guitar));
+    let mut guitar = Guitar::new(std::mem::take(&mut ev.guitar), 0.16);
+    let mut harmony = Guitar::new(std::mem::take(&mut ev.harmony), 0.12);
     let mut duduk = Mono::new(std::mem::take(&mut ev.duduk));
     let mut cur = [(); 12].map(|_| Cursor(0));
     let (mut n_stab, mut n_arp, mut n_bell) = (NoteCursor(0), NoteCursor(0), NoteCursor(0));
@@ -1149,7 +1343,7 @@ pub fn render() -> Vec<[f32; 2]> {
         let step = (t / STEP) as usize % 16;
         let [c_kick, c_snare, c_clap, c_hat, c_oh, c_shaker, c_doum, c_tek, c_crash, c_boom, c_gong, c_taiko] =
             &mut cur;
-        let [snare_f, clap_f, hat_f, shaker_f, tek_f, crash_f, taiko_f, riser_f, stab_f, bass_f, g_lo, g_hi, g_peak, d_f1, d_f2, d_br] =
+        let [snare_f, clap_f, hat_f, shaker_f, tek_f, crash_f, taiko_f, riser_f, stab_f, bass_f, d_f1, d_f2, d_br] =
             &mut f;
 
         // ── Drums and skins.
@@ -1379,28 +1573,9 @@ pub fn render() -> Vec<[f32; 2]> {
         }
         let bell = bell * 0.15;
 
-        // ── The electric guitar: two saws and a square, picked, driven through
-        // tanh into a cabinet, with a feedback octave growing on held notes.
-        let mut gtr = 0.0;
-        if let Some((pitch, amp, into, n)) = guitar.tick(t) {
-            let fq = hz(pitch);
-            gtr_phase[0] = wrap(gtr_phase[0] + fq / sr);
-            gtr_phase[1] = wrap(gtr_phase[1] + fq * 1.004 / sr);
-            gtr_phase[2] = wrap(gtr_phase[2] + fq * 2.0 / sr);
-            let pick = noise_l.next() * (-into * 90.0).exp() * 0.5;
-            let feed =
-                sine(gtr_phase[2]) * 0.6 * smooth((into - 0.7) / 0.8) * (n.dur > 1.0) as i32 as f32;
-            let x = saw(gtr_phase[0]) * 0.55
-                + saw(gtr_phase[1]) * 0.45
-                + pulse(gtr_phase[0], 0.5) * 0.25
-                + pick
-                + feed;
-            let driven = (x * 7.0).tanh();
-            let lo = g_lo.run(driven, 2900.0, 0.8).0;
-            let body = g_hi.run(lo, 140.0, 0.7).2;
-            let (_, peak, _) = g_peak.run(body, 1500.0, 1.3);
-            gtr = (body + 0.5 * peak) * amp * 0.16;
-        }
+        // ── The electric guitars: the lead, and the twin a little to the left.
+        let gtr = guitar.tick(t, &mut noise_l);
+        let twin_g = harmony.tick(t, &mut noise_c);
         // ── The duduk: a reed through two formants, with breath.
         let mut reed = 0.0;
         if let Some((pitch, amp, _, _)) = duduk.tick(t) {
@@ -1415,13 +1590,16 @@ pub fn render() -> Vec<[f32; 2]> {
 
         // ── Mix: one level throughout. The melodic bus pumps with the kick.
         let melodic = (stab + gtr + reed) * pump;
-        echo_l.push((gtr * 0.8 + reed * 0.5 + arp + sant * 0.3) * pump + echo_r.tap() * 0.35);
+        echo_l.push(
+            (gtr * 0.8 + twin_g * 0.6 + reed * 0.5 + arp + sant * 0.3) * pump + echo_r.tap() * 0.35,
+        );
         let el = echo_l.tap();
         echo_r.push(el * 0.8);
         let er = echo_r.tap();
         let send = choir[0] * 0.3
             + bell
             + gtr * 0.35
+            + twin_g * 0.3
             + reed * 0.6
             + sant * 0.5
             + tanp * 0.4
@@ -1432,6 +1610,7 @@ pub fn render() -> Vec<[f32; 2]> {
         let rr = verb_r.run(send, 0.84);
         let center = drums + skins + gong + bass * pump + melodic + riser + tanp;
         let mut lft = center
+            + twin_g * 0.75 * pump
             + (sl + al) * pump
             + choir[0] * pump
             + el * 0.45
@@ -1439,6 +1618,7 @@ pub fn render() -> Vec<[f32; 2]> {
             + crash
             + bell * 0.6;
         let mut rgt = center
+            + twin_g * 0.35 * pump
             + (sr_ + ar) * pump
             + choir[1] * pump
             + er * 0.45
@@ -1465,7 +1645,6 @@ mod tests {
         (69.0 + 12.0 * (freq / 440.0).log2()).round()
     }
 
-    const C_PHRYGIAN: [i32; 7] = [0, 1, 3, 5, 7, 8, 10];
     const D_PHRYGIAN: [i32; 7] = [2, 3, 5, 7, 9, 10, 0];
 
     /// The mode of the bar sounding at `t`.
@@ -1491,7 +1670,7 @@ mod tests {
                 "{what} {m} at {t:.2}s is outside the mode"
             );
         };
-        for n in e.guitar.iter().chain(&e.duduk) {
+        for n in e.guitar.iter().chain(&e.harmony).chain(&e.duduk) {
             check(n.start + 0.01, n.midi, "lead");
         }
         for n in e.stab.iter().chain(&e.arp).chain(&e.bell) {
@@ -1535,12 +1714,55 @@ mod tests {
     /// No flurries: the solo lines move in eighths at the quickest.
     #[test]
     fn the_solos_have_no_quick_figures() {
-        for line in [&solo()[..], &ANSWER[..], &BREAK_LINE[..]] {
+        for line in [
+            &solo()[..],
+            &ANSWER,
+            &BREAK_LINE,
+            &TREMOLO,
+            &HALF_CALL,
+            &HALF_TREM,
+            &FINAL_PEAK,
+        ] {
             assert!(
                 line.iter().all(|(_, b, _)| *b >= 0.5),
                 "a solo note shorter than an eighth"
             );
         }
+        // The only 16ths are the tapped arpeggios, which run on their bar's chord.
+        let fm = form();
+        for n in score(&fm).guitar.iter().filter(|n| n.dur < 0.5 * BEAT) {
+            assert_eq!(
+                n.art, H,
+                "a quick note that is not tapped at {:.2}s",
+                n.start
+            );
+            let chord = fm[(n.start / BAR) as usize].chord;
+            let pc = (n.midi as i32).rem_euclid(12);
+            assert!(
+                PAD_VOICINGS[chord]
+                    .iter()
+                    .any(|v| (*v as i32).rem_euclid(12) == pc),
+                "a tap off its chord"
+            );
+        }
+    }
+
+    /// Each section plays its own technique, not the same fingering again.
+    #[test]
+    fn each_section_has_its_own_technique() {
+        let fm = form();
+        let e = score(&fm);
+        let arts = |p: Part| -> Vec<Art> {
+            e.guitar
+                .iter()
+                .filter(|n| fm[((n.start / BAR) as usize).min(fm.len() - 1)].part == p)
+                .map(|n| n.art)
+                .collect()
+        };
+        assert!(arts(Part::Drop2).contains(&T) && !e.harmony.is_empty());
+        assert!(arts(Part::Half).contains(&S) && arts(Part::Half).contains(&W));
+        assert!(arts(Part::Final).contains(&H));
+        assert!(!arts(Part::Drop1).contains(&T) && !arts(Part::Drop1).contains(&H));
     }
 
     /// The solo is built on the harmony: whatever sounds on beats 1 and 3 of
@@ -1548,11 +1770,15 @@ mod tests {
     #[test]
     fn the_solo_lands_on_chord_tones() {
         let solo = solo();
-        let lines: [(&Line, &[usize; 4]); 4] = [
+        let lines: [(&Line, &[usize]); 8] = [
             (&solo, &LOOP),
             (&ANSWER, &LOOP),
             (&DUDUK, &LOOP),
             (&BREAK_LINE, &BREAK_LOOP),
+            (&TREMOLO, &LOOP),
+            (&HALF_CALL, &LOOP[..2]),
+            (&HALF_TREM, &LOOP[..2]),
+            (&FINAL_PEAK, &LOOP[2..]),
         ];
         for (line, chords) in lines {
             let mut beat = 0.0f32;
@@ -1561,7 +1787,7 @@ mod tests {
                     let bar = (beat / 4.0).floor();
                     let at = bar * 4.0 + strong;
                     if m > 0.0 && at >= beat - 1e-3 && at < beat + b - 1e-3 {
-                        let chord = chords[bar as usize % 4];
+                        let chord = chords[bar as usize % chords.len()];
                         let tones: Vec<i32> = PAD_VOICINGS[chord]
                             .iter()
                             .map(|v| (*v as i32).rem_euclid(12))
