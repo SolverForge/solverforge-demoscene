@@ -1,0 +1,124 @@
+<!doctype html>
+<!-- WORKBENCH_12 vertical cover (1080x1920). The demo's intro in portrait:
+     the plugin's four stock models as panels with the demo each ships and
+     its rules by level (the numbers in src/models.rs, from the plugin's
+     README), and the dashed slot for a model you build. Title and panels
+     sit inside the 3:4 grid crop (y 240-1680).
+     Render with the html-to-image-assets recipe at 1080x1920. -->
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#020503}
+canvas{display:block}
+</style></head><body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+const W = 1080, H = 1920;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+function h2(a, b) {
+  let v = Math.imul(a, 73856093) ^ Math.imul(b, 19349663);
+  v = Math.imul(v ^ (v >>> 13), 0x27d4eb2d);
+  return ((v ^ (v >>> 15)) >>> 0) / 4294967296;
+}
+
+// Background: near-black with a faint green radial floor.
+const bg = ctx.createRadialGradient(540, 980, 60, 540, 1000, 1100);
+bg.addColorStop(0, '#07231a');
+bg.addColorStop(0.55, '#03130d');
+bg.addColorStop(1, '#020503');
+ctx.fillStyle = bg;
+ctx.fillRect(0, 0, W, H);
+
+// Stars, as in the intro's flight.
+for (let y = 20; y < H; y += 30) {
+  for (let x = 20; x < W; x += 30) {
+    const r = h2(x, y);
+    if (r < 0.035) {
+      ctx.fillStyle = `rgba(110,231,183,${0.15 + 3 * r})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }
+}
+
+// The models: name, the demo it ships, its rules by level.
+const MODELS = [
+  { name: ['EMPLOYEE', 'SCHEDULING'], demo: 'HOSPITAL MONTH', rules: [56, 3, 68] },
+  { name: ['TASK', 'SCHEDULING'], demo: 'A FACTORY WEEK', rules: [9, 1, 7] },
+  { name: ['PICK-UP AND', 'DELIVERY'], demo: 'MILAN, TWO DAYS', rules: [26, 1, 9] },
+  { name: ['FIELD', 'SERVICE'], demo: 'TURIN, TWO DAYS', rules: [32, 3, 29] },
+];
+const LEVELS = [['#f87171', 'HARD'], ['#fbbf24', 'MEDIUM'], ['#6ee7b7', 'SOFT']];
+const PW = 444, PH = 400, GX = 72, GAP = 48, TOP = 610;
+
+MODELS.forEach((m, i) => {
+  const x = GX + (i % 2) * (PW + GAP);
+  const y = TOP + Math.floor(i / 2) * (PH + 36);
+  ctx.fillStyle = 'rgba(2,16,10,0.92)';
+  ctx.fillRect(x, y, PW, PH);
+  ctx.shadowColor = 'rgba(16,185,129,0.7)';
+  ctx.shadowBlur = 16;
+  ctx.strokeStyle = '#10b981';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, PW, PH);
+  ctx.shadowBlur = 0;
+  ctx.textAlign = 'left';
+  ctx.font = '700 34px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = '#ecfdf5';
+  ctx.fillText(m.name[0], x + 28, y + 58);
+  ctx.fillText(m.name[1], x + 28, y + 100);
+  ctx.font = '400 28px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = '#50fc00';
+  ctx.fillText(m.demo, x + 28, y + 150);
+  const total = m.rules[0] + m.rules[1] + m.rules[2];
+  ctx.font = '700 50px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = '#ecfdf5';
+  ctx.fillText(`${total} RULES`, x + 28, y + 228);
+  let bx = x + 28;
+  const bw = PW - 56;
+  m.rules.forEach((n, k) => {
+    const w = Math.round(bw * n / total);
+    ctx.fillStyle = LEVELS[k][0];
+    ctx.fillRect(bx, y + 252, w, 16);
+    bx += w;
+    ctx.font = '400 26px ui-monospace, Menlo, monospace';
+    ctx.fillText(`${n} ${LEVELS[k][1]}`, x + 28, y + 310 + k * 32);
+  });
+});
+
+// The slot for a model you build: dashed, with a cursor.
+{
+  const x = GX, y = TOP + 2 * (PH + 36), w = 2 * PW + GAP, h = 150;
+  ctx.fillStyle = 'rgba(2,16,10,0.85)';
+  ctx.fillRect(x, y, w, h);
+  ctx.setLineDash([16, 12]);
+  ctx.strokeStyle = '#3f6b5a';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);
+  ctx.font = '700 34px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = '#ecfdf5';
+  ctx.fillText('YOUR MODEL', x + 28, y + 62);
+  ctx.font = '400 28px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = '#6ee7b7';
+  ctx.fillText('BUILT BY HERMES WITH SOLVERFORGE', x + 28, y + 112);
+  ctx.fillStyle = '#50fc00';
+  ctx.fillRect(x + w - 70, y + 50, 30, 50);
+}
+
+// The wordmark, inside the grid crop.
+ctx.textAlign = 'center';
+ctx.font = '700 112px ui-monospace, Menlo, monospace';
+ctx.fillStyle = '#10b981';
+ctx.shadowColor = 'rgba(16,185,129,0.7)';
+ctx.shadowBlur = 26;
+ctx.fillText('WORKBENCH_12', 540, 372);
+ctx.shadowBlur = 0;
+ctx.font = '400 34px ui-monospace, Menlo, monospace';
+ctx.fillStyle = '#6ee7b7';
+ctx.fillText('SOLVERFORGE WORKBENCH FOR HERMES AGENT', 540, 436);
+ctx.font = '400 30px ui-monospace, Menlo, monospace';
+ctx.fillStyle = 'rgba(236,253,245,0.85)';
+ctx.fillText('FOUR PLANNING MODELS, AND THE ONE YOU BUILD', 540, 494);
+ctx.fillStyle = 'rgba(110,231,183,0.75)';
+ctx.font = '400 28px ui-monospace, Menlo, monospace';
+ctx.fillText('github.com/blackopsrepl/hermes-solverforge-workbench', 540, 548);
+</script></body></html>
