@@ -23,13 +23,14 @@ Hermes Agent. 1920x1080, 60 fps, 101 bars at 125 BPM (193.9 s):
 
 The soundtrack remixes the latest Planner123 tune (planner123_06). It keeps
 the tune's loop, its riff on the supersaw stab, its solo and its basses, and
-rearranges them into a form with an arc:
+reads them in C Phrygian (the loop becomes Cm - Ab - Bbm - Db, each turn
+falling from Db onto C minor) and rearranges them into a form with an arc:
 
 1. a taiko intro
 2. a verse of santur, frame drums and duduk
 3. a first drop with the electric solo
 4. a breakdown on its own progression
-5. a second drop lifted to D minor
+5. a second drop lifted to D Phrygian
 6. a half-time section where guitar and duduk trade calls
 7. a final drop
 8. an outro cadence

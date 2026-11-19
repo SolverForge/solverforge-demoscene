@@ -1,7 +1,8 @@
 // WORKBENCH_12 soundtrack: the latest Planner123 theme (planner123_06),
 // remixed for the SolverForge Workbench.
 //
-// Kept from planner123_06: 125 BPM, the Cm - Ab - Bb - G loop, the lead riff
+// Kept from planner123_06: 125 BPM, the loop's shape (read in C Phrygian as
+// Cm - Ab - Bbm - Db), the lead riff
 // (on the supersaw stab), both phrases of the solo (now played by the
 // guitar), the 16th square bass and the offbeat octave bass.
 //
@@ -13,13 +14,13 @@
 //            maqsum, the duduk answering every four bars;
 //   drop 1   the machine starts: four on the floor, gated snare and clap,
 //            the riff on supersaws, the square bass, and the electric solo;
-//   break    drums out, Fm - Ab - Bb - Cm under choir and santur tremolo,
-//            the guitar's slow bends, a taiko build, and a pivot on Bb;
-//   drop 2   up a whole step to D minor: everything, plus a pulse arp, the
-//            solo an octave-diving answer; it pivots back on Bb;
+//   break    drums out, Fm - Ab - Bbm - Cm under choir and santur tremolo,
+//            the guitar's slow bends and a taiko build;
+//   drop 2   up a whole step to D Phrygian: everything, plus a pulse arp,
+//            the solo again a step higher; it pivots in and out on C minor;
 //   half     half-time, guitar and duduk trading calls;
 //   final    C minor, the Planner solo an octave up on the guitar;
-//   outro    Ab - Bb - Cm, the gong, the guitar's last held bend and dive.
+//   outro    Ab - Db - Cm, the gong, the guitar's last held bend and dive.
 //
 // Archeofuturistic: ancient instruments played by a machine. The strings
 // (santur, tanpura, the lyre's plucks) are Karplus-Strong strings, the duduk
@@ -65,26 +66,31 @@ fn coeff(tau: f32) -> f32 {
 const CM: usize = 0;
 const AB: usize = 1;
 const BB: usize = 2;
-const G: usize = 3;
+const DB: usize = 3;
 const FM: usize = 4;
-const ROOTS: [f32; 5] = [48.0, 44.0, 46.0, 43.0, 41.0];
+const ROOTS: [f32; 5] = [48.0, 44.0, 46.0, 49.0, 41.0];
+// The mode is C Phrygian (C Db Eb F G Ab Bb): natural minor with its second
+// flattened, the darkest mode with a minor tonic. Planner123's loop keeps its
+// shape, Cm - Ab - Bb - G, re-read in the mode: Cm - Ab - Bbm - Db, so every
+// turn of the loop ends on the flat II falling a semitone home to C minor,
+// the Phrygian cadence. Bare triads on fifths, nothing sweet.
 const PAD_VOICINGS: [[f32; 5]; 5] = [
-    [48.0, 55.0, 62.0, 63.0, 70.0], // Cm9
-    [44.0, 51.0, 60.0, 63.0, 67.0], // Abmaj7
-    [46.0, 53.0, 60.0, 62.0, 65.0], // Bb add9
-    [43.0, 50.0, 55.0, 62.0, 65.0], // G5 add b7
-    [41.0, 48.0, 56.0, 60.0, 63.0], // Fm7
+    [48.0, 55.0, 60.0, 63.0, 67.0], // Cm
+    [44.0, 51.0, 56.0, 60.0, 63.0], // Ab
+    [46.0, 53.0, 58.0, 61.0, 65.0], // Bbm
+    [49.0, 56.0, 61.0, 65.0, 68.0], // Db
+    [41.0, 48.0, 53.0, 56.0, 60.0], // Fm
 ];
-const LOOP: [usize; 4] = [CM, AB, BB, G];
+const LOOP: [usize; 4] = [CM, AB, BB, DB];
 const BREAK_LOOP: [usize; 4] = [FM, AB, BB, CM];
-const INTRO_CHORDS: [usize; 7] = [CM, CM, AB, BB, CM, AB, G];
-const OUTRO_CHORDS: [usize; 6] = [AB, BB, CM, CM, CM, CM];
+const INTRO_CHORDS: [usize; 7] = [CM, CM, AB, BB, CM, AB, DB];
+const OUTRO_CHORDS: [usize; 6] = [AB, DB, CM, CM, CM, CM];
 
-// Planner123's lead riff, 16th steps over 4 bars (0 = rest).
+// Planner123's lead riff (its fourth bar's G read as Ab, the fifth of Db), 16th steps over 4 bars (0 = rest).
 const PLANNER_RIFF: [u8; 64] = [
     72, 0, 70, 0, 72, 0, 72, 0, 70, 0, 72, 0, 72, 0, 70, 72, 68, 0, 68, 0, 67, 0, 68, 0, 68, 0, 68,
-    0, 67, 0, 68, 0, 70, 0, 70, 0, 68, 0, 70, 0, 70, 0, 70, 0, 68, 0, 70, 0, 67, 0, 67, 0, 65, 0,
-    67, 0, 67, 0, 70, 0, 70, 0, 70, 72,
+    0, 67, 0, 68, 0, 70, 0, 70, 0, 68, 0, 70, 0, 70, 0, 70, 0, 68, 0, 70, 0, 68, 0, 68, 0, 65, 0,
+    68, 0, 68, 0, 70, 0, 70, 0, 70, 72,
 ];
 
 // The first two phrases of the Planner123 solo (Hz, beats), from
@@ -154,65 +160,86 @@ enum Art {
 }
 use Art::{B, D, N};
 
-/// The remix's solo over the loop (midi, beats, articulation): seven bars
-/// turning the riff's falling C - Bb - Ab into a climb with a 16th run into
-/// the top C, and SOLO_END, the eighth bar, diving home onto G.
-const SOLO: [(f32, f32, Art); 37] = [
-    (72.0, 1.5, B),
-    (75.0, 0.5, N),
-    (79.0, 1.0, N),
+/// The remix's solo over the loop (midi, beats, articulation), in C minor
+/// pentatonic with the mode's Db where the chord holds it: seven bars here and the eighth in SOLO_END, so a part can end
+/// on that cadence alone. It is built from one motif: a bent chord tone held
+/// a beat and a half, then three notes falling through the chord (bar 1).
+/// Bars 2-4 carry it down the loop, each bar falling onto that chord's root
+/// or third; bar 4 ends on C over Db, the cadence in the melody. Bars 5-7
+/// develop it an octave up: the high C bent, a call to the top Eb, a run
+/// into the top F. Bar 8 falls through Db onto F and dives, handing back to
+/// C minor. Every note on beats 1 and 3 is a tone of its bar's chord
+/// (pinned by a test).
+const SOLO: [(f32, f32, Art); 31] = [
+    (79.0, 1.5, B),
     (77.0, 0.5, N),
-    (75.0, 0.5, N),
-    (75.0, 0.5, N),
+    (75.0, 1.0, N),
+    (72.0, 1.0, N),
+    (75.0, 1.5, B),
     (77.0, 0.5, N),
-    (79.0, 0.5, N),
-    (80.0, 1.5, B),
-    (79.0, 0.5, N),
+    (72.0, 1.0, N),
+    (68.0, 1.0, N),
+    (77.0, 1.5, B),
+    (73.0, 0.5, N),
+    (70.0, 1.0, N),
+    (73.0, 1.0, N),
+    (80.0, 1.5, N),
     (77.0, 0.5, N),
-    (74.0, 1.0, N),
-    (77.0, 0.5, N),
-    (82.0, 1.5, B),
-    (80.0, 0.5, N),
-    (79.0, 0.5, N),
-    (79.0, 3.0, N),
-    (0.0, 1.0, N),
-    (72.0, 0.25, N),
-    (74.0, 0.25, N),
-    (75.0, 0.25, N),
-    (77.0, 0.25, N),
-    (79.0, 0.5, N),
+    (73.0, 1.0, N),
+    (72.0, 1.0, N),
+    (84.0, 1.0, B),
     (82.0, 0.5, N),
-    (84.0, 2.0, B),
+    (84.0, 0.5, N),
+    (87.0, 1.0, N),
+    (84.0, 0.5, N),
+    (82.0, 0.5, N),
     (87.0, 1.0, B),
-    (86.0, 0.5, N),
     (84.0, 0.5, N),
+    (82.0, 0.5, N),
+    (84.0, 1.0, N),
     (80.0, 1.0, N),
-    (79.0, 0.5, N),
-    (77.0, 0.5, N),
-    (77.0, 0.5, N),
-    (79.0, 0.5, N),
-    (80.0, 0.5, N),
-    (82.0, 0.5, N),
-    (86.0, 1.5, B),
-    (84.0, 0.5, N),
+    (82.0, 0.25, N),
+    (84.0, 0.25, N),
+    (85.0, 0.25, N),
+    (89.0, 0.25, N),
 ];
+/// Bar 7's peak and fall, then bar 8: the top F bent, and the dive from F.
+const SOLO_PEAK: [(f32, f32, Art); 3] = [(89.0, 1.0, B), (85.0, 0.5, N), (82.0, 0.5, N)];
+const SOLO_FALL: [(f32, f32, Art); 1] = [(77.0, 1.0, N)];
 const SOLO_END: [(f32, f32, Art); 4] = [
-    (86.0, 0.5, N),
+    (85.0, 0.5, N),
     (84.0, 0.5, N),
-    (82.0, 0.5, N),
-    (79.0, 2.5, D),
+    (80.0, 0.5, N),
+    (77.0, 2.5, D),
 ];
 
-/// The duduk's call, four bars of long chord tones over the loop.
-const DUDUK: [(f32, f32, Art); 8] = [
+/// The whole solo, eight bars.
+fn solo() -> Vec<(f32, f32, Art)> {
+    SOLO.iter()
+        .chain(&SOLO_PEAK)
+        .chain(&SOLO_FALL)
+        .chain(&SOLO_END)
+        .copied()
+        .collect()
+}
+
+/// The motif as the duduk states it, before the guitar takes it: long chord
+/// tones, the mode's Db turning onto C each time.
+const DUDUK: [(f32, f32, Art); 14] = [
     (67.0, 2.0, B),
+    (63.0, 1.0, N),
+    (61.0, 0.5, N),
+    (60.0, 0.5, N),
+    (68.0, 2.0, N),
+    (63.0, 0.5, N),
+    (61.0, 0.5, N),
+    (60.0, 1.0, N),
+    (70.0, 2.0, N),
     (65.0, 1.0, N),
-    (63.0, 1.0, N),
-    (60.0, 3.0, N),
-    (63.0, 1.0, N),
-    (62.0, 2.0, N),
-    (65.0, 2.0, N),
-    (62.0, 4.0, D),
+    (61.0, 1.0, N),
+    (73.0, 1.5, N),
+    (72.0, 0.5, N),
+    (68.0, 2.0, N),
 ];
 
 #[derive(Clone, Copy)]
@@ -251,8 +278,8 @@ fn lay(
     t
 }
 
-/// The Planner123 solo as a guitar line: its long notes bent up into pitch,
-/// its last note diving.
+/// The Planner123 solo as a guitar line in the mode: its long notes bent up
+/// into pitch, its last note diving.
 fn planner_solo(phrase: usize) -> Vec<(f32, f32, Art)> {
     let half = PLANNER_SOLO.len() / 2;
     let notes = if phrase == 0 {
@@ -272,7 +299,14 @@ fn planner_solo(phrase: usize) -> Vec<(f32, f32, Art)> {
             } else {
                 N
             };
-            (midi_of(f), beats, art)
+            // Read in the mode: the solo's D becomes Db.
+            let m = midi_of(f);
+            let m = if (m as i32).rem_euclid(12) == 2 {
+                m - 1.0
+            } else {
+                m
+            };
+            (m, beats, art)
         })
         .collect()
 }
@@ -310,16 +344,23 @@ impl Mono {
                 let p = self.notes[self.idx];
                 p.start + p.dur >= n.start - 0.01
             };
+            // Only a phrase's first note scoops up from below; inside a
+            // phrase the voice slides quickly from note to note.
+            let phrase_start = self.idx == usize::MAX || {
+                let p = self.notes[self.idx];
+                n.start - (p.start + p.dur) > 0.25
+            };
             if n.art == B {
                 self.pitch = n.midi - 2.0;
                 self.k_glide = coeff(0.02);
-            } else if legato && n.dur < 0.6 {
-                self.k_glide = coeff(0.025);
+            } else if phrase_start {
+                self.pitch = n.midi - 2.0;
+                self.k_glide = coeff(0.03);
             } else {
                 if !legato {
-                    self.pitch = n.midi - 2.0;
+                    self.pitch = n.midi;
                 }
-                self.k_glide = coeff(if n.dur > 0.6 { 0.07 } else { 0.035 });
+                self.k_glide = coeff(0.012);
             }
             self.idx = next;
         }
@@ -433,14 +474,27 @@ impl Strings {
         }
     }
 
-    fn tick(&mut self, t: f32, noise: &mut Noise) -> f32 {
+    /// (left, right): the strings alternate a little left and right of
+    /// centre, so a run of plucks moves across the field.
+    fn tick(&mut self, t: f32, noise: &mut Noise) -> (f32, f32) {
         while self.cursor < self.plucks.len() && self.plucks[self.cursor].t <= t {
             let p = self.plucks[self.cursor];
             self.strs[self.next].pluck(p.freq, p.vel, p.bright, p.damp, noise);
             self.next = (self.next + 1) % self.strs.len();
             self.cursor += 1;
         }
-        self.strs.iter_mut().map(Str::tick).sum()
+        let (mut l, mut r) = (0.0, 0.0);
+        for (k, s) in self.strs.iter_mut().enumerate() {
+            let y = s.tick();
+            let (gl, gr) = if k % 2 == 0 {
+                (1.15, 0.85)
+            } else {
+                (0.85, 1.15)
+            };
+            l += y * gl;
+            r += y * gr;
+        }
+        (l, r)
     }
 }
 
@@ -515,15 +569,18 @@ fn form() -> Vec<Bar> {
         let len = parts[b..].iter().take_while(|q| **q == p).count();
         for pos in 0..len {
             let last = pos + 1 == len;
+            let next = parts.get(b + len).copied();
             let chord = match p {
                 Part::Intro => INTRO_CHORDS[pos.min(6)],
                 Part::Outro => OUTRO_CHORDS[pos.min(5)],
-                // The key changes pivot on Bb, common to C and D minor.
-                Part::Break | Part::Drop2 if last => BB,
+                // The key changes pivot on C minor, common to C and D Phrygian.
+                Part::Break | Part::Drop2 if last => CM,
+                // Every other part turns round on Db, falling into C minor.
+                _ if last && next.is_some_and(|q| q != Part::Break && q != Part::Outro) => DB,
                 Part::Break => BREAK_LOOP[pos % 4],
                 _ => LOOP[pos % 4],
             };
-            // In D minor the loop's chords move up; the pivot Bb stays put.
+            // In D Phrygian the loop's chords move up; the pivot Cm stays put.
             let key = if p == Part::Drop2 && !last { 2.0 } else { 0.0 };
             out.push(Bar {
                 part: p,
@@ -559,6 +616,8 @@ struct Events {
     /// (time, midi pitch)
     taiko: Vec<(f32, f32)>,
     risers: Vec<f32>,
+    /// Downbeats a reverse cymbal swells into.
+    swells: Vec<f32>,
     santur: Vec<Pluck>,
     tanpura: Vec<Pluck>,
     stab: Vec<Note>,
@@ -582,7 +641,8 @@ fn score(fm: &[Bar]) -> Events {
             key,
         } = fm[b];
         let s = i % 16;
-        let swing = if s % 2 == 1 { STEP * 0.12 } else { 0.0 };
+        // Swing only in the hats, shaker and rim; the melodic parts play straight.
+        let swing = if s % 2 == 1 { STEP * 0.08 } else { 0.0 };
         let last = pos + 1 == len;
         let next_drop = fm
             .get(b + 1)
@@ -723,7 +783,13 @@ fn score(fm: &[Bar]) -> Events {
         };
         if play {
             let order = [1usize, 3, 2, 4, 3, 2, 4, 1];
-            let m = voicing[order[s % 8]] + 12.0;
+            // The last 16th of each group of eight turns on the mode's flat
+            // second over the C minor and Ab bars.
+            let m = if s % 8 == 7 && (chord == CM || chord == AB) && part != Part::Break {
+                73.0 + key
+            } else {
+                voicing[order[s % 8]] + 12.0
+            };
             e.santur.push(Pluck {
                 t: t + swing,
                 freq: hz(m),
@@ -757,6 +823,7 @@ fn score(fm: &[Bar]) -> Events {
         }
         if is_drop(bar.part) || bar.part == Part::Verse {
             e.risers.push(b as f32);
+            e.swells.push(at);
         }
     }
 
@@ -800,8 +867,7 @@ fn score(fm: &[Bar]) -> Events {
             }
             Part::Drop1 => {
                 riff_full(&mut e.stab, from, to, 0.0, 0.9);
-                let mut t = lay(&mut e.guitar, bars(from), &SOLO, 0.0, 1.0, 1.0);
-                t = lay(&mut e.guitar, t, &SOLO_END, 0.0, 1.0, 1.0);
+                let t = lay(&mut e.guitar, bars(from), &solo(), 0.0, 1.0, 1.0);
                 if t + bars(4.0) < bars(to) {
                     lay(
                         &mut e.guitar,
@@ -826,8 +892,7 @@ fn score(fm: &[Bar]) -> Events {
             }
             Part::Drop2 => {
                 riff_full(&mut e.stab, from, to - 1.0, 2.0, 1.0);
-                let t = lay(&mut e.guitar, bars(from), &SOLO, 2.0, 1.0, 1.0);
-                let t = lay(&mut e.guitar, t, &SOLO_END, 2.0, 1.0, 1.0);
+                let t = lay(&mut e.guitar, bars(from), &solo(), 2.0, 1.0, 1.0);
                 if t + bars(4.0) < bars(to - 1.0) {
                     lay(
                         &mut e.guitar,
@@ -840,15 +905,18 @@ fn score(fm: &[Bar]) -> Events {
                 }
             }
             Part::Half => {
-                // Guitar and duduk trade two-bar calls.
+                // Call and answer: the guitar plays two bars of the solo, the
+                // duduk echoes them an octave lower, and on to the next two.
                 riff_stab(&mut e.stab, from, to, 0.0, 0.7);
+                let whole = solo();
                 let mut p = from;
                 let mut k = 0;
                 while p + 2.0 <= to + 0.01 {
+                    let pair = &whole[(k / 2 % 2) * 8..(k / 2 % 2) * 8 + 8];
                     if k % 2 == 0 {
-                        lay(&mut e.guitar, bars(p), &SOLO[..11], 0.0, 1.0, 0.9);
+                        lay(&mut e.guitar, bars(p), pair, 0.0, 1.0, 0.9);
                     } else {
-                        lay(&mut e.duduk, bars(p), &DUDUK[..4], 0.0, 0.5, 0.8);
+                        lay(&mut e.duduk, bars(p), pair, -12.0, 1.0, 0.85);
                     }
                     p += 2.0;
                     k += 1;
@@ -1280,12 +1348,22 @@ pub fn render() -> Vec<[f32; 2]> {
         if let Some(&end) = ev.risers.iter().find(|&&e| bar >= e - 1.0 && bar < e) {
             let p = bar - (end - 1.0);
             let (_, rb, _) = riser_f.run(hiss, 300.0 * 20f32.powf(p), 2.5);
-            riser = rb * p * 0.4;
+            riser = rb * p * 0.35;
+        }
+        // A reverse cymbal: the crash's hiss swelling over two beats into the
+        // downbeat, cut dead on it.
+        if let Some(&at) = ev.swells.iter().find(|&&a| t >= a - 2.0 * BEAT && t < a) {
+            let k = (t - (at - 2.0 * BEAT)) / (2.0 * BEAT);
+            let (_, _, ch) = crash_f.run(noise_d.next(), 5000.0, 0.5);
+            riser += ch * k * k * k * 0.45;
         }
 
         // ── Strings: santur and tanpura. The tanpura's bridge buzzes (jawari).
-        let sant = santur.tick(t, &mut noise_c) * 0.26;
-        let tp = tanpura.tick(t, &mut noise_k);
+        let (sl, sr_) = santur.tick(t, &mut noise_c);
+        let (sl, sr_) = (sl * 0.26, sr_ * 0.26);
+        let sant = 0.5 * (sl + sr_);
+        let (tl, tr) = tanpura.tick(t, &mut noise_k);
+        let tp = 0.5 * (tl + tr);
         let tanp = (tp + 0.35 * (tp * 5.0).tanh()) * 0.2;
 
         // ── Choir pad: the detuned saws sung through an "ah".
@@ -1362,12 +1440,20 @@ pub fn render() -> Vec<[f32; 2]> {
             stab += s * 0.3 * adsr(age, n.dur, 0.003, 0.06) * n.vel;
         }
         let stab = stab_f.run(stab, 2400.0, 1.2).0 * 0.11;
-        let mut arp = 0.0;
+        // The arp ping-pongs, every other 16th on the other side.
+        let (mut al, mut ar) = (0.0, 0.0);
         for n in n_arp.active(&ev.arp, t, 0.02) {
             let age = t - n.start;
-            arp += (pulse(n.freq * age, 0.25) + 0.5) * (-age * 18.0).exp() * n.vel;
+            let y = (pulse(n.freq * age, 0.25) + 0.5) * (-age * 18.0).exp() * n.vel * 0.045;
+            if ((n.start / STEP).round() as i32) % 2 == 0 {
+                al += y * 1.4;
+                ar += y * 0.6;
+            } else {
+                al += y * 0.6;
+                ar += y * 1.4;
+            }
         }
-        let arp = arp * 0.045;
+        let arp = 0.5 * (al + ar);
 
         // ── Bell.
         let mut bell = 0.0;
@@ -1397,8 +1483,8 @@ pub fn render() -> Vec<[f32; 2]> {
                 + pulse(gtr_phase[0], 0.5) * 0.25
                 + pick
                 + feed;
-            let driven = (x * 5.0).tanh();
-            let lo = g_lo.run(driven, 3600.0, 0.8).0;
+            let driven = (x * 7.0).tanh();
+            let lo = g_lo.run(driven, 2900.0, 0.8).0;
             let body = g_hi.run(lo, 140.0, 0.7).2;
             let (_, peak, _) = g_peak.run(body, 1500.0, 1.3);
             gtr = (body + 0.5 * peak) * amp * 0.16;
@@ -1416,7 +1502,7 @@ pub fn render() -> Vec<[f32; 2]> {
         }
 
         // ── Mix: one level throughout. The melodic bus pumps with the kick.
-        let melodic = (stab + arp + sant + gtr + reed) * pump;
+        let melodic = (stab + gtr + reed) * pump;
         echo_l.push((gtr * 0.8 + reed * 0.5 + arp + sant * 0.3) * pump + echo_r.tap() * 0.35);
         let el = echo_l.tap();
         echo_r.push(el * 0.8);
@@ -1433,8 +1519,20 @@ pub fn render() -> Vec<[f32; 2]> {
         let rl = verb_l.run(send, 0.84);
         let rr = verb_r.run(send, 0.84);
         let center = drums + skins + gong + bass * pump + melodic + riser + tanp;
-        let mut lft = center + choir[0] * pump + el * 0.45 + rl * 0.55 + crash + bell * 0.6;
-        let mut rgt = center + choir[1] * pump + er * 0.45 + rr * 0.55 + crash * 0.9 + bell * 0.6;
+        let mut lft = center
+            + (sl + al) * pump
+            + choir[0] * pump
+            + el * 0.45
+            + rl * 0.55
+            + crash
+            + bell * 0.6;
+        let mut rgt = center
+            + (sr_ + ar) * pump
+            + choir[1] * pump
+            + er * 0.45
+            + rr * 0.55
+            + crash * 0.9
+            + bell * 0.6;
         let fade = ((DURATION - t) / 1.5).clamp(0.0, 1.0);
         lft = soft_clip(lft * 0.6) * fade;
         rgt = soft_clip(rgt * 0.6) * fade;
@@ -1451,30 +1549,30 @@ fn soft_clip(x: f32) -> f32 {
 mod tests {
     use super::*;
 
-    const C_MINOR: [i32; 7] = [0, 2, 3, 5, 7, 8, 10];
-    const D_MINOR: [i32; 7] = [2, 4, 5, 7, 9, 10, 0];
+    const C_PHRYGIAN: [i32; 7] = [0, 1, 3, 5, 7, 8, 10];
+    const D_PHRYGIAN: [i32; 7] = [2, 3, 5, 7, 9, 10, 0];
 
-    /// The key of the bar sounding at `t`.
+    /// The mode of the bar sounding at `t`.
     fn scale_at(fm: &[Bar], t: f32) -> &'static [i32; 7] {
         let b = &fm[((t / BAR) as usize).min(fm.len() - 1)];
         if b.key > 0.0 {
-            &D_MINOR
+            &D_PHRYGIAN
         } else {
-            &C_MINOR
+            &C_PHRYGIAN
         }
     }
 
-    /// Every written pitch sits in its section's key: C minor, D minor in
-    /// the second drop. (The bends only pass through other pitches.)
+    /// Every written pitch sits in its section's mode: C Phrygian, D
+    /// Phrygian in the second drop. (The bends only pass through others.)
     #[test]
-    fn every_pitch_is_in_its_key() {
+    fn every_pitch_is_in_the_mode() {
         let fm = form();
         let e = score(&fm);
         let check = |t: f32, m: f32, what: &str| {
             let pc = (m.round() as i32).rem_euclid(12);
             assert!(
                 scale_at(&fm, t).contains(&pc),
-                "{what} {m} at {t:.2}s is outside the key"
+                "{what} {m} at {t:.2}s is outside the mode"
             );
         };
         for n in e.guitar.iter().chain(&e.duduk) {
@@ -1486,15 +1584,18 @@ mod tests {
         for p in e.santur.iter().chain(&e.tanpura) {
             check(p.t + 0.01, midi_of(p.freq), "string");
         }
+        for v in PAD_VOICINGS.iter().flatten() {
+            assert!(C_PHRYGIAN.contains(&(*v as i32).rem_euclid(12)), "pad {v}");
+        }
     }
 
     #[test]
     fn the_solo_fills_eight_bars_and_each_note_stays_in_its_bar() {
-        let solo: Vec<_> = SOLO.iter().chain(&SOLO_END).collect();
+        let solo = solo();
         let total: f32 = solo.iter().map(|(_, b, _)| b).sum();
         assert_eq!(total, 32.0);
         let mut beat = 0.0f32;
-        for &&(_, b, _) in &solo {
+        for &(_, b, _) in &solo {
             let bar_end = (beat / 4.0).floor() * 4.0 + 4.0;
             assert!(
                 beat + b <= bar_end + 1e-3,
@@ -1505,8 +1606,38 @@ mod tests {
         assert_eq!(DUDUK.iter().map(|(_, b, _)| b).sum::<f32>(), 16.0);
     }
 
+    /// The solo is built on the harmony: whatever sounds on beats 1 and 3 of
+    /// a bar is a tone of that bar's chord. The duduk's motif too.
     #[test]
-    fn the_form_follows_the_chapters_and_pivots_on_bb() {
+    fn the_solo_lands_on_chord_tones() {
+        let solo = solo();
+        for line in [&solo[..], &DUDUK[..]] {
+            let mut beat = 0.0f32;
+            for &(m, b, _) in line {
+                for strong in [0.0f32, 2.0] {
+                    let bar = (beat / 4.0).floor();
+                    let at = bar * 4.0 + strong;
+                    if m > 0.0 && at >= beat - 1e-3 && at < beat + b - 1e-3 {
+                        let chord = LOOP[bar as usize % 4];
+                        let tones: Vec<i32> = PAD_VOICINGS[chord]
+                            .iter()
+                            .map(|v| (*v as i32).rem_euclid(12))
+                            .collect();
+                        assert!(
+                            tones.contains(&((m as i32).rem_euclid(12))),
+                            "{m} on beat {} of bar {} is not in its chord",
+                            strong + 1.0,
+                            bar + 1.0
+                        );
+                    }
+                }
+                beat += b;
+            }
+        }
+    }
+
+    #[test]
+    fn the_form_follows_the_chapters_pivots_on_c_minor_and_cadences_from_db() {
         let fm = form();
         assert_eq!(fm.len(), TOTAL_BARS as usize);
         for &(name, start, _) in CHAPTERS.iter() {
@@ -1516,7 +1647,16 @@ mod tests {
         for w in fm.windows(2) {
             if w[0].key != w[1].key {
                 let pivot = if w[0].key == 0.0 { &w[0] } else { &w[1] };
-                assert_eq!(pivot.chord, BB, "a key change not on the Bb pivot");
+                assert_eq!(pivot.chord, CM, "a key change not on the C minor pivot");
+            }
+            // Every part that starts on C minor is entered from Db or the pivot.
+            if w[1].pos == 0 && w[1].chord == CM && w[0].part != Part::Intro {
+                assert!(
+                    w[0].chord == DB || w[0].chord == CM,
+                    "{:?} entered from chord {}",
+                    w[1].part,
+                    w[0].chord
+                );
             }
         }
         assert_eq!(fm.last().unwrap().chord, CM);
