@@ -2,9 +2,8 @@
 // remixed for the SolverForge Workbench.
 //
 // Kept from planner123_06: 125 BPM, the loop's shape (read in C Phrygian as
-// Cm - Ab - Bbm - Db), the lead riff
-// (on the supersaw stab), both phrases of the solo (now played by the
-// guitar), the 16th square bass and the offbeat octave bass.
+// Cm - Ab - Bbm - Db), the lead riff (on the supersaw stab), the 16th square
+// bass and the offbeat octave bass. The guitar plays the remix's own solo.
 //
 // Rearranged: the form has an arc (cut.rs sets where each part starts, on the
 // bar nearest its chapter):
@@ -19,7 +18,7 @@
 //   drop 2   up a whole step to D Phrygian: everything, plus a pulse arp,
 //            the solo again a step higher; it pivots in and out on C minor;
 //   half     half-time, guitar and duduk trading calls;
-//   final    C minor, the Planner solo an octave up on the guitar;
+//   final    C minor, the solo's answer climbing to the high G;
 //   outro    Ab - Db - Cm, the gong, the guitar's last held bend and dive.
 //
 // Archeofuturistic: ancient instruments played by a machine. The strings
@@ -53,10 +52,6 @@ fn hz(midi: f32) -> f32 {
     440.0 * 2f32.powf((midi - 69.0) / 12.0)
 }
 
-fn midi_of(freq: f32) -> f32 {
-    (69.0 + 12.0 * (freq / 440.0).log2()).round()
-}
-
 /// One-pole coefficient for a time constant in seconds.
 fn coeff(tau: f32) -> f32 {
     1.0 - (-1.0 / (tau * SAMPLE_RATE as f32)).exp()
@@ -83,7 +78,9 @@ const PAD_VOICINGS: [[f32; 5]; 5] = [
 ];
 const LOOP: [usize; 4] = [CM, AB, BB, DB];
 const BREAK_LOOP: [usize; 4] = [FM, AB, BB, CM];
-const INTRO_CHORDS: [usize; 7] = [CM, CM, AB, BB, CM, AB, DB];
+// Two bars of C minor under the drone, then the loop itself under the
+// duduk's first statement of the motif (bars 3-6), and Db into the verse.
+const INTRO_CHORDS: [usize; 7] = [CM, CM, CM, AB, BB, DB, DB];
 const OUTRO_CHORDS: [usize; 6] = [AB, DB, CM, CM, CM, CM];
 
 // Planner123's lead riff (its fourth bar's G read as Ab, the fifth of Db), 16th steps over 4 bars (0 = rest).
@@ -91,63 +88,6 @@ const PLANNER_RIFF: [u8; 64] = [
     72, 0, 70, 0, 72, 0, 72, 0, 70, 0, 72, 0, 72, 0, 70, 72, 68, 0, 68, 0, 67, 0, 68, 0, 68, 0, 68,
     0, 67, 0, 68, 0, 70, 0, 70, 0, 68, 0, 70, 0, 70, 0, 70, 0, 68, 0, 70, 0, 68, 0, 68, 0, 65, 0,
     68, 0, 68, 0, 70, 0, 70, 0, 70, 72,
-];
-
-// The first two phrases of the Planner123 solo (Hz, beats), from
-// planner123_01 -- quoted over the agenda.
-const PLANNER_SOLO: [(f32, f32); 52] = [
-    (349.20, 0.5),
-    (261.60, 0.75),
-    (293.70, 0.5),
-    (261.60, 0.25),
-    (311.10, 0.5),
-    (293.70, 0.25),
-    (392.00, 0.25),
-    (523.30, 2.0),
-    (293.70, 0.25),
-    (311.10, 0.75),
-    (293.70, 0.75),
-    (233.10, 0.75),
-    (196.00, 1.0),
-    (261.60, 0.75),
-    (293.70, 0.5),
-    (261.60, 0.25),
-    (311.10, 0.5),
-    (293.70, 0.25),
-    (392.00, 0.25),
-    (523.30, 2.0),
-    (622.30, 0.25),
-    (466.20, 0.75),
-    (392.00, 0.5),
-    (523.30, 0.25),
-    (349.20, 0.75),
-    (311.10, 0.5),
-    (349.20, 0.5),
-    (311.10, 0.75),
-    (311.10, 0.5),
-    (261.60, 0.25),
-    (349.20, 0.5),
-    (311.10, 0.25),
-    (415.30, 0.25),
-    (523.30, 2.0),
-    (311.10, 0.25),
-    (349.20, 0.75),
-    (311.10, 0.75),
-    (261.60, 0.75),
-    (207.65, 1.0),
-    (311.10, 0.75),
-    (311.10, 0.5),
-    (261.60, 0.25),
-    (349.20, 0.5),
-    (311.10, 0.25),
-    (415.30, 0.25),
-    (523.30, 2.0),
-    (622.30, 0.25),
-    (523.30, 0.75),
-    (415.30, 0.5),
-    (466.20, 0.25),
-    (415.30, 0.75),
-    (392.00, 0.5),
 ];
 
 // ── The guitar's lines ──────────────────────────────────────────────────────
@@ -160,17 +100,19 @@ enum Art {
 }
 use Art::{B, D, N};
 
+/// A melodic line: (midi, beats, articulation), 0 for a rest.
+type Line = [(f32, f32, Art)];
+
 /// The remix's solo over the loop (midi, beats, articulation), in C minor
 /// pentatonic with the mode's Db where the chord holds it: seven bars here and the eighth in SOLO_END, so a part can end
 /// on that cadence alone. It is built from one motif: a bent chord tone held
 /// a beat and a half, then three notes falling through the chord (bar 1).
 /// Bars 2-4 carry it down the loop, each bar falling onto that chord's root
 /// or third; bar 4 ends on C over Db, the cadence in the melody. Bars 5-7
-/// develop it an octave up: the high C bent, a call to the top Eb, a run
-/// into the top F. Bar 8 falls through Db onto F and dives, handing back to
-/// C minor. Every note on beats 1 and 3 is a tone of its bar's chord
+/// sing it an octave up, one bent note and one held note per bar. Bar 8
+/// holds Db and dives from F, handing back to C minor. Every note on beats 1 and 3 is a tone of its bar's chord
 /// (pinned by a test).
-const SOLO: [(f32, f32, Art); 31] = [
+const SOLO: [(f32, f32, Art); 25] = [
     (79.0, 1.5, B),
     (77.0, 0.5, N),
     (75.0, 1.0, N),
@@ -187,41 +129,69 @@ const SOLO: [(f32, f32, Art); 31] = [
     (77.0, 0.5, N),
     (73.0, 1.0, N),
     (72.0, 1.0, N),
-    (84.0, 1.0, B),
+    (84.0, 1.5, B),
     (82.0, 0.5, N),
-    (84.0, 0.5, N),
-    (87.0, 1.0, N),
-    (84.0, 0.5, N),
+    (87.0, 2.0, N),
+    (84.0, 1.5, N),
     (82.0, 0.5, N),
-    (87.0, 1.0, B),
-    (84.0, 0.5, N),
-    (82.0, 0.5, N),
-    (84.0, 1.0, N),
-    (80.0, 1.0, N),
-    (82.0, 0.25, N),
-    (84.0, 0.25, N),
-    (85.0, 0.25, N),
-    (89.0, 0.25, N),
-];
-/// Bar 7's peak and fall, then bar 8: the top F bent, and the dive from F.
-const SOLO_PEAK: [(f32, f32, Art); 3] = [(89.0, 1.0, B), (85.0, 0.5, N), (82.0, 0.5, N)];
-const SOLO_FALL: [(f32, f32, Art); 1] = [(77.0, 1.0, N)];
-const SOLO_END: [(f32, f32, Art); 4] = [
+    (80.0, 2.0, N),
+    (89.0, 1.5, B),
     (85.0, 0.5, N),
-    (84.0, 0.5, N),
-    (80.0, 0.5, N),
-    (77.0, 2.5, D),
+    (82.0, 2.0, N),
 ];
+
+const SOLO_END: [(f32, f32, Art); 3] = [(85.0, 1.5, N), (84.0, 0.5, N), (77.0, 2.0, D)];
 
 /// The whole solo, eight bars.
 fn solo() -> Vec<(f32, f32, Art)> {
-    SOLO.iter()
-        .chain(&SOLO_PEAK)
-        .chain(&SOLO_FALL)
-        .chain(&SOLO_END)
-        .copied()
-        .collect()
+    SOLO.iter().chain(&SOLO_END).copied().collect()
 }
+
+/// The answer, eight more bars: the motif turned upside down, climbing
+/// through each chord where the solo fell, in the same two rhythms, to the
+/// high G, then falling back onto Db and diving into C minor.
+const ANSWER: [(f32, f32, Art); 28] = [
+    (72.0, 1.5, B),
+    (75.0, 0.5, N),
+    (79.0, 1.0, N),
+    (84.0, 1.0, N),
+    (80.0, 1.5, B),
+    (84.0, 0.5, N),
+    (87.0, 1.0, N),
+    (84.0, 1.0, N),
+    (82.0, 1.5, B),
+    (85.0, 0.5, N),
+    (89.0, 1.0, N),
+    (85.0, 1.0, N),
+    (89.0, 1.5, N),
+    (87.0, 0.5, N),
+    (85.0, 1.0, N),
+    (84.0, 1.0, N),
+    (91.0, 1.5, B),
+    (87.0, 0.5, N),
+    (84.0, 2.0, N),
+    (87.0, 1.5, B),
+    (84.0, 0.5, N),
+    (80.0, 2.0, N),
+    (85.0, 1.5, N),
+    (82.0, 0.5, N),
+    (77.0, 2.0, N),
+    (80.0, 1.5, N),
+    (77.0, 0.5, N),
+    (73.0, 2.0, D),
+];
+
+/// The breakdown's line over Fm - Ab - Bbm - Cm: one bent chord tone per
+/// bar, held and singing, a step up each bar, and the last one diving.
+const BREAK_LINE: [(f32, f32, Art); 7] = [
+    (72.0, 3.0, B),
+    (68.0, 1.0, N),
+    (75.0, 3.0, B),
+    (72.0, 1.0, N),
+    (77.0, 3.0, B),
+    (73.0, 1.0, N),
+    (79.0, 4.0, D),
+];
 
 /// The motif as the duduk states it, before the guitar takes it: long chord
 /// tones, the mode's Db turning onto C each time.
@@ -253,14 +223,7 @@ struct LNote {
 
 /// Lay a (midi, beats, articulation) line from `at` seconds, `shift`
 /// semitones up and `stretch` times slower. 0 is a rest.
-fn lay(
-    out: &mut Vec<LNote>,
-    at: f32,
-    line: &[(f32, f32, Art)],
-    shift: f32,
-    stretch: f32,
-    vel: f32,
-) -> f32 {
+fn lay(out: &mut Vec<LNote>, at: f32, line: &Line, shift: f32, stretch: f32, vel: f32) -> f32 {
     let mut t = at;
     for &(m, beats, art) in line {
         let dur = beats * BEAT * stretch;
@@ -276,39 +239,6 @@ fn lay(
         t += dur;
     }
     t
-}
-
-/// The Planner123 solo as a guitar line in the mode: its long notes bent up
-/// into pitch, its last note diving.
-fn planner_solo(phrase: usize) -> Vec<(f32, f32, Art)> {
-    let half = PLANNER_SOLO.len() / 2;
-    let notes = if phrase == 0 {
-        &PLANNER_SOLO[..half]
-    } else {
-        &PLANNER_SOLO[half..]
-    };
-    let last = notes.len() - 1;
-    notes
-        .iter()
-        .enumerate()
-        .map(|(i, &(f, beats))| {
-            let art = if i == last {
-                D
-            } else if beats >= 1.0 {
-                B
-            } else {
-                N
-            };
-            // Read in the mode: the solo's D becomes Db.
-            let m = midi_of(f);
-            let m = if (m as i32).rem_euclid(12) == 2 {
-                m - 1.0
-            } else {
-                m
-            };
-            (m, beats, art)
-        })
-        .collect()
 }
 
 /// One monophonic voice that bends: legato notes glide, notes after a rest
@@ -867,41 +797,23 @@ fn score(fm: &[Bar]) -> Events {
             }
             Part::Drop1 => {
                 riff_full(&mut e.stab, from, to, 0.0, 0.9);
+                // The solo, then its answer if the part runs sixteen bars.
                 let t = lay(&mut e.guitar, bars(from), &solo(), 0.0, 1.0, 1.0);
-                if t + bars(4.0) < bars(to) {
-                    lay(
-                        &mut e.guitar,
-                        t + BEAT * 2.0,
-                        &planner_solo(0),
-                        0.0,
-                        1.0,
-                        0.95,
-                    );
+                if t + bars(8.0) <= bars(to) + 0.01 {
+                    lay(&mut e.guitar, t, &ANSWER, 0.0, 1.0, 0.95);
                 }
             }
             Part::Break => {
-                // The second solo phrase, slow, with every long note bent.
-                lay(
-                    &mut e.guitar,
-                    bars(from + 1.0),
-                    &planner_solo(1),
-                    0.0,
-                    1.5,
-                    0.8,
-                );
+                // Four bars of choir alone, then the guitar's held bends.
+                if from + 8.0 <= to {
+                    lay(&mut e.guitar, bars(from + 4.0), &BREAK_LINE, 0.0, 1.0, 0.85);
+                }
             }
             Part::Drop2 => {
                 riff_full(&mut e.stab, from, to - 1.0, 2.0, 1.0);
                 let t = lay(&mut e.guitar, bars(from), &solo(), 2.0, 1.0, 1.0);
-                if t + bars(4.0) < bars(to - 1.0) {
-                    lay(
-                        &mut e.guitar,
-                        t + BEAT * 2.0,
-                        &planner_solo(1),
-                        2.0,
-                        1.0,
-                        0.95,
-                    );
+                if t + bars(8.0) <= bars(to - 1.0) + 0.01 {
+                    lay(&mut e.guitar, t, &ANSWER, 2.0, 1.0, 0.95);
                 }
             }
             Part::Half => {
@@ -924,7 +836,7 @@ fn score(fm: &[Bar]) -> Events {
             }
             Part::Final => {
                 riff_full(&mut e.stab, from, to, 0.0, 1.0);
-                lay(&mut e.guitar, bars(from), &planner_solo(0), 12.0, 1.0, 1.0);
+                lay(&mut e.guitar, bars(from), &ANSWER, 0.0, 1.0, 1.0);
             }
             Part::Outro => {
                 // The last held bend, singing over the cadence, and the dive.
@@ -1549,6 +1461,10 @@ fn soft_clip(x: f32) -> f32 {
 mod tests {
     use super::*;
 
+    fn midi_of(freq: f32) -> f32 {
+        (69.0 + 12.0 * (freq / 440.0).log2()).round()
+    }
+
     const C_PHRYGIAN: [i32; 7] = [0, 1, 3, 5, 7, 8, 10];
     const D_PHRYGIAN: [i32; 7] = [2, 3, 5, 7, 9, 10, 0];
 
@@ -1604,6 +1520,27 @@ mod tests {
             beat += b;
         }
         assert_eq!(DUDUK.iter().map(|(_, b, _)| b).sum::<f32>(), 16.0);
+        assert_eq!(ANSWER.iter().map(|(_, b, _)| b).sum::<f32>(), 32.0);
+        assert_eq!(BREAK_LINE.iter().map(|(_, b, _)| b).sum::<f32>(), 16.0);
+    }
+
+    /// The duduk's first statement in the intro (bars 3-6) sits on the loop
+    /// it was written over.
+    #[test]
+    fn the_intro_plays_the_loop_under_the_duduk() {
+        assert_eq!(&INTRO_CHORDS[2..6], &LOOP);
+        assert_eq!(INTRO_CHORDS[6], DB);
+    }
+
+    /// No flurries: the solo lines move in eighths at the quickest.
+    #[test]
+    fn the_solos_have_no_quick_figures() {
+        for line in [&solo()[..], &ANSWER[..], &BREAK_LINE[..]] {
+            assert!(
+                line.iter().all(|(_, b, _)| *b >= 0.5),
+                "a solo note shorter than an eighth"
+            );
+        }
     }
 
     /// The solo is built on the harmony: whatever sounds on beats 1 and 3 of
@@ -1611,14 +1548,20 @@ mod tests {
     #[test]
     fn the_solo_lands_on_chord_tones() {
         let solo = solo();
-        for line in [&solo[..], &DUDUK[..]] {
+        let lines: [(&Line, &[usize; 4]); 4] = [
+            (&solo, &LOOP),
+            (&ANSWER, &LOOP),
+            (&DUDUK, &LOOP),
+            (&BREAK_LINE, &BREAK_LOOP),
+        ];
+        for (line, chords) in lines {
             let mut beat = 0.0f32;
             for &(m, b, _) in line {
                 for strong in [0.0f32, 2.0] {
                     let bar = (beat / 4.0).floor();
                     let at = bar * 4.0 + strong;
                     if m > 0.0 && at >= beat - 1e-3 && at < beat + b - 1e-3 {
-                        let chord = LOOP[bar as usize % 4];
+                        let chord = chords[bar as usize % 4];
                         let tones: Vec<i32> = PAD_VOICINGS[chord]
                             .iter()
                             .map(|v| (*v as i32).rem_euclid(12))
