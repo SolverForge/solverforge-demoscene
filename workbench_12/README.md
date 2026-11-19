@@ -22,12 +22,23 @@ Hermes Agent. 1920x1080, 60 fps, 101 bars at 125 BPM (193.9 s):
   the last frame.
 
 The soundtrack remixes the latest Planner123 tune (planner123_06). It keeps
-the tune's loop, riff, solo and basses, and adds a hook of its own. The form
-has an arc: verse, first drop, a breakdown on its own progression, a second
-drop, a half-time section, a final drop and an outro cadence. The sound is
-ancient instruments played by a machine: a choir pad, a plucked lyre, a glass
-lyre for the hook, taiko toms and a temple gong. Its sections follow the
-cut's chapters. `src/audio/song.rs` lists what is kept and what is new.
+the tune's loop, its riff on the supersaw stab, its solo and its basses, and
+rearranges them into a form with an arc:
+
+1. a taiko intro
+2. a verse of santur, frame drums and duduk
+3. a first drop with the electric solo
+4. a breakdown on its own progression
+5. a second drop lifted to D minor
+6. a half-time section where guitar and duduk trade calls
+7. a final drop
+8. an outro cadence
+
+The sound is ancient instruments played by a machine. The strings are plucked
+Karplus-Strong strings, and the lead is an electric guitar that bends, slides,
+sings with vibrato and dives, in the manner of One Must Fall. The music stays
+at one level throughout. Its sections follow the cut's chapters.
+`src/audio/song.rs` lists what is kept and what is new.
 
 ## Run and render
 
