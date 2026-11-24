@@ -1,0 +1,433 @@
+LASER-1|LASER 1|machine
+LASER-2|LASER 2|machine
+LASER-3|LASER 3 12KW|machine
+PRESS-1|PRESS 135T|machine
+PRESS-2|PRESS 320T|machine
+MILL-1|VERTICAL MILL 1|machine
+MILL-2|VERTICAL MILL 2|machine
+MILL-3|5-AXIS MILL 3|machine
+MILL-4|5-AXIS MILL 4|machine
+LATHE-1|LATHE 1|machine
+LATHE-2|LATHE 2|machine
+LATHE-3|LATHE 3|machine
+PAINT-1|POWDER LINE 1|machine
+PAINT-2|POWDER LINE 2|machine
+WELD-1|WELDING ROBOT 1|machine
+WELD-2|WELDING ROBOT 2|machine
+W-PIETER|PIETER WELDER|employee
+W-SANNE|SANNE WELDER|employee
+W-JORIS|JORIS WELDER|employee
+A-FATIMA|FATIMA ASSEMBLER|employee
+A-LUCAS|LUCAS ASSEMBLER|employee
+A-EMMA|EMMA ASSEMBLER|employee
+Q-NOOR|NOOR INSPECTOR|employee
+Q-DAAN|DAAN INSPECTOR|employee
+task|O001-bend|bend|Machine guard for Tecnomar|
+task|O001-cut|cut|Machine guard for Tecnomar|
+task|O001-inspect|inspect|Machine guard for Tecnomar|
+task|O001-mill|mill|Machine guard for Tecnomar|
+task|O001-paint|paint|Machine guard for Tecnomar|black
+task|O001-weld|weld|Machine guard for Tecnomar|
+task|O002-bend|bend|Motor bracket for Oostwerk|
+task|O002-cut|cut|Motor bracket for Oostwerk|
+task|O002-inspect|inspect|Motor bracket for Oostwerk|
+task|O002-mill|mill|Motor bracket for Oostwerk|
+task|O002-weld|weld|Motor bracket for Oostwerk|
+task|O003-assemble|assemble|Control cabinet for Halden|
+task|O003-cut|cut|Control cabinet for Halden|
+task|O003-inspect|inspect|Control cabinet for Halden|
+task|O003-mill|mill|Control cabinet for Halden|
+task|O003-paint|paint|Control cabinet for Halden|blue
+task|O004-cut|cut|Hydraulic block for Vandermolen|
+task|O004-finish|finish|Hydraulic block for Vandermolen|
+task|O004-inspect|inspect|Hydraulic block for Vandermolen|
+task|O004-mill|mill|Hydraulic block for Vandermolen|
+task|O004-paint|paint|Hydraulic block for Vandermolen|blue
+task|O005-bend|bend|Machine guard for Tecnomar|
+task|O005-cut|cut|Machine guard for Tecnomar|
+task|O005-inspect|inspect|Machine guard for Tecnomar|
+task|O005-mill|mill|Machine guard for Tecnomar|
+task|O005-paint|paint|Machine guard for Tecnomar|grey
+task|O006-bend|bend|Motor bracket for Oostwerk|
+task|O006-cut|cut|Motor bracket for Oostwerk|
+task|O006-inspect|inspect|Motor bracket for Oostwerk|
+task|O006-mill|mill|Motor bracket for Oostwerk|
+task|O006-paint|paint|Motor bracket for Oostwerk|black
+task|O006-weld|weld|Motor bracket for Oostwerk|
+task|O007-bend|bend|Cable duct for Halden|
+task|O007-cut|cut|Cable duct for Halden|
+task|O007-finish|finish|Cable duct for Halden|
+task|O007-inspect|inspect|Cable duct for Halden|
+task|O007-mill|mill|Cable duct for Halden|
+task|O008-cut|cut|Hydraulic block for Norrland|
+task|O008-finish|finish|Hydraulic block for Norrland|
+task|O008-inspect|inspect|Hydraulic block for Norrland|
+task|O008-mill|mill|Hydraulic block for Norrland|
+task|O009-cut|cut|Hydraulic block for Brightline|
+task|O009-finish|finish|Hydraulic block for Brightline|
+task|O009-inspect|inspect|Hydraulic block for Brightline|
+task|O009-mill|mill|Hydraulic block for Brightline|
+task|O009-paint|paint|Hydraulic block for Brightline|red
+task|O010-bend|bend|Cable duct for Tecnomar|
+task|O010-cut|cut|Cable duct for Tecnomar|
+task|O010-inspect|inspect|Cable duct for Tecnomar|
+task|O010-mill|mill|Cable duct for Tecnomar|
+task|O010-paint|paint|Cable duct for Tecnomar|grey
+task|O010-weld|weld|Cable duct for Tecnomar|
+task|O011-bend|bend|Motor bracket for Brightline|
+task|O011-cut|cut|Motor bracket for Brightline|
+task|O011-inspect|inspect|Motor bracket for Brightline|
+task|O011-mill|mill|Motor bracket for Brightline|
+task|O011-paint|paint|Motor bracket for Brightline|black
+task|O012-bend|bend|Battery tray for Vandermolen|
+task|O012-cut|cut|Battery tray for Vandermolen|
+task|O012-inspect|inspect|Battery tray for Vandermolen|
+task|O012-mill|mill|Battery tray for Vandermolen|
+task|O012-paint|paint|Battery tray for Vandermolen|red
+task|O012-weld|weld|Battery tray for Vandermolen|
+task|O013-cut|cut|Hydraulic block for Brightline|
+task|O013-inspect|inspect|Hydraulic block for Brightline|
+task|O013-mill|mill|Hydraulic block for Brightline|
+task|O014-bend|bend|Battery tray for Norrland|
+task|O014-cut|cut|Battery tray for Norrland|
+task|O014-inspect|inspect|Battery tray for Norrland|
+task|O014-mill|mill|Battery tray for Norrland|
+task|O014-paint|paint|Battery tray for Norrland|black
+task|O014-weld|weld|Battery tray for Norrland|
+task|O015-bend|bend|Motor bracket for Tecnomar|
+task|O015-cut|cut|Motor bracket for Tecnomar|
+task|O015-inspect|inspect|Motor bracket for Tecnomar|
+task|O015-mill|mill|Motor bracket for Tecnomar|
+task|O015-paint|paint|Motor bracket for Tecnomar|black
+task|O016-cut|cut|Hydraulic block for Brightline|
+task|O016-inspect|inspect|Hydraulic block for Brightline|
+task|O016-mill|mill|Hydraulic block for Brightline|
+task|O016-paint|paint|Hydraulic block for Brightline|blue
+task|O017-assemble|assemble|Control cabinet for Halden|
+task|O017-bend|bend|Control cabinet for Halden|
+task|O017-cut|cut|Control cabinet for Halden|
+task|O017-inspect|inspect|Control cabinet for Halden|
+task|O017-mill|mill|Control cabinet for Halden|
+task|O017-paint|paint|Control cabinet for Halden|red
+task|O017-weld|weld|Control cabinet for Halden|
+task|O018-bend|bend|Battery tray for Oostwerk|
+task|O018-cut|cut|Battery tray for Oostwerk|
+task|O018-finish|finish|Battery tray for Oostwerk|
+task|O018-inspect|inspect|Battery tray for Oostwerk|
+task|O018-mill|mill|Battery tray for Oostwerk|
+task|O018-paint|paint|Battery tray for Oostwerk|black
+task|O019-cut|cut|Battery tray for Vandermolen|
+task|O019-inspect|inspect|Battery tray for Vandermolen|
+task|O019-mill|mill|Battery tray for Vandermolen|
+task|O019-paint|paint|Battery tray for Vandermolen|red
+task|O020-cut|cut|Motor bracket for Brightline|
+task|O020-finish|finish|Motor bracket for Brightline|
+task|O020-inspect|inspect|Motor bracket for Brightline|
+task|O020-mill|mill|Motor bracket for Brightline|
+task|O021-assemble|assemble|Control cabinet for Oostwerk|
+task|O021-cut|cut|Control cabinet for Oostwerk|
+task|O021-inspect|inspect|Control cabinet for Oostwerk|
+task|O021-mill|mill|Control cabinet for Oostwerk|
+task|O021-paint|paint|Control cabinet for Oostwerk|grey
+task|O022-assemble|assemble|Control cabinet for Vandermolen|
+task|O022-cut|cut|Control cabinet for Vandermolen|
+task|O022-finish|finish|Control cabinet for Vandermolen|
+task|O022-inspect|inspect|Control cabinet for Vandermolen|
+task|O022-mill|mill|Control cabinet for Vandermolen|
+task|O022-paint|paint|Control cabinet for Vandermolen|grey
+task|O023-assemble|assemble|Control cabinet for Oostwerk|
+task|O023-bend|bend|Control cabinet for Oostwerk|
+task|O023-cut|cut|Control cabinet for Oostwerk|
+task|O023-finish|finish|Control cabinet for Oostwerk|
+task|O023-inspect|inspect|Control cabinet for Oostwerk|
+task|O023-mill|mill|Control cabinet for Oostwerk|
+task|O023-paint|paint|Control cabinet for Oostwerk|black
+task|O024-bend|bend|Cable duct for Norrland|
+task|O024-cut|cut|Cable duct for Norrland|
+task|O024-inspect|inspect|Cable duct for Norrland|
+task|O024-mill|mill|Cable duct for Norrland|
+task|O024-paint|paint|Cable duct for Norrland|grey
+task|O024-weld|weld|Cable duct for Norrland|
+task|O025-bend|bend|Panel door for Brightline|
+task|O025-cut|cut|Panel door for Brightline|
+task|O025-inspect|inspect|Panel door for Brightline|
+task|O025-mill|mill|Panel door for Brightline|
+task|O025-weld|weld|Panel door for Brightline|
+task|O026-assemble|assemble|Pump skid for Brightline|
+task|O026-bend|bend|Pump skid for Brightline|
+task|O026-cut|cut|Pump skid for Brightline|
+task|O026-finish|finish|Pump skid for Brightline|
+task|O026-inspect|inspect|Pump skid for Brightline|
+task|O026-mill|mill|Pump skid for Brightline|
+task|O026-paint|paint|Pump skid for Brightline|black
+task|O026-weld|weld|Pump skid for Brightline|
+task|O027-cut|cut|Panel door for Tecnomar|
+task|O027-inspect|inspect|Panel door for Tecnomar|
+task|O027-mill|mill|Panel door for Tecnomar|
+task|O028-assemble|assemble|Pump skid for Tecnomar|
+task|O028-bend|bend|Pump skid for Tecnomar|
+task|O028-cut|cut|Pump skid for Tecnomar|
+task|O028-inspect|inspect|Pump skid for Tecnomar|
+task|O028-mill|mill|Pump skid for Tecnomar|
+task|O029-cut|cut|Hydraulic block for Vandermolen|
+task|O029-inspect|inspect|Hydraulic block for Vandermolen|
+task|O029-mill|mill|Hydraulic block for Vandermolen|
+task|O029-paint|paint|Hydraulic block for Vandermolen|grey
+task|O030-bend|bend|Cable duct for Vandermolen|
+task|O030-cut|cut|Cable duct for Vandermolen|
+task|O030-inspect|inspect|Cable duct for Vandermolen|
+task|O030-mill|mill|Cable duct for Vandermolen|
+task|O030-paint|paint|Cable duct for Vandermolen|grey
+task|O030-weld|weld|Cable duct for Vandermolen|
+task|O031-assemble|assemble|Conveyor frame for Norrland|
+task|O031-bend|bend|Conveyor frame for Norrland|
+task|O031-cut|cut|Conveyor frame for Norrland|
+task|O031-finish|finish|Conveyor frame for Norrland|
+task|O031-inspect|inspect|Conveyor frame for Norrland|
+task|O031-mill|mill|Conveyor frame for Norrland|
+task|O031-paint|paint|Conveyor frame for Norrland|red
+task|O032-assemble|assemble|Control cabinet for Oostwerk|
+task|O032-bend|bend|Control cabinet for Oostwerk|
+task|O032-cut|cut|Control cabinet for Oostwerk|
+task|O032-inspect|inspect|Control cabinet for Oostwerk|
+task|O032-mill|mill|Control cabinet for Oostwerk|
+task|O032-paint|paint|Control cabinet for Oostwerk|black
+task|O032-weld|weld|Control cabinet for Oostwerk|
+task|O033-cut|cut|Machine guard for Kessler AG|
+task|O033-inspect|inspect|Machine guard for Kessler AG|
+task|O033-mill|mill|Machine guard for Kessler AG|
+task|O033-paint|paint|Machine guard for Kessler AG|red
+task|O034-assemble|assemble|Control cabinet for Brightline|
+task|O034-bend|bend|Control cabinet for Brightline|
+task|O034-cut|cut|Control cabinet for Brightline|
+task|O034-finish|finish|Control cabinet for Brightline|
+task|O034-inspect|inspect|Control cabinet for Brightline|
+task|O034-mill|mill|Control cabinet for Brightline|
+task|O034-weld|weld|Control cabinet for Brightline|
+task|O035-assemble|assemble|Pump skid for Brightline|
+task|O035-bend|bend|Pump skid for Brightline|
+task|O035-cut|cut|Pump skid for Brightline|
+task|O035-inspect|inspect|Pump skid for Brightline|
+task|O035-mill|mill|Pump skid for Brightline|
+task|O036-bend|bend|Panel door for Vandermolen|
+task|O036-cut|cut|Panel door for Vandermolen|
+task|O036-finish|finish|Panel door for Vandermolen|
+task|O036-inspect|inspect|Panel door for Vandermolen|
+task|O036-mill|mill|Panel door for Vandermolen|
+task|O036-weld|weld|Panel door for Vandermolen|
+task|O037-bend|bend|Panel door for Kessler AG|
+task|O037-cut|cut|Panel door for Kessler AG|
+task|O037-inspect|inspect|Panel door for Kessler AG|
+task|O037-mill|mill|Panel door for Kessler AG|
+task|O037-weld|weld|Panel door for Kessler AG|
+task|O038-bend|bend|Cable duct for Halden|
+task|O038-cut|cut|Cable duct for Halden|
+task|O038-inspect|inspect|Cable duct for Halden|
+task|O038-mill|mill|Cable duct for Halden|
+task|O038-paint|paint|Cable duct for Halden|grey
+task|O038-weld|weld|Cable duct for Halden|
+task|O039-bend|bend|Panel door for Halden|
+task|O039-cut|cut|Panel door for Halden|
+task|O039-inspect|inspect|Panel door for Halden|
+task|O039-mill|mill|Panel door for Halden|
+task|O039-paint|paint|Panel door for Halden|grey
+task|O039-weld|weld|Panel door for Halden|
+task|O040-bend|bend|Panel door for Norrland|
+task|O040-cut|cut|Panel door for Norrland|
+task|O040-inspect|inspect|Panel door for Norrland|
+task|O040-mill|mill|Panel door for Norrland|
+task|O040-paint|paint|Panel door for Norrland|black
+task|O040-weld|weld|Panel door for Norrland|
+task|O041-assemble|assemble|Pump skid for Norrland|
+task|O041-bend|bend|Pump skid for Norrland|
+task|O041-cut|cut|Pump skid for Norrland|
+task|O041-inspect|inspect|Pump skid for Norrland|
+task|O041-mill|mill|Pump skid for Norrland|
+task|O041-weld|weld|Pump skid for Norrland|
+task|O042-bend|bend|Cable duct for Tecnomar|
+task|O042-cut|cut|Cable duct for Tecnomar|
+task|O042-inspect|inspect|Cable duct for Tecnomar|
+task|O042-mill|mill|Cable duct for Tecnomar|
+task|O042-paint|paint|Cable duct for Tecnomar|grey
+task|O043-bend|bend|Motor bracket for Brightline|
+task|O043-cut|cut|Motor bracket for Brightline|
+task|O043-inspect|inspect|Motor bracket for Brightline|
+task|O043-mill|mill|Motor bracket for Brightline|
+task|O043-paint|paint|Motor bracket for Brightline|grey
+task|O044-cut|cut|Axle hub for Vandermolen|
+task|O044-inspect|inspect|Axle hub for Vandermolen|
+task|O044-mill|mill|Axle hub for Vandermolen|
+task|O045-assemble|assemble|Control cabinet for Halden|
+task|O045-bend|bend|Control cabinet for Halden|
+task|O045-cut|cut|Control cabinet for Halden|
+task|O045-inspect|inspect|Control cabinet for Halden|
+task|O045-mill|mill|Control cabinet for Halden|
+task|O045-paint|paint|Control cabinet for Halden|grey
+task|O046-bend|bend|Cable duct for Halden|
+task|O046-cut|cut|Cable duct for Halden|
+task|O046-inspect|inspect|Cable duct for Halden|
+task|O046-mill|mill|Cable duct for Halden|
+task|O046-paint|paint|Cable duct for Halden|black
+task|O046-weld|weld|Cable duct for Halden|
+task|O047-assemble|assemble|Conveyor frame for Kessler AG|
+task|O047-bend|bend|Conveyor frame for Kessler AG|
+task|O047-cut|cut|Conveyor frame for Kessler AG|
+task|O047-inspect|inspect|Conveyor frame for Kessler AG|
+task|O047-mill|mill|Conveyor frame for Kessler AG|
+task|O048-assemble|assemble|Pump skid for Kessler AG|
+task|O048-bend|bend|Pump skid for Kessler AG|
+task|O048-cut|cut|Pump skid for Kessler AG|
+task|O048-inspect|inspect|Pump skid for Kessler AG|
+task|O048-mill|mill|Pump skid for Kessler AG|
+task|O048-paint|paint|Pump skid for Kessler AG|black
+task|O048-weld|weld|Pump skid for Kessler AG|
+task|O049-assemble|assemble|Pump skid for Halden|
+task|O049-cut|cut|Pump skid for Halden|
+task|O049-inspect|inspect|Pump skid for Halden|
+task|O049-mill|mill|Pump skid for Halden|
+task|O049-paint|paint|Pump skid for Halden|grey
+task|O050-cut|cut|Axle hub for Tecnomar|
+task|O050-inspect|inspect|Axle hub for Tecnomar|
+task|O050-mill|mill|Axle hub for Tecnomar|
+task|O050-paint|paint|Axle hub for Tecnomar|black
+task|O051-cut|cut|Axle hub for Halden|
+task|O051-inspect|inspect|Axle hub for Halden|
+task|O051-mill|mill|Axle hub for Halden|
+task|O051-paint|paint|Axle hub for Halden|blue
+task|O052-bend|bend|Cable duct for Halden|
+task|O052-cut|cut|Cable duct for Halden|
+task|O052-inspect|inspect|Cable duct for Halden|
+task|O052-mill|mill|Cable duct for Halden|
+task|O052-paint|paint|Cable duct for Halden|grey
+task|O052-weld|weld|Cable duct for Halden|
+task|O053-assemble|assemble|Pump skid for Norrland|
+task|O053-bend|bend|Pump skid for Norrland|
+task|O053-cut|cut|Pump skid for Norrland|
+task|O053-inspect|inspect|Pump skid for Norrland|
+task|O053-mill|mill|Pump skid for Norrland|
+task|O053-paint|paint|Pump skid for Norrland|red
+task|O053-weld|weld|Pump skid for Norrland|
+task|O054-cut|cut|Axle hub for Brightline|
+task|O054-inspect|inspect|Axle hub for Brightline|
+task|O054-mill|mill|Axle hub for Brightline|
+task|O055-cut|cut|Panel door for Norrland|
+task|O055-finish|finish|Panel door for Norrland|
+task|O055-inspect|inspect|Panel door for Norrland|
+task|O055-mill|mill|Panel door for Norrland|
+task|O056-cut|cut|Hydraulic block for Oostwerk|
+task|O056-finish|finish|Hydraulic block for Oostwerk|
+task|O056-inspect|inspect|Hydraulic block for Oostwerk|
+task|O056-mill|mill|Hydraulic block for Oostwerk|
+task|O056-paint|paint|Hydraulic block for Oostwerk|blue
+task|O057-assemble|assemble|Control cabinet for Oostwerk|
+task|O057-cut|cut|Control cabinet for Oostwerk|
+task|O057-inspect|inspect|Control cabinet for Oostwerk|
+task|O057-mill|mill|Control cabinet for Oostwerk|
+task|O057-paint|paint|Control cabinet for Oostwerk|black
+task|O058-assemble|assemble|Conveyor frame for Brightline|
+task|O058-bend|bend|Conveyor frame for Brightline|
+task|O058-cut|cut|Conveyor frame for Brightline|
+task|O058-inspect|inspect|Conveyor frame for Brightline|
+task|O058-mill|mill|Conveyor frame for Brightline|
+task|O058-paint|paint|Conveyor frame for Brightline|grey
+task|O058-weld|weld|Conveyor frame for Brightline|
+task|O059-cut|cut|Panel door for Tecnomar|
+task|O059-finish|finish|Panel door for Tecnomar|
+task|O059-inspect|inspect|Panel door for Tecnomar|
+task|O059-mill|mill|Panel door for Tecnomar|
+task|O059-paint|paint|Panel door for Tecnomar|blue
+task|O060-cut|cut|Hydraulic block for Brightline|
+task|O060-inspect|inspect|Hydraulic block for Brightline|
+task|O060-mill|mill|Hydraulic block for Brightline|
+task|O061-bend|bend|Battery tray for Tecnomar|
+task|O061-cut|cut|Battery tray for Tecnomar|
+task|O061-inspect|inspect|Battery tray for Tecnomar|
+task|O061-mill|mill|Battery tray for Tecnomar|
+task|O061-paint|paint|Battery tray for Tecnomar|blue
+task|O062-assemble|assemble|Control cabinet for Halden|
+task|O062-bend|bend|Control cabinet for Halden|
+task|O062-cut|cut|Control cabinet for Halden|
+task|O062-finish|finish|Control cabinet for Halden|
+task|O062-inspect|inspect|Control cabinet for Halden|
+task|O062-mill|mill|Control cabinet for Halden|
+task|O062-paint|paint|Control cabinet for Halden|red
+task|O062-weld|weld|Control cabinet for Halden|
+task|O063-bend|bend|Machine guard for Oostwerk|
+task|O063-cut|cut|Machine guard for Oostwerk|
+task|O063-inspect|inspect|Machine guard for Oostwerk|
+task|O063-mill|mill|Machine guard for Oostwerk|
+task|O063-paint|paint|Machine guard for Oostwerk|blue
+task|O064-bend|bend|Machine guard for Kessler AG|
+task|O064-cut|cut|Machine guard for Kessler AG|
+task|O064-inspect|inspect|Machine guard for Kessler AG|
+task|O064-mill|mill|Machine guard for Kessler AG|
+task|O064-paint|paint|Machine guard for Kessler AG|grey
+task|O064-weld|weld|Machine guard for Kessler AG|
+task|O065-bend|bend|Battery tray for Tecnomar|
+task|O065-cut|cut|Battery tray for Tecnomar|
+task|O065-inspect|inspect|Battery tray for Tecnomar|
+task|O065-mill|mill|Battery tray for Tecnomar|
+task|O065-paint|paint|Battery tray for Tecnomar|black
+task|O066-assemble|assemble|Control cabinet for Halden|
+task|O066-bend|bend|Control cabinet for Halden|
+task|O066-cut|cut|Control cabinet for Halden|
+task|O066-inspect|inspect|Control cabinet for Halden|
+task|O066-mill|mill|Control cabinet for Halden|
+task|O066-paint|paint|Control cabinet for Halden|grey
+task|O067-bend|bend|Cable duct for Vandermolen|
+task|O067-cut|cut|Cable duct for Vandermolen|
+task|O067-inspect|inspect|Cable duct for Vandermolen|
+task|O067-mill|mill|Cable duct for Vandermolen|
+task|O067-paint|paint|Cable duct for Vandermolen|red
+task|O067-weld|weld|Cable duct for Vandermolen|
+task|O068-cut|cut|Axle hub for Norrland|
+task|O068-finish|finish|Axle hub for Norrland|
+task|O068-inspect|inspect|Axle hub for Norrland|
+task|O068-mill|mill|Axle hub for Norrland|
+task|O068-paint|paint|Axle hub for Norrland|grey
+task|O069-assemble|assemble|Control cabinet for Norrland|
+task|O069-bend|bend|Control cabinet for Norrland|
+task|O069-cut|cut|Control cabinet for Norrland|
+task|O069-inspect|inspect|Control cabinet for Norrland|
+task|O069-mill|mill|Control cabinet for Norrland|
+task|O069-paint|paint|Control cabinet for Norrland|grey
+task|O069-weld|weld|Control cabinet for Norrland|
+task|O070-assemble|assemble|Pump skid for Vandermolen|
+task|O070-bend|bend|Pump skid for Vandermolen|
+task|O070-cut|cut|Pump skid for Vandermolen|
+task|O070-inspect|inspect|Pump skid for Vandermolen|
+task|O070-mill|mill|Pump skid for Vandermolen|
+task|O070-paint|paint|Pump skid for Vandermolen|black
+task|O070-weld|weld|Pump skid for Vandermolen|
+task|O071-bend|bend|Motor bracket for Halden|
+task|O071-cut|cut|Motor bracket for Halden|
+task|O071-finish|finish|Motor bracket for Halden|
+task|O071-inspect|inspect|Motor bracket for Halden|
+task|O071-mill|mill|Motor bracket for Halden|
+task|O072-assemble|assemble|Conveyor frame for Vandermolen|
+task|O072-bend|bend|Conveyor frame for Vandermolen|
+task|O072-cut|cut|Conveyor frame for Vandermolen|
+task|O072-inspect|inspect|Conveyor frame for Vandermolen|
+task|O072-mill|mill|Conveyor frame for Vandermolen|
+task|O073-assemble|assemble|Pump skid for Oostwerk|
+task|O073-bend|bend|Pump skid for Oostwerk|
+task|O073-cut|cut|Pump skid for Oostwerk|
+task|O073-inspect|inspect|Pump skid for Oostwerk|
+task|O073-mill|mill|Pump skid for Oostwerk|
+task|O073-paint|paint|Pump skid for Oostwerk|red
+task|O073-weld|weld|Pump skid for Oostwerk|
+task|O074-cut|cut|Axle hub for Vandermolen|
+task|O074-inspect|inspect|Axle hub for Vandermolen|
+task|O074-mill|mill|Axle hub for Vandermolen|
+task|O074-paint|paint|Axle hub for Vandermolen|black
+task|O075-cut|cut|Hydraulic block for Kessler AG|
+task|O075-finish|finish|Hydraulic block for Kessler AG|
+task|O075-inspect|inspect|Hydraulic block for Kessler AG|
+task|O075-mill|mill|Hydraulic block for Kessler AG|
+task|O075-paint|paint|Hydraulic block for Kessler AG|grey
+task|O076-assemble|assemble|Conveyor frame for Norrland|
+task|O076-bend|bend|Conveyor frame for Norrland|
+task|O076-cut|cut|Conveyor frame for Norrland|
+task|O076-inspect|inspect|Conveyor frame for Norrland|
+task|O076-mill|mill|Conveyor frame for Norrland|
+task|O076-paint|paint|Conveyor frame for Norrland|black
