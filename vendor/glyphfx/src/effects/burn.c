@@ -100,9 +100,7 @@ void burn_free_config(void *cfg_ptr) {
 static void burn_initialize_smoke(void *user, EngineCtx *ctx, CharId id) {
     Burn *st = user;
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    size_t sym_len = strlen(ch->input_symbol);
-    char *input_symbol = malloc(sym_len + 1);
-    strcpy(input_symbol, ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
     bool uses_pre = ch->uses_input_preexisting_colors;
 
     Color stops[2];
@@ -116,17 +114,15 @@ static void burn_initialize_smoke(void *user, EngineCtx *ctx, CharId id) {
     // The 504F4F->C7C7C7 fade over the character's symbol is the same for
     // every particle with that symbol: build once, let the rest append (the
     // asm engine runs these frames through visual_run).
-    bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+    bool shareable = scene && !scene->cold->has_preexisting_colors && !scene->cold->preexisting_bold;
     Scene *run = shareable ? framemo_get(st->smoke_runs, input_symbol, stops[0]) : NULL;
     if (run) {
         if (scene_append_frames(scene, run) != 0) {
-            free(input_symbol);
             return;
         }
     } else if (scene) {
         Gradient gradient;
         if (gradient_with_steps(stops, 2, 9, false, &gradient) != 0) {
-            free(input_symbol);
             return;
         }
         for (size_t i = 0; i < gradient.len; i++) {
@@ -144,7 +140,6 @@ static void burn_initialize_smoke(void *user, EngineCtx *ctx, CharId id) {
     }
     ctx->terminal.arena.items[id].layer = 2;
     renderer_layer(id, 2);
-    free(input_symbol);
 }
 
 /// BurnIterator._emit_smoke.
@@ -162,7 +157,7 @@ static void burn_on_emit(void *user, EngineCtx *ctx, CharId particle) {
     if (scene) {
         scene_reset(scene);
     }
-    char *smoke_path = NULL;
+    const char *smoke_path = NULL;
     Easing ease = no_ease();
     if (motion_new_path(&ctx->terminal.arena.items[particle].motion, 0.5, false, ease, false, 0, 0, false, "",
                         &smoke_path) != 0) {
@@ -187,7 +182,6 @@ static void burn_on_emit(void *user, EngineCtx *ctx, CharId particle) {
     action.kind = ACTION_CALLBACK;
     action.cb.id = CB_RECLAIM_SMOKE;
     (void)engine_register_event(ctx, particle, EVENT_SCENE_COMPLETE, &caller, &action);
-    free(smoke_path);
 }
 
 static void burn_emit_smoke(Effect *self, EngineCtx *ctx, Coord origin) {
@@ -284,8 +278,7 @@ static int burn_build(Effect *self, EngineCtx *ctx) {
         CharId id = characters[i];
         terminal_set_character_visibility(&ctx->terminal, id, true);
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool has_input_fg = ch->animation.has_input_fg;
         Color input_fg = ch->animation.input_fg_color;
         bool has_input_bg = ch->animation.has_input_bg;
@@ -303,7 +296,6 @@ static int burn_build(Effect *self, EngineCtx *ctx) {
         Scene *scene = burn_scn ? (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, burn_scn) : NULL;
         if (!scene || scene_apply_gradient_to_symbols(scene, burn_char_order, 9, 4, &fire_gradient, NULL) != 0) {
             rc = -1;
-            free(input_symbol);
             break;
         }
 
@@ -388,12 +380,12 @@ static int burn_build(Effect *self, EngineCtx *ctx) {
             CallerKey caller;
             memset(&caller, 0, sizeof(caller));
             caller.kind = CALLER_SCENE;
-            caller.id = (char *)burn_scn;
+            caller.id = burn_scn;
             EventAction action;
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)final_color_scn;
+            action.id = final_color_scn;
             if (engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
                 rc = -1;
             }
@@ -404,7 +396,6 @@ static int burn_build(Effect *self, EngineCtx *ctx) {
                 rc = -1;
             }
         }
-        free(input_symbol);
     }
     free(characters);
     gradient_free(&fire_gradient);

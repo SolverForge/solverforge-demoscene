@@ -9,12 +9,21 @@
 #include "engine/ctx.h"
 #include "engine/terminal.h"
 #include "utils/graphics.h"
+#include "utils/strtab.h"
 
 typedef struct {
     WavesConfig config;
     CharIdGrouping pending;
     size_t pending_head;
+    FrameMemo *runs;  // scenes' frame lists, shared by the template pattern
 } Waves;
+
+// A scene whose frames the run's config fully determines shares them with
+// every later scene: the first builder records itself, the rest append the
+// shared immutable frame list (print's head_runs, matrix's resolve_runs).
+static bool scene_shareable(EngineCtx *ctx, bool uses_pre) {
+    return !(ctx->terminal.config.existing_color_handling == EXISTING_COLOR_ALWAYS && uses_pre);
+}
 
 static void push_color_default(ColorList *list, const char *hex) {
     if (list->len == list->cap) {
@@ -54,9 +63,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 static int parse_wave_direction(const char *value, void *dst) {
@@ -105,9 +112,6 @@ void waves_config_defaults(void *cfg_ptr) {
 
 void waves_free_config(void *cfg_ptr) {
     WavesConfig *cfg = cfg_ptr;
-    for (size_t i = 0; i < cfg->wave_symbols.len; i++) {
-        free(cfg->wave_symbols.items[i]);
-    }
     free(cfg->wave_symbols.items);
     free(cfg->wave_gradient_stops.items);
     free(cfg->wave_gradient_steps.items);
@@ -159,8 +163,7 @@ static int waves_build(Effect *self, EngineCtx *ctx) {
         Color input_bg = ch->animation.input_bg_color;
         Coord input_coord = ch->input_coord;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         ColorPair final_colors;
         memset(&final_colors, 0, sizeof(final_colors));
@@ -177,32 +180,41 @@ static int waves_build(Effect *self, EngineCtx *ctx) {
             }
         }
 
+        bool wave_shareable = scene_shareable(ctx, uses_pre);
         const char *ws = animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, true, cfg->wave_easing,
                                              "", uses_pre);
-        char wave_scn[32];
-        wave_scn[0] = '\0';
-        if (ws) {
-            strncpy(wave_scn, ws, sizeof(wave_scn) - 1);
-            wave_scn[sizeof(wave_scn) - 1] = '\0';
-        }
+        // Interned scene id (process lifetime): looked up by identity.
+        const char *wave_scn = ws ? ws : "";
         Scene *wave_scene = (Scene *)om_get(&ch->animation.scenes, wave_scn);
         const char *const *symbols = (const char *const *)cfg->wave_symbols.items;
-        for (int64_t w = 0; w < cfg->wave_count; w++) {
-            if (scene_apply_gradient_to_symbols(wave_scene, symbols, cfg->wave_symbols.len, cfg->wave_length,
-                                                &wave_gradient, NULL) != 0) {
-                rc = -1;
-                break;
+        Color wave_key;
+        memset(&wave_key, 0, sizeof(wave_key));
+        Scene *wave_template = wave_shareable ? framemo_get(st->runs, "", wave_key) : NULL;
+        if (wave_template) {
+            rc = scene_append_frames(wave_scene, wave_template);
+        } else {
+            for (int64_t w = 0; w < cfg->wave_count; w++) {
+                if (scene_apply_gradient_to_symbols(wave_scene, symbols, cfg->wave_symbols.len, cfg->wave_length,
+                                                    &wave_gradient, NULL) != 0) {
+                    rc = -1;
+                    break;
+                }
+            }
+            if (rc == 0 && wave_template == NULL && wave_shareable && st->runs) {
+                // The scene just built for this character is the run's template;
+                // every later shareable wave scene appends its frame list.
+                if (framemo_put(st->runs, "", wave_key, wave_scene) != 0) {
+                    rc = -1;
+                }
             }
         }
 
-        char final_scn[32];
-        final_scn[0] = '\0';
+        const char *final_scn = "";
         if (rc == 0) {
             const char *fs =
                 animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "", uses_pre);
             if (fs) {
-                strncpy(final_scn, fs, sizeof(final_scn) - 1);
-                final_scn[sizeof(final_scn) - 1] = '\0';
+                final_scn = fs;
             }
             Scene *scene = (Scene *)om_get(&ch->animation.scenes, final_scn);
             Color last_wave = wave_gradient.spectrum[wave_gradient.len - 1];
@@ -264,24 +276,37 @@ static int waves_build(Effect *self, EngineCtx *ctx) {
                     }
                 }
             } else {
-                Color stops[2] = {last_wave, final_colors.fg};
-                Gradient final_scene_gradient;
-                if (gradient_new(stops, 2, cfg->final_gradient_steps.items, cfg->final_gradient_steps.len, false,
-                                 false, &final_scene_gradient) != 0) {
-                    rc = -1;
+                bool final_shareable = scene_shareable(ctx, uses_pre) && final_colors.has_fg;
+                Scene *template = final_shareable ? framemo_get(st->runs, input_symbol, final_colors.fg) : NULL;
+                if (template) {
+                    if (scene_append_frames(scene, template) != 0) {
+                        rc = -1;
+                    }
                 } else {
-                    for (size_t s = 0; s < final_scene_gradient.len; s++) {
-                        VisualParams vp;
-                        memset(&vp, 0, sizeof(vp));
-                        vp.has_colors = true;
-                        vp.colors.has_fg = true;
-                        vp.colors.fg = final_scene_gradient.spectrum[s];
-                        if (scene_add_frame(scene, input_symbol, 10, &vp) != 0) {
+                    Color stops[2] = {last_wave, final_colors.fg};
+                    Gradient final_scene_gradient;
+                    if (gradient_new(stops, 2, cfg->final_gradient_steps.items, cfg->final_gradient_steps.len, false,
+                                     false, &final_scene_gradient) != 0) {
+                        rc = -1;
+                    } else {
+                        for (size_t s = 0; s < final_scene_gradient.len; s++) {
+                            VisualParams vp;
+                            memset(&vp, 0, sizeof(vp));
+                            vp.has_colors = true;
+                            vp.colors.has_fg = true;
+                            vp.colors.fg = final_scene_gradient.spectrum[s];
+                            if (scene_add_frame(scene, input_symbol, 10, &vp) != 0) {
+                                rc = -1;
+                                break;
+                            }
+                        }
+                        gradient_free(&final_scene_gradient);
+                    }
+                    if (rc == 0 && template == NULL && final_shareable && st->runs) {
+                        if (framemo_put(st->runs, input_symbol, final_colors.fg, scene) != 0) {
                             rc = -1;
-                            break;
                         }
                     }
-                    gradient_free(&final_scene_gradient);
                 }
             }
         }
@@ -306,7 +331,6 @@ static int waves_build(Effect *self, EngineCtx *ctx) {
                 }
             }
         }
-        free(input_symbol);
     }
     free(characters);
 
@@ -344,6 +368,7 @@ static void waves_destroy(Effect *self) {
         return;
     }
     charidgrouping_free(&st->pending);
+    framemo_free(st->runs);
     free(st);
     free(self);
 }
@@ -358,6 +383,7 @@ Effect *waves_make(const void *cfg) {
         free(effect);
         return NULL;
     }
+    st->runs = framemo_new();
     st->config = *(const WavesConfig *)cfg;
     effect->ops = &WAVES_OPS;
     effect->state = st;

@@ -15,6 +15,7 @@
 #include "utils/graphics.h"
 #include "utils/ordmap.h"
 #include "utils/spanning_tree.h"
+#include "utils/strtab.h"
 
 typedef struct {
     SmokeConfig config;
@@ -65,9 +66,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 static Easing no_ease(void) {
@@ -97,9 +96,6 @@ void smoke_config_defaults(void *cfg_ptr) {
 
 void smoke_free_config(void *cfg_ptr) {
     SmokeConfig *cfg = cfg_ptr;
-    for (size_t i = 0; i < cfg->smoke_symbols.len; i++) {
-        free(cfg->smoke_symbols.items[i]);
-    }
     free(cfg->smoke_symbols.items);
     free(cfg->smoke_gradient_stops.items);
     free(cfg->final_gradient_stops.items);
@@ -185,8 +181,7 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
         terminal_set_character_visibility(&ctx->terminal, id, true);
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         Coord input_coord = ch->input_coord;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool has_input_fg = ch->animation.has_input_fg;
         Color input_fg = ch->animation.input_fg_color;
         bool has_input_bg = ch->animation.has_input_bg;
@@ -233,7 +228,7 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
             Color final_fg = map_colors.fg;
             Scene *scene =
                 paint_scn ? (Scene *)om_get(&ctx->terminal.arena.items[id].animation.scenes, paint_scn) : NULL;
-            bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+            bool shareable = scene && !scene->cold->has_preexisting_colors && !scene->cold->preexisting_bold;
             Scene *run = shareable ? framemo_get(st->paint_runs, input_symbol, final_fg) : NULL;
             if (run) {
                 if (scene_append_frames(scene, run) != 0) {
@@ -264,7 +259,6 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
             }
         }
         if (rc != 0) {
-            free(input_symbol);
             break;
         }
 
@@ -282,7 +276,7 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
                     rc = -1;
                 }
             }
-        } else if (smoke_scene && !smoke_scene->has_preexisting_colors && !smoke_scene->preexisting_bold) {
+        } else if (smoke_scene && !smoke_scene->cold->has_preexisting_colors && !smoke_scene->cold->preexisting_bold) {
             // The smoke frames are identical for every character: the first
             // shareable scene applies the gradient and becomes the template;
             // the rest copy its frames (the asm engine keeps one template too).
@@ -310,12 +304,12 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
             CallerKey caller;
             memset(&caller, 0, sizeof(caller));
             caller.kind = CALLER_SCENE;
-            caller.id = (char *)smoke_scn;
+            caller.id = smoke_scn;
             EventAction action;
             memset(&action, 0, sizeof(action));
             action.kind = ACTION_ACTIVATE_SCENE;
             action.has_id = true;
-            action.id = (char *)paint_scn;
+            action.id = paint_scn;
             if (engine_register_event(ctx, id, EVENT_SCENE_COMPLETE, &caller, &action) != 0) {
                 rc = -1;
             }
@@ -324,7 +318,6 @@ static int smoke_build(Effect *self, EngineCtx *ctx) {
             animation_set_appearance(&ctx->terminal.arena.items[id].animation, uses_pre, input_symbol,
                                      &base_colors);
         }
-        free(input_symbol);
     }
     free(characters);
 

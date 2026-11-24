@@ -6,10 +6,26 @@
 
 RenderLog g_rlog;
 
+RenderMirror *g_rlog_mirror;
+size_t g_rlog_mirror_len;
+
 static Terminal *g_target;
 
 void render_log_bind(Terminal *t) {
     g_target = t;
+    g_rlog_mirror = t ? t->render_mirror : (RenderMirror *)NULL;
+    g_rlog_mirror_len = t ? t->render_mirror_len : 0;
+}
+
+void render_log_release(Terminal *t) {
+    if (g_target != t) {
+        return;
+    }
+    render_log_bind(NULL);
+    // The pending records name t's characters; nothing may replay them.
+    g_rlog.on = false;
+    g_rlog.len = 0;
+    g_rlog.overflow = false;
 }
 
 void render_log_grow(void) {
@@ -26,7 +42,9 @@ void render_log_grow(void) {
 // canvas. Bounds match the renderer's paint walk.
 static int32_t cell_for(const Terminal *t, CharId id, Coord coord) {
     size_t width = t->visible_right > 0 ? (size_t)t->visible_right : 0;
-    if (width == 0 || !t->arena.items[id].is_visible) {
+    // The mirror is kept by the same hooks; its visible flag and coordinate
+    // match the arena at every point its record side can be consulted.
+    if (!g_rlog_mirror || (size_t)id >= g_rlog_mirror_len || !g_rlog_mirror[id].visible) {
         return -1;
     }
     int64_t row = coord.row + t->canvas_row_offset;

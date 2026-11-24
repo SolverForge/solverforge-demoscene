@@ -9,6 +9,7 @@
 #include "engine/ctx.h"
 #include "engine/terminal.h"
 #include "utils/graphics.h"
+#include "utils/strtab.h"
 #include "utils/utf8.h"
 
 typedef struct {
@@ -64,9 +65,7 @@ static void push_symbol_default(RainSymbolList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 void rain_config_defaults(void *cfg_ptr) {
@@ -100,9 +99,6 @@ void rain_free_config(void *cfg_ptr) {
     free(cfg->rain_colors.items);
     free(cfg->final_gradient_stops.items);
     free(cfg->final_gradient_steps.items);
-    for (size_t i = 0; i < cfg->rain_symbols.len; i++) {
-        free(cfg->rain_symbols.items[i]);
-    }
     free(cfg->rain_symbols.items);
 }
 
@@ -176,8 +172,7 @@ static int rain_build(Effect *self, EngineCtx *ctx) {
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         Coord input_coord = ch->input_coord;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         Color raindrop_color = cfg->rain_colors.items[rng_choice_index(&ctx->rng, cfg->rain_colors.len)];
 
@@ -193,7 +188,6 @@ static int rain_build(Effect *self, EngineCtx *ctx) {
         rain_vp.colors.has_fg = true;
         rain_vp.colors.fg = raindrop_color;
         if (scene_add_frame(rain_scene, rain_symbol, 1, &rain_vp) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -263,10 +257,9 @@ static int rain_build(Effect *self, EngineCtx *ctx) {
 
             double speed = rng_uniform(&ctx->rng, cfg->movement_speed.start, cfg->movement_speed.end);
             motion_set_coordinate(&ctx->terminal.arena.items[id].motion, coord_new(input_coord.column, canvas_top));
-            char *path_id = NULL;
+            const char *path_id = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, speed, true, cfg->movement_easing, false, 0,
                                 0, false, "", &path_id) != 0) {
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -275,8 +268,6 @@ static int rain_build(Effect *self, EngineCtx *ctx) {
             memset(&wp, 0, sizeof(wp));
             if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
                 waypoint_free(&wp);
-                free(path_id);
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -289,19 +280,15 @@ static int rain_build(Effect *self, EngineCtx *ctx) {
             EventAction activate_fade;
             memset(&activate_fade, 0, sizeof(activate_fade));
             activate_fade.kind = ACTION_ACTIVATE_SCENE;
-            activate_fade.id = (char *)fade_scene_id;
+            activate_fade.id = fade_scene_id;
             if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &activate_fade) != 0) {
-                free(path_id);
-                free(input_symbol);
                 rc = -1;
                 break;
             }
 
             engine_activate_path(ctx, self, id, path_id);
-            free(path_id);
             st->pending[pending_count++] = id;
         }
-        free(input_symbol);
     }
 
     st->pending_len = pending_count;

@@ -176,20 +176,15 @@ static int print_make_row(Effect *self, EngineCtx *ctx, const CharId *chars, siz
         if (!all_spaces && ch->input_coord.column > right_extent) {
             continue;
         }
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         int64_t input_column = ch->input_coord.column;
         bool uses_pre = ch->uses_input_preexisting_colors;
 
         motion_set_coordinate(&ch->motion, coord_new(input_column, 1));
         const char *ta = animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, (Easing){0}, "",
                                              uses_pre);
-        char typed_animation[32];
-        typed_animation[0] = '\0';
-        if (ta) {
-            strncpy(typed_animation, ta, sizeof(typed_animation) - 1);
-            typed_animation[sizeof(typed_animation) - 1] = '\0';
-        }
+        // Interned scene id (process lifetime): looked up by identity.
+        const char *typed_animation = ta ? ta : "";
         Scene *scene = (Scene *)om_get(&ch->animation.scenes, typed_animation);
         const char *head_symbols[5] = {"█", "▓", "▒", "░", input_symbol};
 
@@ -261,7 +256,7 @@ static int print_make_row(Effect *self, EngineCtx *ctx, const CharId *chars, siz
             // The head frames depend on the input symbol and final color only,
             // so later characters with the same pair copy the first one's
             // scene (the asm engine's visual_run_find/keep memo).
-            bool shareable = scene && !scene->has_preexisting_colors && !scene->preexisting_bold;
+            bool shareable = scene && !scene->cold->has_preexisting_colors && !scene->cold->preexisting_bold;
             Scene *tmpl = shareable ? framemo_get(st->head_runs, input_symbol, final_fg) : NULL;
             if (tmpl) {
                 if (scene_append_frames(scene, tmpl) != 0) {
@@ -287,7 +282,6 @@ static int print_make_row(Effect *self, EngineCtx *ctx, const CharId *chars, siz
             engine_activate_scene(ctx, self, id, typed_animation);
             row_push_untyped(out, id);
         }
-        free(input_symbol);
     }
     return rc;
 }

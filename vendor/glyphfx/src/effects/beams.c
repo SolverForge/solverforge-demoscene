@@ -10,6 +10,7 @@
 #include "engine/ctx.h"
 #include "engine/terminal.h"
 #include "utils/graphics.h"
+#include "utils/strtab.h"
 
 typedef enum {
     DIR_ROW,
@@ -90,9 +91,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 void beams_config_defaults(void *cfg_ptr) {
@@ -127,13 +126,7 @@ void beams_config_defaults(void *cfg_ptr) {
 
 void beams_free_config(void *cfg_ptr) {
     BeamsConfig *cfg = cfg_ptr;
-    for (size_t i = 0; i < cfg->beam_row_symbols.len; i++) {
-        free(cfg->beam_row_symbols.items[i]);
-    }
     free(cfg->beam_row_symbols.items);
-    for (size_t i = 0; i < cfg->beam_column_symbols.len; i++) {
-        free(cfg->beam_column_symbols.items[i]);
-    }
     free(cfg->beam_column_symbols.items);
     free(cfg->beam_gradient_stops.items);
     free(cfg->beam_gradient_steps.items);
@@ -226,10 +219,8 @@ static bool beams_get_next_character(EngineCtx *ctx, Effect *self, BeamGroup *gr
     const char *active_scene = ctx->terminal.arena.items[next].animation.active_scene;
     bool return_value;
     if (active_scene) {
-        char name[128];
-        strncpy(name, active_scene, sizeof(name) - 1);
-        name[sizeof(name) - 1] = '\0';
-        Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[next].animation.scenes, name);
+        // active_scene is interned: look the scene up by identity.
+        Scene *scene = (Scene *)om_get(&ctx->terminal.arena.items[next].animation.scenes, active_scene);
         if (scene) {
             scene_reset(scene);
         }
@@ -364,8 +355,7 @@ static int beams_build(Effect *self, EngineCtx *ctx) {
         for (size_t ci = 0; ci < group->characters.len && rc == 0; ci++) {
             CharId id = group->characters.items[ci];
             EffectCharacter *ch = &ctx->terminal.arena.items[id];
-            char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-            strcpy(input_symbol, ch->input_symbol);
+            const char *input_symbol = ch->input_symbol;
             bool uses_pre = ch->uses_input_preexisting_colors;
 
             animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "beam_row",
@@ -502,7 +492,6 @@ static int beams_build(Effect *self, EngineCtx *ctx) {
             if (has_bg_bright) {
                 gradient_free(&bg_bright);
             }
-            free(input_symbol);
         }
     }
 

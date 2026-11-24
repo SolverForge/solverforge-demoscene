@@ -9,6 +9,7 @@
 #include "engine/ctx.h"
 #include "engine/terminal.h"
 #include "utils/graphics.h"
+#include "utils/strtab.h"
 
 typedef struct {
     int64_t row;
@@ -69,9 +70,7 @@ static void push_symbol_default(BouncyBallsSymbolList *list, const char *symbol)
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 void bouncyballs_config_defaults(void *cfg_ptr) {
@@ -97,9 +96,6 @@ void bouncyballs_config_defaults(void *cfg_ptr) {
 void bouncyballs_free_config(void *cfg_ptr) {
     BouncyBallsConfig *cfg = cfg_ptr;
     free(cfg->ball_colors.items);
-    for (size_t i = 0; i < cfg->ball_symbols.len; i++) {
-        free(cfg->ball_symbols.items[i]);
-    }
     free(cfg->ball_symbols.items);
     free(cfg->final_gradient_stops.items);
     free(cfg->final_gradient_steps.items);
@@ -163,8 +159,7 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         bool has_input_bg = ch->animation.has_input_bg;
         Color input_bg = ch->animation.input_bg_color;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         const Color *mapped = coordcolormap_get(&mapping, input_coord);
         Color mapped_color;
@@ -190,7 +185,6 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         ball_vp.colors.has_fg = true;
         ball_vp.colors.fg = color;
         if (scene_add_frame(ball_scene, symbol, 1, &ball_vp) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -259,17 +253,15 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
             }
         }
         if (rc != 0) {
-            free(input_symbol);
             break;
         }
 
         int64_t drop_row = (int64_t)((double)canvas_top * rng_uniform(&ctx->rng, 1.0, 1.5));
         ch = &ctx->terminal.arena.items[id];
         motion_set_coordinate(&ch->motion, coord_new(input_coord.column, drop_row));
-        char *path_id = NULL;
+        const char *path_id = NULL;
         if (motion_new_path(&ch->motion, cfg->movement_speed, true, cfg->movement_easing, false, 0, 0, false, "",
                             &path_id) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -278,8 +270,6 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -295,16 +285,12 @@ static int bouncyballs_build(Effect *self, EngineCtx *ctx) {
         EventAction activate_final;
         memset(&activate_final, 0, sizeof(activate_final));
         activate_final.kind = ACTION_ACTIVATE_SCENE;
-        activate_final.id = (char *)final_scene_id;
+        activate_final.id = final_scene_id;
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &activate_final) != 0) {
-            free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
 
-        free(path_id);
-        free(input_symbol);
         st->pending[pending_count++] = id;
     }
 

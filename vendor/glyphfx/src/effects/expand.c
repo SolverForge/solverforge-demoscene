@@ -105,15 +105,13 @@ static int expand_build(Effect *self, EngineCtx *ctx) {
         Color input_bg = ch->animation.input_bg_color;
         Coord input_coord = ch->input_coord;
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
 
         Coord center = ctx->terminal.canvas.center;
         motion_set_coordinate(&ctx->terminal.arena.items[id].motion, center);
-        char *path_id = NULL;
+        const char *path_id = NULL;
         if (motion_new_path(&ctx->terminal.arena.items[id].motion, cfg->movement_speed, true, cfg->expand_easing,
                             false, 0, 0, false, "", &path_id) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -122,8 +120,6 @@ static int expand_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(p, input_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -141,21 +137,16 @@ static int expand_build(Effect *self, EngineCtx *ctx) {
         set_layer.kind = ACTION_SET_LAYER;
         set_layer.layer = 1;
         if (engine_register_event(ctx, id, EVENT_PATH_ACTIVATED, &caller, &set_layer) != 0) {
-            free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
         set_layer.layer = 0;
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &set_layer) != 0) {
-            free(path_id);
-            free(input_symbol);
             rc = -1;
             break;
         }
 
         engine_activate_path(ctx, self, id, path_id);
-        free(path_id);
 
         ch = &ctx->terminal.arena.items[id];
         const char *scene_id = animation_new_scene(&ch->animation, false, true, SYNC_DISTANCE, false, no_ease, "",
@@ -225,7 +216,6 @@ static int expand_build(Effect *self, EngineCtx *ctx) {
         if (rc == 0) {
             engine_activate_scene(ctx, self, id, scene_id);
         }
-        free(input_symbol);
     }
 
     free(characters);

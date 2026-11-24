@@ -84,6 +84,18 @@ typedef struct {
     size_t len;
 } CharIdGrouping;
 
+// Compact per-character render record: the grid walk and the record replay
+// read this instead of dereferencing the arena's record per character, and
+// the hooks that feed the change log maintain it. Rebuilt from the arena when
+// the arena grows or the render geometry changes.
+typedef struct {
+    Coord coord;
+    int64_t layer;
+    uint32_t character_id;
+    VisualHandle vis;
+    bool visible;
+} RenderMirror;
+
 void charidgrouping_free(CharIdGrouping *g);
 
 CharacterFilter character_filter_default(void);
@@ -136,6 +148,8 @@ struct Terminal {
     size_t inner_fill_characters_len;
     CharId *outer_fill_characters;
     size_t outer_fill_characters_len;
+    RenderMirror *render_mirror;  // per arena slot; see RenderMirror
+    size_t render_mirror_len;
     CharId *visible_characters;
     size_t visible_characters_len;
     size_t *visible_positions;
@@ -161,11 +175,19 @@ struct Terminal {
     // (the asm renderer's row buffers). The version grid identifies rendered
     // byte content exactly, so no mutation hooks are needed.
     VisualHandle *cell_visual;  // winning visual per cell (a pool handle; 0 = empty)
+    VisualHandle *previous_cell_visual;  // scratch grid for full-walk row comparison
     // Rows whose bytes must be rebuilt this frame. A cell write that changes
     // the winning handle marks its row, so the renderer finds dirty rows
     // without copying or rescanning the grid (render.asm's dirty cells).
     uint8_t *row_dirty;
     bool all_rows_dirty;
+    // fx's emission state: a dirty byte per cell (rows padded to whole
+    // 64-cell chunks), each row buffer's block start offsets, and the
+    // scratch bitmap of a row's dirty blocks.
+    uint8_t *cell_dirty;
+    size_t dirty_stride;
+    uint32_t *row_offs;       // height*2 arrays of row_blocks+1 offsets
+    uint64_t *block_bits;
     uint8_t *row_sel;         // which of a row's two buffers is current
     size_t row_blocks;
     char **row_bytes;         // each row's current buffer

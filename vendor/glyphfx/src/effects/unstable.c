@@ -211,15 +211,13 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
 
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         bool uses_pre = ch->uses_input_preexisting_colors;
-        char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-        strcpy(input_symbol, ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         Coord input_coord = ch->input_coord;
         motion_set_coordinate(&ch->motion, jumbled_coord);
 
-        char *explosion_path = NULL;
+        const char *explosion_path = NULL;
         if (motion_new_path(&ch->motion, cfg->explosion_speed, true, cfg->explosion_ease, false, 0, 0, false,
                             "explosion", &explosion_path) != 0) {
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -228,18 +226,14 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(ep, coord_new(col, row), NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(explosion_path);
-            free(input_symbol);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
 
-        char *reassembly_path = NULL;
+        const char *reassembly_path = NULL;
         if (motion_new_path(&ch->motion, cfg->reassembly_speed, true, cfg->reassembly_ease, false, 0, 0, false,
                             "reassembly", &reassembly_path) != 0) {
-            free(explosion_path);
-            free(input_symbol);
             rc = -1;
             break;
         }
@@ -247,15 +241,10 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(rp, input_coord, NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(explosion_path);
-            free(reassembly_path);
-            free(input_symbol);
             rc = -1;
             break;
         }
         waypoint_free(&wp);
-        free(explosion_path);
-        free(reassembly_path);
 
         animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false, no_ease, "rumble", uses_pre);
 
@@ -267,7 +256,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
             Gradient bg_gradient;
             bool has_bg_gradient = false;
             if (gradient_with_steps(stops, 2, 12, false, &fg_gradient) != 0) {
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -275,7 +263,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
                 Color bg_stops[2] = {start_pair.bg, cfg->unstable_color};
                 if (gradient_with_steps(bg_stops, 2, 12, false, &bg_gradient) != 0) {
                     gradient_free(&fg_gradient);
-                    free(input_symbol);
                     rc = -1;
                     break;
                 }
@@ -297,7 +284,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
             Color stops[2] = {final_fg, cfg->unstable_color};
             Gradient unstable_gradient;
             if (gradient_with_steps(stops, 2, 12, false, &unstable_gradient) != 0) {
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -309,7 +295,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
             gradient_free(&unstable_gradient);
         }
         if (rc != 0) {
-            free(input_symbol);
             break;
         }
 
@@ -328,7 +313,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
                 Color stops[2] = {cfg->unstable_color, ngray};
                 Gradient fg_gradient;
                 if (gradient_with_steps(stops, 2, 12, false, &fg_gradient) != 0) {
-                    free(input_symbol);
                     rc = -1;
                     break;
                 }
@@ -352,7 +336,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
                 if (has_ffg) {
                     Color stops[2] = {cfg->unstable_color, final_fg};
                     if (gradient_with_steps(stops, 2, 12, false, &fg_gradient) != 0) {
-                        free(input_symbol);
                         rc = -1;
                         break;
                     }
@@ -364,7 +347,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
                         if (has_fg_gradient) {
                             gradient_free(&fg_gradient);
                         }
-                        free(input_symbol);
                         rc = -1;
                         break;
                     }
@@ -400,7 +382,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
             Color stops[2] = {cfg->unstable_color, final_fg};
             Gradient final_color;
             if (gradient_with_steps(stops, 2, 12, false, &final_color) != 0) {
-                free(input_symbol);
                 rc = -1;
                 break;
             }
@@ -412,7 +393,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
             gradient_free(&final_color);
         }
         if (rc != 0) {
-            free(input_symbol);
             break;
         }
 
@@ -424,7 +404,6 @@ static int unstable_build(Effect *self, EngineCtx *ctx) {
                                      &start_pair);
         }
         terminal_set_character_visibility(&ctx->terminal, id, true);
-        free(input_symbol);
     }
 
     free(characters);

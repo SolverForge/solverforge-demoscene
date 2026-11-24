@@ -22,6 +22,7 @@
 #include "utils/graphics.h"
 #include "utils/ordmap.h"
 #include "utils/pycompat.h"
+#include "utils/strtab.h"
 
 /// Callback id: update_group_tracker(group_number).
 #define CB_UPDATE_GROUP_TRACKER 0u
@@ -111,9 +112,7 @@ static void push_symbol_default(StringList *list, const char *symbol) {
         list->items = grown;
         list->cap = cap;
     }
-    char *copy = malloc(strlen(symbol) + 1);
-    strcpy(copy, symbol);
-    list->items[list->len++] = copy;
+    list->items[list->len++] = (char *)strtab_intern(symbol);
 }
 
 static void idvec_push(CharId **items, size_t *len, size_t *cap, CharId id) {
@@ -209,9 +208,6 @@ void synthgrid_free_config(void *cfg_ptr) {
     free(cfg->text_gradient_steps.items);
     free(cfg->grid_row_symbol);
     free(cfg->grid_column_symbol);
-    for (size_t i = 0; i < cfg->text_generation_symbols.len; i++) {
-        free(cfg->text_generation_symbols.items[i]);
-    }
     free(cfg->text_generation_symbols.items);
 }
 
@@ -575,8 +571,7 @@ static int synthgrid_build(Effect *self, EngineCtx *ctx) {
             for (size_t k = 0; k < group->len && rc == 0; k++) {
                 CharId character = group->items[k];
                 EffectCharacter *ch = &ctx->terminal.arena.items[character];
-                char *input_symbol = malloc(strlen(ch->input_symbol) + 1);
-                strcpy(input_symbol, ch->input_symbol);
+                const char *input_symbol = ch->input_symbol;
                 bool uses_pre = ch->uses_input_preexisting_colors;
                 const char *dissolve_scn = animation_new_scene(&ch->animation, false, false, SYNC_DISTANCE, false,
                                                                ease, "", uses_pre);
@@ -617,7 +612,7 @@ static int synthgrid_build(Effect *self, EngineCtx *ctx) {
                     CallerKey caller;
                     memset(&caller, 0, sizeof(caller));
                     caller.kind = CALLER_SCENE;
-                    caller.id = (char *)dissolve_scn;
+                    caller.id = dissolve_scn;
                     EventAction action;
                     memset(&action, 0, sizeof(action));
                     action.kind = ACTION_CALLBACK;
@@ -631,7 +626,6 @@ static int synthgrid_build(Effect *self, EngineCtx *ctx) {
                     }
                     free(action.cb.args);
                 }
-                free(input_symbol);
             }
         }
     }

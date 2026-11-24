@@ -1,6 +1,13 @@
 #include "engine/ctx.h"
 
 #include <stdbool.h>
+#include <math.h>
+#include <limits.h>
+
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+#include <immintrin.h>
+#define GLYPHFX_MOTION_AVX2 1
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +28,7 @@ int engine_ctx_init(EngineCtx *ctx, const char *input_data, const TerminalConfig
     ctx->rng = rng;
     ctx->clock = clock;
     ac_init(&ctx->active_characters);
+    doze_init(&ctx->doze, ctx);
     ctx->preexisting_colors_present = false;
     for (size_t i = 0; i < ctx->terminal.input_characters_len; i++) {
         EffectCharacter *ch = &ctx->terminal.arena.items[ctx->terminal.input_characters[i]];
@@ -32,10 +40,57 @@ int engine_ctx_init(EngineCtx *ctx, const char *input_data, const TerminalConfig
     return 0;
 }
 
+// Flat storage, grown with the arena and owned by this engine context.
+static bool mirror_grow(EngineCtx *ctx) {
+    size_t slots = ctx->terminal.arena.len;
+    if (slots <= ctx->mirrors_cap) {
+        return true;
+    }
+    size_t cap = ctx->mirrors_cap ? ctx->mirrors_cap : 1024;
+    while (cap < slots) {
+        cap *= 2;
+    }
+    MotionMirror *grown = realloc(ctx->mirrors, cap * sizeof(MotionMirror));
+    if (!grown) {
+        return false;
+    }
+    memset(grown + ctx->mirrors_cap, 0, (cap - ctx->mirrors_cap) * sizeof(MotionMirror));
+    ctx->mirrors = grown;
+    size_t old_words = ctx->mirrors_cap / 64;
+    size_t words = cap / 64;
+    MotionWord *input = realloc(ctx->motion_words, words * sizeof(MotionWord));
+    if (!input) return false;
+    memset(input + old_words, 0, (words - old_words) * sizeof(MotionWord));
+    // Inactive lanes may share a SIMD group with active ones. Give their
+    // division denominators neutral values, not zero.
+    for (size_t w = old_words; w < words; w++) {
+        for (unsigned lane = 0; lane < 64; lane++) {
+            input[w].max[lane] = 1.0;
+            input[w].limit[lane] = 1.0;
+        }
+    }
+    ctx->motion_words = input;
+    uint64_t *bits = realloc(ctx->motion_mirrored, words * sizeof(uint64_t));
+    if (!bits) return false;
+    memset(bits + old_words, 0, (words - old_words) * sizeof(uint64_t));
+    ctx->motion_mirrored = bits;
+    ctx->mirrors_cap = cap;
+    return true;
+}
+
 void engine_ctx_free(EngineCtx *ctx) {
+    // Drop the dozes first: nothing may settle them into the freed arena.
+    doze_free(&ctx->doze);
+    free(ctx->mirrors);
+    free(ctx->motion_words);
+    free(ctx->motion_mirrored);
+    while (ctx->motion_eases) {
+        MotionEaseTable *next = ctx->motion_eases->next;
+        free(ctx->motion_eases);
+        ctx->motion_eases = next;
+    }
     terminal_free(&ctx->terminal);
     ac_free(&ctx->active_characters);
-    free(ctx->scratch);
     memset(ctx, 0, sizeof(*ctx));
 }
 
@@ -47,8 +102,8 @@ static CallerKey scene_caller(const Scene *scene) {
     CallerKey key;
     memset(&key, 0, sizeof(key));
     key.kind = CALLER_SCENE;
-    key.id = scene->scene_id;
-    key.id_handle = strtab_handle(scene->scene_id);
+    key.id = scene->cold->scene_id;
+    key.id_handle = strtab_interned_handle(scene->cold->scene_id);
     return key;
 }
 
@@ -56,7 +111,7 @@ static CallerKey path_caller(const char *id) {
     CallerKey key;
     memset(&key, 0, sizeof(key));
     key.kind = CALLER_PATH;
-    key.id = (char *)id;
+    key.id = id;
     key.id_handle = strtab_handle(id);
     return key;
 }
@@ -77,6 +132,9 @@ void engine_caller_from_waypoint(const Waypoint *wp, CallerKey *out) {
 }
 
 // --- events ---------------------------------------------------------------
+
+static void activate_path_at(EngineCtx *ctx, Effect *effect, CharId id, long slot);
+static void activate_scene_at(EngineCtx *ctx, Effect *effect, CharId id, long scene_slot);
 
 int engine_register_event(EngineCtx *ctx, CharId id, Event event, const CallerKey *caller, const EventAction *action) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
@@ -105,7 +163,7 @@ int engine_chain_paths(EngineCtx *ctx, CharId id, const char *const *paths, size
         EventAction action;
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_PATH;
-        action.id = (char *)paths[i];
+        action.id = paths[i];
         CallerKey caller = path_caller(paths[i - 1]);
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
             return -1;
@@ -115,7 +173,7 @@ int engine_chain_paths(EngineCtx *ctx, CharId id, const char *const *paths, size
         EventAction action;
         memset(&action, 0, sizeof(action));
         action.kind = ACTION_ACTIVATE_PATH;
-        action.id = (char *)paths[0];
+        action.id = paths[0];
         CallerKey caller = path_caller(paths[n_paths - 1]);
         if (engine_register_event(ctx, id, EVENT_PATH_COMPLETE, &caller, &action) != 0) {
             return -1;
@@ -133,6 +191,9 @@ void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event,
     if (entry < 0) {
         return;
     }
+    // Only an actual dispatch can change another slot. Its pending batch
+    // result expires, but unrelated persistent mirrors remain reusable.
+    ctx->motion_epoch++;
     for (size_t action_index = 0;; action_index++) {
         EventHandler *handler = &ctx->terminal.arena.items[id].event_handler;
         if ((size_t)entry >= handler->len) {
@@ -144,32 +205,27 @@ void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event,
         }
         const EventAction *action = event_handler_action(handler, (size_t)entry, action_index);
         // A dispatched action can append to the entry and reallocate its action
-        // list, so the action cannot be read across the dispatch. Non-callbacks
-        // only need the id to survive; keep it on the stack instead of a heap
-        // deep copy. Callbacks own argument strings, so those are deep-copied.
-        char id_buf[256];
+        // list, so the action cannot be read across the dispatch. Its id is
+        // interned and outlives that, so a shallow copy serves; callbacks own
+        // argument strings, so those are deep-copied.
         EventAction local;
-        bool deep = false;
-        size_t id_len = action->id ? strlen(action->id) : 0;
-        if (action->kind == ACTION_CALLBACK || id_len >= sizeof(id_buf)) {
+        bool deep = action->kind == ACTION_CALLBACK;
+        if (deep) {
             event_action_copy(&local, action);
-            deep = true;
         } else {
             local = *action;
-            if (action->id) {
-                memcpy(id_buf, action->id, id_len + 1);
-                local.id = id_buf;
-            }
         }
         switch (local.kind) {
             case ACTION_ACTIVATE_SCENE:
-                engine_activate_scene(ctx, effect, id, local.id);
+                activate_scene_at(ctx, effect, id,
+                                  om_slot_interned(&ctx->terminal.arena.items[id].animation.scenes, local.id));
                 break;
             case ACTION_DEACTIVATE_SCENE:
                 engine_deactivate_scene(ctx, id, local.has_id ? local.id : NULL);
                 break;
             case ACTION_ACTIVATE_PATH:
-                engine_activate_path(ctx, effect, id, local.id);
+                activate_path_at(ctx, effect, id,
+                                 om_slot_interned(&ctx->terminal.arena.items[id].motion.paths, local.id));
                 break;
             case ACTION_DEACTIVATE_PATH:
                 motion_deactivate_path(&ctx->terminal.arena.items[id].motion, local.has_id ? local.id : NULL);
@@ -188,6 +244,7 @@ void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event,
                 break;
             case ACTION_CALLBACK:
                 if (effect->ops->dispatch_callback) {
+                    ac_mark_all_candidates(&ctx->active_characters);
                     effect->ops->dispatch_callback(effect, ctx, id, &local.cb);
                 }
                 break;
@@ -201,11 +258,13 @@ void engine_handle_event(EngineCtx *ctx, Effect *effect, CharId id, Event event,
 // --- motion ---------------------------------------------------------------
 
 static void path_replace_segment(Path *p, size_t index, const Segment *seg) {
+    p->geometry_revision++;
     segment_free(&p->segments[index]);
     segment_copy(&p->segments[index], seg);
 }
 
 static void path_insert_segment_front(Path *p, const Segment *seg) {
+    p->geometry_revision++;
     if (p->segments_len == p->segments_cap) {
         size_t cap = p->segments_cap ? p->segments_cap * 2 : 8;
         Segment *grown = realloc(p->segments, cap * sizeof(Segment));
@@ -221,13 +280,29 @@ static void path_insert_segment_front(Path *p, const Segment *seg) {
     segment_copy(&p->segments[0], seg);
 }
 
+static CallerKey path_caller_interned(const char *id) {
+    CallerKey key;
+    memset(&key, 0, sizeof(key));
+    key.kind = CALLER_PATH;
+    key.id = id;
+    key.id_handle = strtab_interned_handle(id);
+    return key;
+}
+
 void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id) {
+    activate_path_at(ctx, effect, id, om_slot(&ctx->terminal.arena.items[id].motion.paths, path_id));
+}
+
+// Activation by map slot: the slot's key is the interned id, so the active
+// path, its caller key and its handle all come without copying or hashing.
+static void activate_path_at(EngineCtx *ctx, Effect *effect, CharId id, long slot) {
+    doze_wake(id);
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    long slot = om_slot(&ch->motion.paths, path_id);
     Path *p = slot < 0 ? NULL : (Path *)om_value_at(&ch->motion.paths, (size_t)slot);
     if (!p || p->waypoints_len == 0) {
         return;
     }
+    const char *path_id = om_key_at(&ch->motion.paths, (size_t)slot);
     Coord current = ch->motion.current_coord;
     const Waypoint *first = &p->waypoints[0];
     double distance_to_first = first->has_bezier
@@ -242,9 +317,7 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
     waypoint_copy(&new_origin.end, first);
     new_origin.distance = distance_to_first;
 
-    free(ch->motion.active_path);
-    ch->motion.active_path = malloc(strlen(path_id) + 1);
-    strcpy(ch->motion.active_path, path_id);
+    ch->motion.active_path = path_id;
     ch->motion.active_path_slot = (size_t)slot;
     ch->motion.active_path_slot_valid = true;
 
@@ -263,6 +336,13 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
     segment_copy(&p->origin_segment, &new_origin);
     p->has_origin_segment = true;
     p->current_step = 0;
+    if ((size_t)id < ctx->mirrors_cap) {
+        MotionMirror *mm = &ctx->mirrors[id];
+        ctx->motion_mirrored[(size_t)id >> 6] &= ~(UINT64_C(1) << ((unsigned)id & 63u));
+        mm->valid = false;
+        mm->path = p;
+        mm->step = 0;
+    }
     p->hold_time_remaining = p->hold_time;
     p->max_steps = py_round_half_even(p->total_distance / p->speed);
     for (size_t i = 0; i < p->segments_len; i++) {
@@ -275,9 +355,471 @@ void engine_activate_path(EngineCtx *ctx, Effect *effect, CharId id, const char 
     }
     segment_free(&new_origin);
     if (observes_event(ctx, id, EVENT_PATH_ACTIVATED)) {
-        CallerKey caller = path_caller(path_id);
+        CallerKey caller = path_caller_interned(path_id);
         engine_handle_event(ctx, effect, id, EVENT_PATH_ACTIVATED, &caller);
     }
+}
+
+static bool motion_ease_equal(const Easing *a, const Easing *b) {
+    if (a->kind != b->kind) return false;
+    return a->kind != EASE_CUBIC_BEZIER ||
+           (a->x1 == b->x1 && a->y1 == b->y1 && a->x2 == b->x2 && a->y2 == b->y2);
+}
+
+// fx Paths::ease_table: paths sharing an easing/step count share factors.
+// Tables are optional and bounded; huge or numerous shapes keep scalar ease
+// evaluation rather than growing memory without limit.
+static const double *motion_ease_table(EngineCtx *ctx, const Path *p) {
+    if (!p->has_ease || p->max_steps <= 0 || p->max_steps > (1 << 16)) return NULL;
+    for (MotionEaseTable *t = ctx->motion_eases; t; t = t->next) {
+        if (t->steps == p->max_steps && motion_ease_equal(&t->ease, &p->ease))
+            return t->factors;
+    }
+    size_t count = (size_t)p->max_steps + 1;
+    if (ctx->motion_ease_values + count > ((size_t)1 << 20)) return NULL;
+    MotionEaseTable *t = malloc(sizeof(*t) + count * sizeof(double));
+    if (!t) return NULL;
+    t->ease = p->ease;
+    t->steps = p->max_steps;
+    for (size_t i = 0; i < count; i++)
+        t->factors[i] = easing_ease(&p->ease, (double)i / (double)p->max_steps);
+    t->next = ctx->motion_eases;
+    ctx->motion_eases = t;
+    ctx->motion_ease_values += count;
+    return t->factors;
+}
+
+// fx motion.rs::mirror: only combine preceding subtractions when exact.
+// Summing fractional prefixes changes rounding and was the old cursor bug.
+static void mirror_capture(EngineCtx *ctx, CharId id, Path *p, size_t k, bool over) {
+    if ((size_t)id >= ctx->mirrors_cap) return;
+    MotionMirror *m = &ctx->mirrors[id];
+    ctx->motion_mirrored[(size_t)id >> 6] &= ~(UINT64_C(1) << ((unsigned)id & 63u));
+    m->valid = false;
+    if (k >= p->segments_len || p->max_steps <= 0 || p->max_steps > INT64_C(4503599627370496) ||
+        !(fabs(p->total_distance) < 0x1p52) || p->total_distance == 0.0) return;
+    Segment *s = &p->segments[k];
+    if (s->end.has_bezier && s->end.bezier_len > 1) return;
+    size_t passed = k + (over ? 1u : 0u);
+    double off = 0.0;
+    for (size_t j = 0; j < passed; j++) {
+        double d = p->segments[j].distance;
+        if (passed > 1 && trunc(d) != d) return;
+        off += d;
+    }
+    if (!(off < 0x1p52)) return;
+    m->path = p;
+    m->segment = k;
+    m->over = over;
+    m->segments_len = p->segments_len;
+    m->identity = p->identity;
+    m->geometry = p->geometry_revision;
+    m->step = p->current_step;
+    m->max_steps = p->max_steps;
+    m->total = p->total_distance;
+    m->offset = off;
+    m->limit = s->distance;
+    m->start = s->start.coord;
+    m->end = s->end.coord;
+    m->curved = s->end.has_bezier && s->end.bezier_len == 1;
+    m->control = m->curved ? s->end.bezier[0] : m->end;
+    m->has_ease = p->has_ease;
+    m->ease = p->ease;
+    m->factors = motion_ease_table(ctx, p);
+    MotionWord *word = &ctx->motion_words[(size_t)id >> 6];
+    unsigned lane = (unsigned)id & 63u;
+    word->step[lane] = (double)m->step;
+    word->max[lane] = (double)m->max_steps;
+    word->total[lane] = m->total;
+    word->offset[lane] = m->offset;
+    word->limit[lane] = m->limit;
+    word->sx[lane] = (double)m->start.column;
+    word->sy[lane] = (double)m->start.row;
+    word->cx[lane] = (double)m->control.column;
+    word->cy[lane] = (double)m->control.row;
+    word->ex[lane] = (double)m->end.column;
+    word->ey[lane] = (double)m->end.row;
+    m->valid = true;
+    ctx->motion_mirrored[(size_t)id >> 6] |= UINT64_C(1) << lane;
+}
+
+// fx's pure-segment arithmetic, isolated from record mutation. This is also
+// the lane kernel for the word pass: divide, ease, multiply, subtract, divide,
+// interpolate, half-even round. No reassociation or reciprocal substitution.
+static bool mirror_next(const MotionMirror *m, Coord *out, double *distance) {
+    if (!m->valid || m->step >= m->max_steps) return false;
+    double ratio = (double)(m->step + 1) / (double)m->max_steps;
+    double factor = !m->has_ease ? ratio :
+                    m->factors ? m->factors[m->step + 1] : easing_ease(&m->ease, ratio);
+    double d = factor * m->total;
+    double remaining = d - m->offset;
+    if (m->over) {
+        if (!(d > m->offset)) return false;
+        remaining += m->limit;
+    } else if (!(remaining <= m->limit && (m->segment == 0 || d > m->offset))) {
+        return false;
+    }
+    double t = m->limit == 0.0 ? 0.0 : remaining / m->limit;
+    if (!m->has_ease && !(t < 1.0)) t = 1.0;
+    *out = m->curved ? find_coord_on_bezier_curve(m->start, &m->control, 1, m->end, t)
+                     : find_coord_on_line(m->start, m->end, t);
+    *distance = d;
+    return true;
+}
+
+#ifdef GLYPHFX_MOTION_AVX2
+// No "no-fma" here: a build whose -march already has FMA (x86-64-v3, native)
+// would then give this function a smaller ISA than the intrinsics it calls,
+// and GCC refuses to inline every one of them. Bit-exactness does not need
+// it either: with contraction off the multiplies and adds stay separate
+// whether or not the target has FMA.
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((target("avx2"), optimize("fp-contract=off")))
+#else
+__attribute__((target("avx2")))
+#endif
+static void motion_four(EngineCtx *ctx, size_t word, const unsigned lanes[4]) {
+#if defined(__clang__)
+#pragma clang fp contract(off)
+#endif
+    const MotionMirror *a = &ctx->mirrors[(word << 6) | lanes[0]];
+    const MotionMirror *b = &ctx->mirrors[(word << 6) | lanes[1]];
+    const MotionMirror *c = &ctx->mirrors[(word << 6) | lanes[2]];
+    const MotionMirror *d = &ctx->mirrors[(word << 6) | lanes[3]];
+    const MotionWord *input = &ctx->motion_words[word];
+    __m128i indices = _mm_set_epi32((int)lanes[3], (int)lanes[2], (int)lanes[1], (int)lanes[0]);
+    bool adjacent = lanes[1] == lanes[0] + 1 && lanes[2] == lanes[0] + 2 &&
+                    lanes[3] == lanes[0] + 3;
+#define PACK(field) (adjacent ? _mm256_loadu_pd(input->field + lanes[0]) \
+                              : _mm256_i32gather_pd(input->field, indices, 8))
+    const __m256d one = _mm256_set1_pd(1.0);
+    __m256d step = PACK(step);
+    step = _mm256_add_pd(step, one);
+    __m256d factor = (a->has_ease && b->has_ease && c->has_ease && d->has_ease)
+                         ? _mm256_setzero_pd() : _mm256_div_pd(step, PACK(max));
+    __m256d eased = _mm256_set_pd(
+        d->factors ? d->factors[d->step + 1] : 0.0,
+        c->factors ? c->factors[c->step + 1] : 0.0,
+        b->factors ? b->factors[b->step + 1] : 0.0,
+        a->factors ? a->factors[a->step + 1] : 0.0);
+    __m256d ease_mask = _mm256_castsi256_pd(_mm256_set_epi64x(
+        d->has_ease ? -1LL : 0LL, c->has_ease ? -1LL : 0LL,
+        b->has_ease ? -1LL : 0LL, a->has_ease ? -1LL : 0LL));
+    factor = _mm256_blendv_pd(factor, eased, ease_mask);
+    __m256d travel = _mm256_mul_pd(factor, PACK(total));
+    __m256d remaining = _mm256_sub_pd(travel, PACK(offset));
+    __m256d limit = PACK(limit);
+    __m256d over_mask = _mm256_castsi256_pd(_mm256_set_epi64x(
+        d->over ? -1LL : 0LL, c->over ? -1LL : 0LL,
+        b->over ? -1LL : 0LL, a->over ? -1LL : 0LL));
+    remaining = _mm256_blendv_pd(remaining, _mm256_add_pd(remaining, limit), over_mask);
+    __m256d fraction = _mm256_div_pd(remaining, limit);
+    // The scalar path uses t=0 for a zero-length segment, never 0/0.
+    fraction = _mm256_blendv_pd(fraction, _mm256_setzero_pd(),
+                               _mm256_cmp_pd(limit, _mm256_setzero_pd(), _CMP_EQ_OQ));
+    fraction = _mm256_blendv_pd(_mm256_min_pd(fraction, one), fraction, ease_mask);
+    __m256d u = _mm256_sub_pd(one, fraction);
+    __m256d x = _mm256_add_pd(_mm256_mul_pd(u, PACK(sx)),
+                             _mm256_mul_pd(fraction, PACK(ex)));
+    __m256d y = _mm256_add_pd(_mm256_mul_pd(u, PACK(sy)),
+                             _mm256_mul_pd(fraction, PACK(ey)));
+    // Straight-only groups do not pay for the quadratic kernel.
+    if (a->curved || b->curved || c->curved || d->curved) {
+    // Quadratic lanes use the same two de Casteljau stages as geometry.c.
+    __m256d ax = _mm256_add_pd(_mm256_mul_pd(u, PACK(sx)),
+                              _mm256_mul_pd(fraction, PACK(cx)));
+    __m256d ay = _mm256_add_pd(_mm256_mul_pd(u, PACK(sy)),
+                              _mm256_mul_pd(fraction, PACK(cy)));
+    __m256d bx = _mm256_add_pd(_mm256_mul_pd(u, PACK(cx)),
+                              _mm256_mul_pd(fraction, PACK(ex)));
+    __m256d by = _mm256_add_pd(_mm256_mul_pd(u, PACK(cy)),
+                              _mm256_mul_pd(fraction, PACK(ey)));
+    __m256d curve_mask = _mm256_castsi256_pd(_mm256_set_epi64x(
+        d->curved ? -1LL : 0LL, c->curved ? -1LL : 0LL,
+        b->curved ? -1LL : 0LL, a->curved ? -1LL : 0LL));
+    x = _mm256_blendv_pd(x, _mm256_add_pd(_mm256_mul_pd(u, ax),
+                                       _mm256_mul_pd(fraction, bx)), curve_mask);
+    y = _mm256_blendv_pd(y, _mm256_add_pd(_mm256_mul_pd(u, ay),
+                                       _mm256_mul_pd(fraction, by)), curve_mask);
+    }
+    // Round explicitly, independently of the caller's MXCSR rounding mode.
+    x = _mm256_round_pd(x, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+    y = _mm256_round_pd(y, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+    __m256d above_offset = _mm256_cmp_pd(travel, PACK(offset), _CMP_GT_OQ);
+    __m256d lower = _mm256_or_pd(_mm256_castsi256_pd(_mm256_set_epi64x(d->segment == 0 ? -1LL : 0LL,
+                                                      c->segment == 0 ? -1LL : 0LL,
+                                                      b->segment == 0 ? -1LL : 0LL,
+                                                      a->segment == 0 ? -1LL : 0LL)),
+                                 above_offset);
+    __m256d in_segment = _mm256_and_pd(_mm256_cmp_pd(remaining, limit, _CMP_LE_OQ), lower);
+    in_segment = _mm256_blendv_pd(in_segment, above_offset, over_mask);
+    __m256d ok = _mm256_and_pd(_mm256_cmp_pd(step, PACK(max), _CMP_LE_OQ), in_segment);
+    __m256d low = _mm256_set1_pd((double)INT32_MIN);
+    __m256d high = _mm256_set1_pd((double)INT32_MAX);
+    ok = _mm256_and_pd(ok, _mm256_and_pd(_mm256_cmp_pd(x, low, _CMP_GE_OQ),
+                                       _mm256_cmp_pd(x, high, _CMP_LE_OQ)));
+    ok = _mm256_and_pd(ok, _mm256_and_pd(_mm256_cmp_pd(y, low, _CMP_GE_OQ),
+                                       _mm256_cmp_pd(y, high, _CMP_LE_OQ)));
+    unsigned mask = (unsigned)_mm256_movemask_pd(ok);
+    int32_t xs[4], ys[4];
+    double distances[4];
+    _mm_storeu_si128((__m128i *)(void *)xs, _mm256_cvttpd_epi32(x));
+    _mm_storeu_si128((__m128i *)(void *)ys, _mm256_cvttpd_epi32(y));
+    _mm256_storeu_pd(distances, travel);
+    const MotionMirror *mirrors[4] = {a, b, c, d};
+    for (unsigned i = 0; i < 4; i++) {
+        unsigned lane = lanes[i];
+        if (mask & (1u << i)) {
+            ctx->motion_batch.coord[lane] = coord_new(xs[i], ys[i]);
+            ctx->motion_batch.distance[lane] = distances[i];
+            ctx->motion_batch.step[lane] = mirrors[i]->step;
+            ctx->motion_batch.ready |= UINT64_C(1) << lane;
+        } else if (mirror_next(mirrors[i], &ctx->motion_batch.coord[lane],
+                              &ctx->motion_batch.distance[lane])) {
+            // Large coordinates keep the original int64 rounding semantics.
+            ctx->motion_batch.step[lane] = mirrors[i]->step;
+            ctx->motion_batch.ready |= UINT64_C(1) << lane;
+        }
+    }
+#undef PACK
+}
+#endif
+
+// A path lane is idle only if its next coordinate AND animation are unchanged.
+// Synced scenes do not advance counters: evaluate the original sync formula
+// against the speculative step/distance and compare the resulting visual.
+static bool motion_synced_visual(const EffectCharacter *ch, const MotionMirror *m,
+                                 double distance, VisualHandle *visual) {
+    *visual = 0;
+    const Animation *a = &ch->animation;
+    if (!a->active_scene) return true;
+    const Scene *s = a->active_scene_ref;
+    if (!s) return false;  // legacy lookup must run through the normal tick
+    if (s->head >= s->all_frames_len) return true;
+    if (!s->has_sync || s->is_looping) return false;
+    int64_t last = (int64_t)(s->all_frames_len - s->head) - 1;
+    double ratio;
+    if (s->sync == SYNC_STEP) {
+        int64_t step = m->step + 1;
+        int64_t max = m->max_steps;
+        ratio = (double)(step > 1 ? step : 1) / (double)(max > 1 ? max : 1);
+    } else {
+        double total = m->total > 1.0 ? m->total : 1.0;
+        double remaining = m->total - distance;
+        if (remaining < 1.0) remaining = 1.0;
+        double reached = total - remaining;
+        if (reached < 1.0) reached = 1.0;
+        ratio = reached / total;
+    }
+    int64_t index = py_round_half_even((double)last * ratio);
+    if (index > last) index = last;
+    if (index < 0) index = 0;
+    *visual = s->all_frames[s->head + (size_t)index].visual;
+    return true;
+}
+
+static unsigned motion_scene_flags(const Scene *scene) {
+    return (scene->has_sync ? 1u : 0u) | (scene->is_looping ? 2u : 0u) |
+           ((unsigned)scene->sync << 2);
+}
+
+// Between two of a slot's own commits, the mirror's own fields are the truth
+// for its pure steps: every mutation point outside them either bumps the
+// epoch (any dispatched callback), clears this slot's mirror bit (path
+// activation, ring disperse's map swap) or bumps the path's geometry revision
+// (waypoint changes). Validating the segment geometry per preparation instead
+// cost binarypath a quarter of its run for no information. fx trusts its
+// mirror the same way; the fallback walk re-reads the path when anything did
+// move.
+static bool mirror_live(MotionMirror *m) {
+    return m->valid && m->step < m->max_steps && m->path != NULL &&
+           m->path->identity == m->identity &&
+           m->path->geometry_revision == m->geometry;
+}
+
+// Compute a whole snapshot word before its ordered ticks. Results are only
+// committed when that slot's turn arrives. Thus a callback can
+// invalidate later results without exposing any future path state to effects.
+static void motion_prepare_word(EngineCtx *ctx, size_t word, uint64_t slots) {
+    MotionBatch *batch = &ctx->motion_batch;
+    batch->ready = 0;
+    batch->idle = 0;
+    batch->animation = 0;
+    batch->word = word;
+    batch->epoch = ctx->motion_epoch;
+#ifdef GLYPHFX_MOTION_AVX2
+    unsigned lanes[4];
+    unsigned count = 0;
+    bool vector = __builtin_cpu_supports("avx2") != 0;
+#endif
+    while (slots) {
+        unsigned lane = (unsigned)__builtin_ctzll(slots);
+        slots &= slots - 1;
+        size_t id = (word << 6) | lane;
+        if (id >= ctx->mirrors_cap) continue;
+        MotionMirror *m = &ctx->mirrors[id];
+        if (!mirror_live(m)) {
+            m->valid = false;
+            ctx->motion_mirrored[word] &= ~(UINT64_C(1) << lane);
+            continue;
+        }
+#ifdef GLYPHFX_MOTION_AVX2
+        if (vector && (!m->has_ease || m->factors) && m->step < m->max_steps) {
+            lanes[count++] = lane;
+            if (count == 4) {
+                motion_four(ctx, word, lanes);
+                count = 0;
+            }
+            continue;
+        }
+#endif
+        if (mirror_next(m, &batch->coord[lane], &batch->distance[lane])) {
+            batch->step[lane] = m->step;
+            batch->ready |= UINT64_C(1) << lane;
+        }
+    }
+#ifdef GLYPHFX_MOTION_AVX2
+    for (unsigned i = 0; i < count; i++) {
+        unsigned lane = lanes[i];
+        const MotionMirror *m = &ctx->mirrors[(word << 6) | lane];
+        if (mirror_next(m, &batch->coord[lane], &batch->distance[lane])) {
+            batch->step[lane] = m->step;
+            batch->ready |= UINT64_C(1) << lane;
+        }
+    }
+#endif
+    uint64_t ready = batch->ready;
+    while (ready) {
+        unsigned lane = (unsigned)__builtin_ctzll(ready);
+        ready &= ready - 1;
+        size_t id = (word << 6) | lane;
+        const MotionMirror *m = &ctx->mirrors[id];
+        const EffectCharacter *ch = &ctx->terminal.arena.items[id];
+        if (motion_synced_visual(ch, m, batch->distance[lane], &batch->visual[lane])) {
+            const Animation *a = &ch->animation;
+            Scene *scene = a->active_scene ? a->active_scene_ref : NULL;
+            batch->scene[lane] = scene;
+            batch->scene_head[lane] = scene ? scene->head : 0;
+            batch->scene_count[lane] = scene ? scene->all_frames_len : 0;
+            batch->scene_flags[lane] = scene ? motion_scene_flags(scene) : 0;
+            batch->animation |= UINT64_C(1) << lane;
+            // Final steps must still execute the holding/completion tail.
+            if (m->step + 1 < m->max_steps &&
+                coord_eq(batch->coord[lane], ch->motion.current_coord) &&
+                (batch->visual[lane] == 0 ||
+                 batch->visual[lane] == a->current_visual)) {
+                batch->idle |= UINT64_C(1) << lane;
+            }
+        }
+    }
+}
+
+// Pure steps stay inside the mirrored segment. Boundary crossings take the
+// original walk, which owns segment events and refreshes the mirror afterwards.
+static bool mirror_step(EngineCtx *ctx, CharId id, Path *p, Coord *out) {
+    if ((size_t)id >= ctx->mirrors_cap) return false;
+    MotionMirror *m = &ctx->mirrors[id];
+    if (!mirror_live(m) || m->path != p) return false;
+    MotionBatch *batch = &ctx->motion_batch;
+    unsigned lane = (unsigned)id & 63u;
+    uint64_t bit = UINT64_C(1) << lane;
+    double d;
+    if (batch->word == (size_t)id >> 6 && batch->epoch == ctx->motion_epoch &&
+        (batch->ready & bit) && batch->step[lane] == p->current_step) {
+        *out = batch->coord[lane];
+        d = batch->distance[lane];
+        batch->ready &= ~bit;
+    } else if (!mirror_next(m, out, &d)) {
+        return false;
+    }
+    p->current_step++;
+    p->last_distance_reached = d;
+    m->step = p->current_step;
+    ctx->motion_words[(size_t)id >> 6].step[lane] = (double)m->step;
+    return true;
+}
+
+// Apply a prepared lane directly, without motion_move_now -> path_step and
+// their repeated map resolution. Intermediate pure steps cannot hold, loop or
+// complete a path. Final steps and segment boundaries use the original walk.
+// No Path was changed during preparation: callbacks always see canonical order.
+__attribute__((always_inline))
+static inline bool motion_take_batch(EngineCtx *ctx, CharId id, bool *animation_ready,
+                              VisualHandle *visual) {
+    MotionBatch *batch = &ctx->motion_batch;
+    unsigned lane = (unsigned)id & 63u;
+    uint64_t bit = UINT64_C(1) << lane;
+    if (batch->word != ((size_t)id >> 6) || batch->epoch != ctx->motion_epoch ||
+        !(batch->ready & bit)) return false;
+    MotionMirror *m = &ctx->mirrors[id];
+    if (!(ctx->motion_mirrored[batch->word] & bit) || !m->valid ||
+        m->step != batch->step[lane] || m->step >= m->max_steps - 1) return false;
+    // This mirror passed preparation and nothing outside this slot's own
+    // commit could have moved it since: a dispatched callback expires the
+    // whole batch (epoch), a path activation or a retired lane clears the
+    // mirror bit. The prepared pointer is the path; no map traversal again.
+    Path *p = m->path;
+    EffectCharacter *ch = &ctx->terminal.arena.items[id];
+    // Synced animation consumes the same speculative progress as motion; it
+    // need not resolve this path again and repeat the progress computation.
+    // Non-synced and looping scenes retain their original event/counter path.
+    const Animation *a = &ch->animation;
+    Scene *scene = a->active_scene ? a->active_scene_ref : NULL;
+    bool same_scene = (!a->active_scene || scene != NULL) && scene == batch->scene[lane];
+    if ((batch->animation & bit) && same_scene &&
+        (!scene || (scene->head == batch->scene_head[lane] &&
+                    scene->all_frames_len == batch->scene_count[lane] &&
+                    motion_scene_flags(scene) == batch->scene_flags[lane]))) {
+        *animation_ready = true;
+        // An idle lane can retain its current visual without any frame read.
+        *visual = (batch->idle & bit) &&
+                  (batch->visual[lane] == 0 || batch->visual[lane] == a->current_visual)
+                      ? a->current_visual : batch->visual[lane];
+    } else {
+        *animation_ready = motion_synced_visual(ch, m, batch->distance[lane], visual);
+    }
+    Coord next = batch->coord[lane];
+    batch->ready &= ~bit;
+    p->current_step++;
+    p->last_distance_reached = batch->distance[lane];
+    m->step = p->current_step;
+    ctx->motion_words[batch->word].step[lane] = (double)m->step;
+    ch->motion.previous_coord = ch->motion.current_coord;
+    // Preserve the renderer's replay contract, including unchanged coordinates
+    // after another move within this frame.
+    motion_set_coordinate(&ch->motion, next);
+    return true;
+}
+
+// Retire counter-only lanes before the next observable tick, not during word
+// preparation. Callbacks therefore see earlier slots advanced and later slots
+// untouched, without speculative writes or a rollback pass. Failed validations
+// rejoin the scalar word; only intermediate, unchanged-coordinate steps qualify.
+static uint64_t motion_retire_idle(EngineCtx *ctx, uint64_t slots) {
+    MotionBatch *batch = &ctx->motion_batch;
+    MotionWord *input = &ctx->motion_words[batch->word];
+    uint64_t retry = 0;
+    while (slots) {
+        unsigned lane = (unsigned)__builtin_ctzll(slots);
+        uint64_t bit = UINT64_C(1) << lane;
+        slots &= slots - 1;
+        size_t id = (batch->word << 6) | lane;
+        MotionMirror *m = &ctx->mirrors[id];
+        if (!(ctx->motion_mirrored[batch->word] & bit) || !mirror_live(m) ||
+            m->step != batch->step[lane] || m->path->current_step != m->step) {
+            retry = bit | slots;
+            break;
+        }
+        Path *p = m->path;
+        p->current_step++;
+        p->last_distance_reached = batch->distance[lane];
+        m->step = p->current_step;
+        input->step[lane] = (double)m->step;
+        Motion *motion = &ctx->terminal.arena.items[id].motion;
+        motion->previous_coord = motion->current_coord;
+        batch->ready &= ~bit;
+    }
+    return retry;
 }
 
 static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *path_id) {
@@ -296,6 +838,8 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
     if (!p) {
         return m->current_coord;
     }
+    Coord mirrored;
+    if (mirror_step(ctx, id, p, &mirrored)) return mirrored;
     if (p->max_steps == 0 || p->current_step >= p->max_steps || p->total_distance == 0.0) {
         return p->segments[p->segments_len - 1].end.coord;
     }
@@ -369,10 +913,12 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
     if (!p || p->segments_len == 0) {
         return m->current_coord;
     }
-    if (active < 0) {
+    bool over = active < 0;
+    if (over) {
         active = (long)p->segments_len - 1;
         distance_to_travel += p->segments[active].distance;
     }
+    if (!dispatched) mirror_capture(ctx, id, p, (size_t)active, over);
     Segment *seg = &p->segments[active];
     double t;
     if (seg->distance == 0.0) {
@@ -389,7 +935,8 @@ static Coord path_step(EngineCtx *ctx, Effect *effect, CharId id, const char *pa
     return find_coord_on_line(seg->start.coord, seg->end.coord, t);
 }
 
-void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
+__attribute__((always_inline))
+static inline void motion_move_now(EngineCtx *ctx, Effect *effect, CharId id) {
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
     ch->motion.previous_coord = ch->motion.current_coord;
     if (!ch->motion.active_path) {
@@ -419,7 +966,7 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
     if (p->current_step == p->max_steps) {
         if (p->hold_time != 0 && p->hold_time_remaining == p->hold_time) {
             if (observes_event(ctx, id, EVENT_PATH_HOLDING)) {
-                CallerKey caller = path_caller(active);
+                CallerKey caller = path_caller_interned(active);
                 engine_handle_event(ctx, effect, id, EVENT_PATH_HOLDING, &caller);
             }
             p->hold_time_remaining -= 1;
@@ -429,22 +976,17 @@ void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
             p->hold_time_remaining -= 1;
             return;
         }
+        // Path ids are interned and outlive deactivation: no copies.
         if (p->loop_ && p->segments_len > 1) {
-            // Copy the id before deactivating: deactivate frees active_path.
-            char *loop_id = malloc(strlen(active) + 1);
-            strcpy(loop_id, active);
+            long slot = ch->motion.active_path_slot_valid ? (long)ch->motion.active_path_slot
+                                                          : om_slot_interned(&ch->motion.paths, active);
             motion_deactivate_path(&ch->motion, active);
-            engine_activate_path(ctx, effect, id, loop_id);
-            free(loop_id);
+            activate_path_at(ctx, effect, id, slot);
         } else {
-            char *completed = malloc(strlen(active) + 1);
-            strcpy(completed, active);
-            free(ch->motion.completed_path);
-            ch->motion.completed_path = completed;
+            ch->motion.completed_path = active;
             motion_deactivate_path(&ch->motion, active);
-            // `active` points into the freed active_path; use the owned copy.
             if (observes_event(ctx, id, EVENT_PATH_COMPLETE)) {
-                CallerKey caller = path_caller(completed);
+                CallerKey caller = path_caller_interned(active);
                 engine_handle_event(ctx, effect, id, EVENT_PATH_COMPLETE, &caller);
             }
         }
@@ -465,8 +1007,13 @@ static void set_current_visual(EngineCtx *ctx, CharId id, VisualHandle src) {
 }
 
 void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char *scene_id) {
+    activate_scene_at(ctx, effect, id, om_slot(&ctx->terminal.arena.items[id].animation.scenes, scene_id));
+}
+
+// Activation by map slot; the scene carries its interned id.
+static void activate_scene_at(EngineCtx *ctx, Effect *effect, CharId id, long scene_slot) {
+    doze_wake(id);
     EffectCharacter *ch = &ctx->terminal.arena.items[id];
-    long scene_slot = om_slot(&ch->animation.scenes, scene_id);
     Scene *scene = scene_slot < 0 ? NULL : (Scene *)om_value_at(&ch->animation.scenes, (size_t)scene_slot);
     if (!scene) {
         return;
@@ -476,13 +1023,8 @@ void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char
     if (scene_activate(scene, &src, &fidx) != 0) {
         return;
     }
-    free(ch->animation.active_scene);
-    ch->animation.active_scene = malloc(strlen(scene_id) + 1);
-    strcpy(ch->animation.active_scene, scene_id);
-    ch->animation.active_scene_slot = (size_t)scene_slot;
-    ch->animation.active_scene_slot_valid = true;
+    ch->animation.active_scene = scene->cold->scene_id;
     ch->animation.active_scene_ref = scene;
-    ch->animation.active_scene_current_step = 0;
     set_current_visual(ctx, id, src);
     if (observes_event(ctx, id, EVENT_SCENE_ACTIVATED)) {
         CallerKey key = scene_caller(scene);
@@ -491,18 +1033,15 @@ void engine_activate_scene(EngineCtx *ctx, Effect *effect, CharId id, const char
 }
 
 void engine_deactivate_scene(EngineCtx *ctx, CharId id, const char *scene_id) {
+    doze_wake(id);
     Animation *anim = &ctx->terminal.arena.items[id].animation;
     if (!scene_id) {
-        free(anim->active_scene);
         anim->active_scene = NULL;
-        anim->active_scene_slot_valid = false;
         anim->active_scene_ref = NULL;
         return;
     }
-    if (anim->active_scene && strcmp(anim->active_scene, scene_id) == 0) {
-        free(anim->active_scene);
+    if (anim->active_scene && (anim->active_scene == scene_id || strcmp(anim->active_scene, scene_id) == 0)) {
         anim->active_scene = NULL;
-        anim->active_scene_slot_valid = false;
         anim->active_scene_ref = NULL;
     }
 }
@@ -514,9 +1053,7 @@ static void complete_scene_if_finished(EngineCtx *ctx, Effect *effect, CharId id
     Animation *anim = &ctx->terminal.arena.items[id].animation;
     if (!scene->is_looping) {
         scene_reset(scene);
-        free(anim->active_scene);
         anim->active_scene = NULL;
-        anim->active_scene_slot_valid = false;
         anim->active_scene_ref = NULL;
     }
     if (observes_event(ctx, id, EVENT_SCENE_COMPLETE)) {
@@ -578,13 +1115,25 @@ static void step_synced_scene(EngineCtx *ctx, CharId id, Scene *scene, SyncMetri
 }
 
 static void step_eased_scene(EngineCtx *ctx, CharId id, Scene *scene) {
-    int64_t frame_index = eased_frame_index(&scene->ease, scene->easing_total_steps, scene->easing_current_step);
-    if ((size_t)frame_index < scene->frame_index_map_len) {
-        size_t frame = scene->frame_index_map[frame_index];
+    const int32_t *shape = scene_easing_shape_seq(scene);
+    int64_t frame_index;
+    size_t frame = 0;
+    int64_t start = 0;
+    bool resolved;
+    if (shape && scene->easing_current_step < scene->cold->easing_total_steps) {
+        int32_t looked = shape[scene->easing_current_step];
+        frame = looked < 0 ? 0 : (size_t)looked;
+        resolved = looked >= 0 && (size_t)looked < scene->all_frames_len;
+    } else {
+        frame_index = eased_frame_index(&scene->cold->ease, scene->cold->easing_total_steps,
+                                        scene->easing_current_step);
+        resolved = scene_frame_at_tick(scene, frame_index, &frame, &start);
+    }
+    if (resolved) {
         set_current_visual(ctx, id, scene->all_frames[frame].visual);
     }
     scene->easing_current_step += 1;
-    if (scene->easing_current_step == scene->easing_total_steps) {
+    if (scene->easing_current_step == scene->cold->easing_total_steps) {
         if (scene->is_looping) {
             scene->easing_current_step = 0;
         } else {
@@ -593,12 +1142,13 @@ static void step_eased_scene(EngineCtx *ctx, CharId id, Scene *scene) {
     }
 }
 
-void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
+static void step_animation_now(EngineCtx *ctx, Effect *effect, CharId id, bool may_park) {
     Animation *anim = &ctx->terminal.arena.items[id].animation;
     if (!anim->active_scene) {
         return;
     }
-    Scene *scene = animation_active_scene(anim);
+    Scene *scene = anim->active_scene_ref;
+    if (!scene) scene = animation_active_scene(anim);
     if (!scene || scene->head >= scene->all_frames_len) {
         return;
     }
@@ -607,17 +1157,41 @@ void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
     } else if (scene->has_ease) {
         step_eased_scene(ctx, id, scene);
     } else {
-        VisualHandle src = 0;
-        size_t fidx = 0;
-        scene_get_next_visual(scene, &src, &fidx);
-        set_current_visual(ctx, id, src);
+        set_current_visual(ctx, id, scene_advance(scene));
     }
     complete_scene_if_finished(ctx, effect, id, scene);
+    if (may_park) {
+        // Completion callbacks can replace the active scene or create a path.
+        // Reacquire only after dispatch; the ordinary step uses the hot scene.
+        EffectCharacter *ch = &ctx->terminal.arena.items[id];
+        if (!ch->motion.active_path && ch->animation.active_scene) {
+            doze_schedule(&ctx->doze, id, ch->animation.active_scene_ref,
+                          ch->animation.current_visual);
+        }
+    }
+}
+
+__attribute__((always_inline))
+static inline void tick_now(EngineCtx *ctx, Effect *effect, CharId id) {
+    motion_move_now(ctx, effect, id);
+    step_animation_now(ctx, effect, id, false);
+}
+
+// The public tick entry points serve effects that tick characters themselves;
+// a dozing character settles first so it ticks from its true state.
+void engine_motion_move(EngineCtx *ctx, Effect *effect, CharId id) {
+    doze_wake(id);
+    motion_move_now(ctx, effect, id);
+}
+
+void engine_step_animation(EngineCtx *ctx, Effect *effect, CharId id) {
+    doze_wake(id);
+    step_animation_now(ctx, effect, id, false);
 }
 
 void engine_tick(EngineCtx *ctx, Effect *effect, CharId id) {
-    engine_motion_move(ctx, effect, id);
-    engine_step_animation(ctx, effect, id);
+    doze_wake(id);
+    tick_now(ctx, effect, id);
 }
 
 static bool retain_keep(CharId id, void *ctxp) {
@@ -625,26 +1199,144 @@ static bool retain_keep(CharId id, void *ctxp) {
     return character_is_active(&ctx->terminal.arena.items[id]);
 }
 
-void engine_update(EngineCtx *ctx, Effect *effect) {
-    // Tick a snapshot of the active set: ticks can activate characters, which
-    // would invalidate an in-place walk. Reuse one buffer across frames instead
-    // of allocating the copy every frame.
-    size_t n = ac_len(&ctx->active_characters);
-    if (n > ctx->scratch_len) {
-        CharId *grown = realloc(ctx->scratch, (n ? n : 1) * sizeof(CharId));
-        if (!grown) {
-            return;
+void engine_bind(EngineCtx *ctx) {
+    g_doze = ctx ? &ctx->doze : NULL;
+}
+
+__attribute__((always_inline))
+static inline void update_slot(EngineCtx *ctx, Effect *effect, size_t w, unsigned b,
+                                uint64_t mirrored, uint64_t *pending) {
+    Doze *d = &ctx->doze;
+    CharId id = (CharId)((w << 6) | b);
+    d->cursor = id;
+    if (d->bits[w] & (UINT64_C(1) << b)) {
+        doze_settle(d, id);
+    }
+    bool animation_ready = false;
+    VisualHandle visual = 0;
+    if (mirrored && motion_take_batch(ctx, id, &animation_ready, &visual)) {
+        if (animation_ready) {
+            set_current_visual(ctx, id, visual);
+            const EffectCharacter *done = &ctx->terminal.arena.items[id];
+            if (!done->motion.active_path && done->animation.active_scene) {
+                doze_schedule(d, id, done->animation.active_scene_ref, visual);
+            }
+        } else {
+            step_animation_now(ctx, effect, id, true);
         }
-        ctx->scratch = grown;
-        ctx->scratch_len = n;
+    } else {
+        motion_move_now(ctx, effect, id);
+        step_animation_now(ctx, effect, id, true);
     }
-    if (n) {
-        ac_snapshot_into(&ctx->active_characters, ctx->scratch);
+    const EffectCharacter *ch = &ctx->terminal.arena.items[id];
+    if (!ch->motion.active_path) {
+        if (mirrored) {
+            uint64_t bit = UINT64_C(1) << b;
+            if (ctx->motion_mirrored[w] & bit) {
+                ctx->motion_mirrored[w] &= ~bit;
+                ctx->mirrors[id].valid = false;
+            }
+        }
+        const Scene *scene = ch->animation.active_scene_ref;
+        if (!ch->animation.active_scene || !scene || scene->is_looping ||
+            scene->head >= scene->all_frames_len) {
+            ac_mark_candidate(&ctx->active_characters, id);
+        }
     }
-    for (size_t i = 0; i < n; i++) {
-        engine_tick(ctx, effect, ctx->scratch[i]);
+    if (d->snapshot[w]) {
+        *pending |= d->snapshot[w];
+        d->snapshot[w] = 0;
     }
-    ac_retain(&ctx->active_characters, retain_keep, ctx);
+}
+
+// Keep the idle-word specialization out of the scalar word's inlining budget.
+__attribute__((noinline))
+static void update_idle_word(EngineCtx *ctx, Effect *effect, size_t w, uint64_t m,
+                              uint64_t mirrored, uint64_t idle) {
+    m &= ~idle;
+    while (m || idle) {
+        // A dispatch invalidates remaining prepared lanes, including idle ones.
+        if (idle && ctx->motion_batch.epoch != ctx->motion_epoch) {
+            m |= idle;
+            idle = 0;
+        }
+        if (idle) {
+            uint64_t before = m ? idle & ((m & -m) - 1) : idle;
+            idle &= ~before;
+            uint64_t retry = motion_retire_idle(ctx, before);
+            m |= retry;
+            if (retry) continue;
+        }
+        if (!m) break;
+        unsigned b = (unsigned)__builtin_ctzll(m);
+        m &= m - 1;
+        update_slot(ctx, effect, w, b, mirrored, &m);
+    }
+}
+
+void engine_update(EngineCtx *ctx, Effect *effect) {
+    // Tick a snapshot of the active set in ascending order (ticks can change
+    // the live set), leaving out the characters dozing through this update.
+    ActiveCharacters *ac = &ctx->active_characters;
+    Doze *d = &ctx->doze;
+    engine_bind(ctx);
+    if (!mirror_grow(ctx)) {
+        fputs("glyphfx: out of memory (mirrors)\n", stderr);
+        abort();
+    }
+    if (!doze_grow(d, ctx->terminal.arena.len)) {
+        fputs("glyphfx: out of memory (doze)\n", stderr);
+        abort();
+    }
+    uint32_t now = ++d->count;
+    // Only the set's window [lo, hi) can hold members (and so dozers).
+    size_t lo = ac->lo;
+    size_t words = ac->hi;
+    if (words > ac->nwords) {
+        words = ac->nwords;
+    }
+    if (words > d->nwords) {
+        words = d->nwords;
+    }
+    if (lo < words) {
+        memcpy(d->snapshot + lo, ac->bits + lo, (words - lo) * sizeof(uint64_t));
+    }
+    for (size_t w = lo; d->live && w < words; w++) {
+        uint64_t dozing = d->bits[w];
+        if (dozing) {
+            d->snapshot[w] &= ~doze_pending_word(d->until + (w << 6), now, dozing);
+        }
+    }
+    d->snapshot_words = words;
+    d->in_update = true;
+    for (size_t w = lo; w < words; w++) {
+        // Pop from a register copy; snapshot[w] then only collects the
+        // characters woken ahead of the cursor, which rejoin this word.
+        uint64_t m = d->snapshot[w];
+        d->snapshot[w] = 0;
+        uint64_t mirrored = m & ctx->motion_mirrored[w];
+        if (mirrored) {
+            motion_prepare_word(ctx, w, mirrored);
+        } else {
+            ctx->motion_batch.ready = 0;
+        }
+        uint64_t idle = mirrored ? ctx->motion_batch.idle : 0;
+        if (idle) {
+            update_idle_word(ctx, effect, w, m, mirrored, idle);
+            continue;
+        }
+        while (m) {
+            unsigned b = (unsigned)__builtin_ctzll(m);
+            m &= m - 1;
+            update_slot(ctx, effect, w, b, mirrored, &m);
+        }
+    }
+    ctx->motion_batch.ready = 0;
+    d->in_update = false;
+    d->cursor = CHAR_ID_NONE;
+    d->snapshot_words = 0;
+    // Dozers stay: a doze only covers ticks that leave the character active.
+    ac_retain_candidates(ac, d->bits, d->nwords, retain_keep, ctx);
 }
 
 const char *engine_frame(EngineCtx *ctx) {

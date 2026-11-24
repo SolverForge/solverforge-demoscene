@@ -73,7 +73,6 @@ static inline size_t iq_len(const IndexDeque *q) {
 typedef struct Frame {
     VisualHandle visual;
     int64_t duration;
-    int64_t ticks_elapsed;
 } Frame;
 
 // Eased scenes pick a frame index from (ease, total_steps, step) alone, and
@@ -81,52 +80,63 @@ typedef struct Frame {
 // sequence is memoized per shape instead of recomputing cos/pow and rounding in
 // every character's tick. Identical to evaluating easing_ease directly.
 int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step);
+// The whole memoized sequence for one shape: eased_frame_index for every step
+// in [0, total_steps), or NULL on allocation failure.
+const int32_t *eased_frame_seq(const Easing *ease, int64_t total_steps);
 
 typedef struct {
-    char *scene_id;  // owned
-    bool is_looping;
+    char *scene_id;  // interned (strtab), process lifetime
+    Easing ease;
+    int64_t easing_total_steps;
+    ColorPair preexisting_colors;
+    // Resolved frame index per eased step (see shape_frames_by_step): memoized
+    // by shape and shared across identical scenes. Valid only when
+    // easing_shape_for_len matches the frame count (appends rebuild it).
+    const int32_t *easing_shape_seq;
+    const uint32_t *easing_span_ends;  // exclusive end of each equal-frame step run
+    size_t easing_shape_for_len;
+    // The easing the sequence was resolved for: thunderstorm rewrites a
+    // scene's easing without touching its frames, so the frame count alone
+    // cannot say whether the resolved steps still answer this scene.
+    Easing easing_shape_for_ease;
+    int32_t owner;  // arena slot of the character that owns the scene, or -1
     bool no_color;
     bool use_xterm_colors;
-    bool has_sync;
-    SyncMetric sync;
-    bool has_ease;
-    Easing ease;
-    Frame *all_frames;
-    size_t all_frames_len;
-    size_t all_frames_cap;
-    // The remaining queue is just a head index into all_frames: frames retire
-    // in order, reset restores the original order, and the synced/eased steps
-    // index the remaining queue without reordering it. Reaching all_frames_len
-    // is "no remaining frames"; a looping scene wraps the head to 0.
-    size_t head;
-    size_t *frame_index_map;  // tick index -> frame index
-    size_t frame_index_map_len;
-    size_t frame_index_map_cap;
-    int64_t easing_total_steps;
-    int64_t easing_current_step;
     bool has_preexisting_colors;
-    ColorPair preexisting_colors;
     bool preexisting_bold;
+} SceneCold;
+
+// Only playback state lives in the hot pool. Cold records occupy a separate
+// contiguous region, so plain/synced ticks do not stream names, easing or colors.
+typedef struct Scene {
+    const Frame *all_frames;  // shared immutable prefix in the engine's frame pool
+    size_t all_frames_len;
+    // Frames retire in order; reset and looping restore the queue's head.
+    size_t head;
+    int64_t ticks_elapsed;  // only the head frame is playing
+    int64_t easing_current_step;
+    SceneCold *cold;
+    SyncMetric sync;
+    bool is_looping;
+    bool has_sync;
+    bool has_ease;
 } Scene;
 
 struct Easing;
 
 typedef struct {
     OrdMap scenes;  // char* -> Scene*
-    char *active_scene;  // owned copy of the active scene id, or NULL
-    size_t active_scene_slot;  // cached OrdMap slot for the active scene
-    bool active_scene_slot_valid;
+    const char *active_scene;  // process-lifetime interned name, or NULL
     Scene *active_scene_ref;  // borrowed; the scene active_scene names, or NULL
     bool use_xterm_colors;
     bool no_color;
     ExistingColorHandling existing_color_handling;
-    char *input_symbol;  // owned
+    SymbolId input_symbol;
     bool has_input_fg;
     Color input_fg_color;
     bool has_input_bg;
     Color input_bg_color;
     bool input_bold;
-    int64_t active_scene_current_step;
     VisualHandle current_visual;
     int32_t render_id;  // arena index, for the renderer's change log
 } Animation;
@@ -135,6 +145,9 @@ void animation_init(Animation *anim, const char *input_symbol);
 void animation_free(Animation *anim);
 void animation_set_appearance(Animation *anim, bool uses_input_preexisting_colors, const char *symbol,
                               const ColorPair *colors);
+// Handle-native restyle: no string hashing or comparison on the hot path.
+void animation_set_appearance_symbol(Animation *anim, bool uses_input_preexisting_colors, SymbolId symbol,
+                                     const ColorPair *colors);
 // Returns a stable pointer to the interned scene id (NULL on failure).
 const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
                                 Easing ease, const char *scene_id, bool uses_input_preexisting_colors);
@@ -145,12 +158,29 @@ void animation_clear_scenes(Animation *anim);
 
 // Scene operations.
 void scene_free(Scene *scene);
+// Releases the engine-wide frame pool. Called between runs, like visual_free.
+void frame_pool_free(void);
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params);
-// Appends every frame of src to dst, sharing the pooled visuals and copying
-// durations; playback counters start fresh and easing bookkeeping matches
-// scene_add_frame. For templates whose frames are byte-identical to what dst
-// would build for itself.
+// Handle-native: effects intern their glyphs once at build time.
+int scene_add_frame_symbol(Scene *scene, SymbolId symbol, int64_t duration, const VisualParams *params);
+// Appends every frame of src to dst. An empty destination shares src's immutable
+// pooled frame list; otherwise frames are bulk-copied into the destination tail.
+// Playback counters remain per scene and easing bookkeeping matches scene_add_frame.
+// Subsequent appends to either scene do not modify their existing frame prefixes.
 int scene_append_frames(Scene *dst, const Scene *src);
+
+typedef struct {
+    const Frame *frames;
+    size_t len;
+    int64_t total_steps;
+} FrameRun;
+
+// Immutable frame descriptions, independent of their source scene's playback.
+FrameRun scene_frame_run(const Scene *scene);
+// A zero-copy subrange, with its own checked duration total.
+int frame_run_slice(FrameRun run, size_t first, size_t count, FrameRun *out);
+// Replace the description and reset playback; the pooled frames remain shared.
+int scene_set_frame_run(Scene *scene, FrameRun run);
 
 // Memo of template scenes keyed by (symbol, color): effects whose frame
 // content depends only on that pair build one scene and share it across
@@ -159,14 +189,39 @@ typedef struct FrameMemo FrameMemo;
 FrameMemo *framemo_new(void);
 // The template scene recorded for (symbol, fg), or NULL.
 Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg);
+// The immutable description captured at insertion, unaffected by later playback
+// or replacement of the source scene. Copy before inserting another memo entry.
+const FrameRun *framemo_get_run(FrameMemo *m, const char *symbol, Color fg);
 int framemo_put(FrameMemo *m, const char *symbol, Color fg, Scene *scene);
 void framemo_free(FrameMemo *m);
 // Returns 0 on success; sets the active frame's visual (borrowed) and its
 // all_frames index.
 int scene_activate(const Scene *scene, VisualHandle *out, size_t *frame_index);
+static inline VisualHandle scene_advance(Scene *scene) {
+    size_t head = scene->head;
+    if (head >= scene->all_frames_len) return 0;
+    const Frame *frame = &scene->all_frames[head];
+    VisualHandle visual = frame->visual;
+    if (++scene->ticks_elapsed == frame->duration) {
+        scene->ticks_elapsed = 0;
+        scene->head = head + 1;
+        if (scene->is_looping && scene->head >= scene->all_frames_len) scene->head = 0;
+    }
+    return visual;
+}
+
 void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index);
+// Resolve a tick through immutable frame durations, independent of playback
+// state: the caller owns the cursor, look-ahead included.
+bool scene_frame_at_tick(const Scene *scene, int64_t tick, size_t *frame, int64_t *start);
+// Attach the scene's resolved eased sequence (one shared memo per shape).
+// Returns NULL when the shape cannot be memoized; callers keep the walk.
+const int32_t *scene_easing_shape_seq(Scene *scene);
 int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, size_t n_symbols, int64_t duration,
                                     const Gradient *fg, const Gradient *bg);
 void scene_reset(Scene *scene);
+// Ends the owning character's doze (engine/doze.h). Call before writing a
+// Scene's fields directly; the scene_* functions above already do.
+void scene_wake(const Scene *scene);
 
 #endif

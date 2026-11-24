@@ -167,7 +167,7 @@ static int ov_build_launcher_paths(OrbittingVolley *st, EngineCtx *ctx, CharId i
     }
     Easing no_ease;
     memset(&no_ease, 0, sizeof(no_ease));
-    char *perimeter_id = NULL;
+    const char *perimeter_id = NULL;
     if (motion_new_path(&ctx->terminal.arena.items[id].motion, st->config.launcher_movement_speed, false, no_ease,
                         true, 2, 0, false, "perimeter", &perimeter_id) != 0) {
         return -1;
@@ -179,12 +179,10 @@ static int ov_build_launcher_paths(OrbittingVolley *st, EngineCtx *ctx, CharId i
         memset(&wp, 0, sizeof(wp));
         if (path_new_waypoint(path, waypoints[index], NULL, 0, "", &wp) != 0) {
             waypoint_free(&wp);
-            free(perimeter_id);
             return -1;
         }
         waypoint_free(&wp);
     }
-    free(perimeter_id);
     return 0;
 }
 
@@ -235,14 +233,13 @@ static void ov_set_launcher_coordinates(OrbittingVolley *st, EngineCtx *ctx, siz
         color = *mapped;
     }
     EffectCharacter *ch = &ctx->terminal.arena.items[child_char];
-    char *input_symbol = ov_dup(ch->input_symbol);
+    const char *input_symbol = ch->input_symbol;
     bool uses_pre = ch->uses_input_preexisting_colors;
     ColorPair colors;
     memset(&colors, 0, sizeof(colors));
     colors.has_fg = true;
     colors.fg = color;
     animation_set_appearance(&ctx->terminal.arena.items[child_char].animation, uses_pre, input_symbol, &colors);
-    free(input_symbol);
 }
 
 static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
@@ -296,7 +293,7 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
         CharId id = characters[i];
         EffectCharacter *ch = &ctx->terminal.arena.items[id];
         Coord input_coord = ch->input_coord;
-        char *input_symbol = ov_dup(ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool uses_pre = ch->uses_input_preexisting_colors;
         bool has_input_fg = ch->animation.has_input_fg;
         Color input_fg = ch->animation.input_fg_color;
@@ -321,7 +318,7 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
             st->final_present[id] = true;
         }
         {
-            char *input_path = NULL;
+            const char *input_path = NULL;
             if (motion_new_path(&ctx->terminal.arena.items[id].motion, cfg->character_movement_speed, true,
                                 cfg->character_easing, true, 1, 0, false, "input_path", &input_path) != 0) {
                 rc = -1;
@@ -334,7 +331,6 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
                     rc = -1;
                 }
                 waypoint_free(&wp);
-                free(input_path);
             }
         }
         if (rc == 0) {
@@ -354,7 +350,6 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
             animation_set_appearance(&ctx->terminal.arena.items[id].animation, uses_pre, input_symbol,
                                      &final_colors);
         }
-        free(input_symbol);
     }
     free(characters);
 
@@ -382,7 +377,7 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
     if (rc == 0) {
         CharId main_character = st->launchers[0].character;
         EffectCharacter *ch = &ctx->terminal.arena.items[main_character];
-        char *input_symbol = ov_dup(ch->input_symbol);
+        const char *input_symbol = ch->input_symbol;
         bool uses_pre = ch->uses_input_preexisting_colors;
         ColorPair colors;
         memset(&colors, 0, sizeof(colors));
@@ -392,7 +387,6 @@ static int orbittingvolley_build(Effect *self, EngineCtx *ctx) {
         }
         animation_set_appearance(&ctx->terminal.arena.items[main_character].animation, uses_pre, input_symbol,
                                  &colors);
-        free(input_symbol);
         if (ov_build_launcher_paths(st, ctx, main_character) != 0) {
             rc = -1;
         } else {

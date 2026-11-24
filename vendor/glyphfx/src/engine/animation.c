@@ -4,22 +4,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__linux__)
+#include <sys/mman.h>
+#endif
+
 #include "utils/hexterm.h"
+#include "engine/doze.h"
 #include "engine/render_log.h"
 #include "utils/strbuf.h"
 #include "utils/strhash.h"
 #include "utils/pycompat.h"
 #include "utils/strtab.h"
-
-static char *dup_cstr(const char *s) {
-    size_t len = strlen(s);
-    char *out = malloc(len + 1);
-    if (!out) {
-        return NULL;
-    }
-    memcpy(out, s, len + 1);
-    return out;
-}
 
 static bool resolve_color_code(bool has_color, const Color *color, bool no_color, bool use_xterm_colors,
                                ColorCode *out) {
@@ -37,124 +32,261 @@ static bool resolve_color_code(bool has_color, const Color *color, bool no_color
 
 // --- Scene ----------------------------------------------------------------
 
-static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
-                        Easing ease, bool no_color, bool use_xterm_colors) {
-    Scene *scene = calloc(1, sizeof(Scene));
-    if (!scene) {
+// Scene records are pooled too, in a region that never moves: a tick dereferences
+// the scene of every character it ticks, so keeping the records adjacent is worth
+// more than freeing each one.
+static Scene *g_scenes;
+static SceneCold *g_scene_cold;
+static size_t g_scenes_len;
+static size_t g_scenes_cap;
+
+#define SCENE_POOL_RESERVE ((size_t)1 << 28)  // 256 MiB of address space
+
+static Scene *scene_pool_alloc(void) {
+    if (!g_scenes) {
+        size_t bytes = SCENE_POOL_RESERVE;
+#if defined(__linux__)
+        void *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (p == MAP_FAILED) {
+            return NULL;
+        }
+        g_scenes = (Scene *)p;
+#else
+        g_scenes = (Scene *)calloc(1, bytes);
+        if (!g_scenes) {
+            return NULL;
+        }
+#endif
+        // Keep both regions in the original reservation budget. Pad the
+        // boundary explicitly rather than relying on the two types' alignment.
+        size_t align = _Alignof(SceneCold);
+        g_scenes_cap = (bytes - align) / (sizeof(Scene) + sizeof(SceneCold));
+        size_t offset = (g_scenes_cap * sizeof(Scene) + align - 1) / align * align;
+        g_scene_cold = (SceneCold *)((unsigned char *)g_scenes + offset);
+    }
+    if (g_scenes_len == g_scenes_cap) {
         return NULL;
     }
-    scene->scene_id = dup_cstr(scene_id);
-    scene->is_looping = is_looping;
-    scene->no_color = no_color;
-    scene->use_xterm_colors = use_xterm_colors;
-    scene->has_sync = has_sync;
-    scene->sync = sync;
-    scene->has_ease = has_ease;
-    scene->ease = ease;
-    scene->head = 0;
+    Scene *scene = &g_scenes[g_scenes_len];
+    scene->cold = &g_scene_cold[g_scenes_len++];
     return scene;
 }
 
-void scene_free(Scene *scene) {
+static Scene *scene_new(const char *scene_id, bool is_looping, bool has_sync, SyncMetric sync, bool has_ease,
+                        Easing ease, bool no_color, bool use_xterm_colors) {
+    Scene *scene = scene_pool_alloc();
     if (!scene) {
-        return;
+        return NULL;
     }
-    for (size_t i = 0; i < scene->all_frames_len; i++) {
+    scene->cold->scene_id = (char *)scene_id;  // interned by the caller
+    scene->is_looping = is_looping;
+    scene->cold->no_color = no_color;
+    scene->cold->use_xterm_colors = use_xterm_colors;
+    scene->has_sync = has_sync;
+    scene->sync = sync;
+    scene->has_ease = has_ease;
+    scene->cold->ease = ease;
+    scene->head = 0;
+    scene->cold->owner = -1;
+    return scene;
+}
+
+void scene_wake(const Scene *scene) {
+    if (scene->cold->owner >= 0) {
+        doze_wake((CharId)scene->cold->owner);
     }
-    free(scene->all_frames);
-    free(scene->scene_id);
-    free(scene->frame_index_map);
-    free(scene);
+}
+
+void scene_free(Scene *scene) {
+    // Frames and the record itself belong to the engine's pools, and the id
+    // is interned: nothing is owned here.
+    (void)scene;
+}
+
+// --- frame pool -----------------------------------------------------------
+// Frames live in one reserved region instead of one malloc'd array per scene:
+// the reservation never moves, so a scene's all_frames pointer stays valid, and
+// the frames of neighbouring characters end up next to each other. A scene that
+// needs to grow is copied to the tail of the region first (as the reference
+// engine does), which keeps every region contiguous.
+static Frame *g_frames;
+static size_t g_frames_len;
+static size_t g_frames_cap;
+
+#define FRAME_POOL_RESERVE ((size_t)1 << 28)  // 256 MiB of address space
+
+static bool frame_pool_init(void) {
+    if (g_frames) {
+        return true;
+    }
+    // A reservation that never moves: mmap on Linux (the Makefile's
+    // _POSIX_C_SOURCE hides MAP_ANONYMOUS elsewhere), one malloc elsewhere. The
+    // pool is never reallocated, so a scene's pointer into it stays valid.
+    size_t bytes = FRAME_POOL_RESERVE;
+#if defined(__linux__)
+    void *p = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED) {
+        return false;
+    }
+    g_frames = (Frame *)p;
+#else
+    g_frames = (Frame *)malloc(bytes);
+    if (!g_frames) {
+        return false;
+    }
+#endif
+    g_frames_cap = bytes / sizeof(Frame);
+    return true;
+}
+
+void frame_pool_free(void) {
+#if defined(__linux__)
+    if (g_frames) {
+        munmap(g_frames, FRAME_POOL_RESERVE);
+    }
+#else
+    free(g_frames);
+#endif
+    g_frames = NULL;
+    g_frames_len = 0;
+    g_frames_cap = 0;
+}
+
+// Room for `add` more frames at the scene's tail, which must be contiguous.
+static bool frame_pool_grow(Scene *scene, size_t add) {
+    if (!frame_pool_init()) {
+        return false;
+    }
+    bool at_tail = scene->all_frames != NULL &&
+                   (size_t)(scene->all_frames - g_frames) + scene->all_frames_len == g_frames_len;
+    if (!at_tail) {
+        size_t start = g_frames_len;
+        if (start + scene->all_frames_len + add > g_frames_cap) {
+            return false;
+        }
+        if (scene->all_frames_len) {
+            memcpy(g_frames + start, scene->all_frames, scene->all_frames_len * sizeof(Frame));
+        }
+        scene->all_frames = g_frames + start;
+        g_frames_len = start + scene->all_frames_len;
+    }
+    if (g_frames_len + add > g_frames_cap) {
+        return false;
+    }
+    g_frames_len += add;
+    return true;
 }
 
 int scene_add_frame(Scene *scene, const char *symbol, int64_t duration, const VisualParams *params_in) {
+    return scene_add_frame_symbol(scene, strtab_handle(symbol), duration, params_in);
+}
+
+int scene_add_frame_symbol(Scene *scene, SymbolId symbol, int64_t duration, const VisualParams *params_in) {
+    scene_wake(scene);
     VisualParams params = *params_in;
-    if (scene->has_preexisting_colors) {
-        params.colors = scene->preexisting_colors;
+    if (scene->cold->has_preexisting_colors) {
+        params.colors = scene->cold->preexisting_colors;
         params.has_colors = true;
     }
-    if (scene->preexisting_bold) {
+    if (scene->cold->preexisting_bold) {
         params.bold = true;
     }
-    if (params.has_colors) {
+    bool cached_appearance = params.has_colors && !params.dim && !params.italic &&
+                             !params.underline && !params.blink && !params.reverse &&
+                             !params.hidden && !params.strike;
+    if (cached_appearance) {
+        // The appearance cache interns this look and resolves its terminal
+        // codes; keep the params key-equivalent and let it build the visual.
+        params.has_fg_code = false;
+        params.has_bg_code = false;
+    } else if (params.has_colors) {
         params.has_fg_code =
-            resolve_color_code(params.colors.has_fg, &params.colors.fg, scene->no_color, scene->use_xterm_colors,
+            resolve_color_code(params.colors.has_fg, &params.colors.fg, scene->cold->no_color, scene->cold->use_xterm_colors,
                                &params.fg_code);
         params.has_bg_code =
-            resolve_color_code(params.colors.has_bg, &params.colors.bg, scene->no_color, scene->use_xterm_colors,
+            resolve_color_code(params.colors.has_bg, &params.colors.bg, scene->cold->no_color, scene->cold->use_xterm_colors,
                                &params.bg_code);
     } else {
         params.has_fg_code = false;
         params.has_bg_code = false;
     }
-    if (duration < 1) {
+    if (duration < 1 || duration > INT64_MAX - scene->cold->easing_total_steps) {
         return -1;
     }
-    if (scene->all_frames_len == scene->all_frames_cap) {
-        size_t cap = scene->all_frames_cap ? scene->all_frames_cap * 2 : 8;
-        Frame *grown = realloc(scene->all_frames, cap * sizeof(Frame));
-        if (!grown) {
-            return -1;
-        }
-        scene->all_frames = grown;
-        scene->all_frames_cap = cap;
+    if (!frame_pool_grow(scene, 1)) {
+        return -1;
     }
     size_t frame_index = scene->all_frames_len++;
-    Frame *frame = &scene->all_frames[frame_index];
+    // frame_pool_grow reserved this new slot; existing shared frames stay const.
+    Frame *frame = (Frame *)&scene->all_frames[frame_index];
     memset(frame, 0, sizeof(*frame));
-    frame->visual = visual_make(symbol, &params);
+    frame->visual = cached_appearance
+        ? visual_make_appearance_symbol(symbol, &params.colors, params.bold, scene->cold->no_color,
+                                        scene->cold->use_xterm_colors)
+        : visual_make_symbol(symbol, &params);
     frame->duration = duration;
-    frame->ticks_elapsed = 0;
-    for (int64_t i = 0; i < duration; i++) {
-        if (scene->frame_index_map_len == scene->frame_index_map_cap) {
-            size_t cap = scene->frame_index_map_cap ? scene->frame_index_map_cap * 2 : 16;
-            size_t *grown = realloc(scene->frame_index_map, cap * sizeof(size_t));
-            if (!grown) {
-                return -1;
-            }
-            scene->frame_index_map = grown;
-            scene->frame_index_map_cap = cap;
-        }
-        scene->frame_index_map[scene->frame_index_map_len++] = frame_index;
-        scene->easing_total_steps += 1;
-    }
+    scene->cold->easing_shape_for_len = 0;  // a later eased lookup re-resolves
+    scene->cold->easing_total_steps += duration;
     return 0;
 }
 
 int scene_append_frames(Scene *dst, const Scene *src) {
-    for (size_t i = 0; i < src->all_frames_len; i++) {
-        const Frame *from = &src->all_frames[i];
-        if (from->duration < 1) {
-            return -1;
-        }
-        if (dst->all_frames_len == dst->all_frames_cap) {
-            size_t cap = dst->all_frames_cap ? dst->all_frames_cap * 2 : 8;
-            Frame *grown = realloc(dst->all_frames, cap * sizeof(Frame));
-            if (!grown) {
-                return -1;
-            }
-            dst->all_frames = grown;
-            dst->all_frames_cap = cap;
-        }
-        size_t frame_index = dst->all_frames_len++;
-        Frame *frame = &dst->all_frames[frame_index];
-        frame->visual = from->visual;
-        frame->duration = from->duration;
-        frame->ticks_elapsed = 0;
-        for (int64_t k = 0; k < frame->duration; k++) {
-            if (dst->frame_index_map_len == dst->frame_index_map_cap) {
-                size_t cap = dst->frame_index_map_cap ? dst->frame_index_map_cap * 2 : 16;
-                size_t *grown = realloc(dst->frame_index_map, cap * sizeof(size_t));
-                if (!grown) {
-                    return -1;
-                }
-                dst->frame_index_map = grown;
-                dst->frame_index_map_cap = cap;
-            }
-            dst->frame_index_map[dst->frame_index_map_len++] = frame_index;
-            dst->easing_total_steps += 1;
-        }
+    scene_wake(dst);
+    // Snapshot lengths before appending, including when a scene appends itself.
+    size_t count = src->all_frames_len;
+    if (!count) return 0;
+    const Frame *frames = src->all_frames;
+    size_t ticks = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (frames[i].duration < 1 || (uint64_t)frames[i].duration > SIZE_MAX - ticks) return -1;
+        ticks += (size_t)frames[i].duration;
     }
+    if (count > SIZE_MAX - dst->all_frames_len ||
+        ticks > (uint64_t)(INT64_MAX - dst->cold->easing_total_steps)) return -1;
+    size_t base = dst->all_frames_len;
+    if (!base) {
+        // A frame description has no playback counter now. Sharing an immutable
+        // prefix is safe even if either scene later appends: extending at the
+        // pool tail cannot change the other's length or existing frame values.
+        dst->all_frames = src->all_frames;
+    } else {
+        if (!frame_pool_grow(dst, count)) return -1;
+        memcpy((Frame *)dst->all_frames + base, frames, count * sizeof(Frame));
+    }
+    dst->all_frames_len = base + count;
+    dst->cold->easing_shape_for_len = 0;  // a later eased lookup re-resolves
+    dst->cold->easing_total_steps += (int64_t)ticks;
+    return 0;
+}
+
+FrameRun scene_frame_run(const Scene *scene) {
+    return (FrameRun){scene->all_frames, scene->all_frames_len, scene->cold->easing_total_steps};
+}
+
+int frame_run_slice(FrameRun run, size_t first, size_t count, FrameRun *out) {
+    if (first > run.len || count > run.len - first || (count && !run.frames)) return -1;
+    int64_t ticks = 0;
+    for (size_t i = 0; i < count; i++) {
+        int64_t duration = run.frames[first + i].duration;
+        if (duration < 1 || duration > INT64_MAX - ticks) return -1;
+        ticks += duration;
+    }
+    *out = (FrameRun){run.frames ? run.frames + first : NULL, count, ticks};
+    return 0;
+}
+
+int scene_set_frame_run(Scene *scene, FrameRun run) {
+    if (run.total_steps < 0 || (run.len && (!run.frames || run.total_steps < 1)) ||
+        (!run.len && run.total_steps)) return -1;
+    scene_wake(scene);
+    scene->all_frames = run.frames;
+    scene->all_frames_len = run.len;
+    scene->head = 0;
+    scene->ticks_elapsed = 0;
+    scene->easing_current_step = 0;
+    scene->cold->easing_total_steps = run.total_steps;
+    scene->cold->easing_shape_seq = NULL;
+    scene->cold->easing_shape_for_len = 0;
     return 0;
 }
 
@@ -247,29 +379,36 @@ int scene_activate(const Scene *scene, VisualHandle *out, size_t *frame_index) {
 }
 
 void scene_get_next_visual(Scene *scene, VisualHandle *out, size_t *frame_index) {
-    size_t head = scene->head;
-    if (head >= scene->all_frames_len) {
-        *out = 0;
-        *frame_index = 0;
-        return;
+    *frame_index = scene->head < scene->all_frames_len ? scene->head : 0;
+    *out = scene_advance(scene);
+}
+
+bool scene_frame_at_tick(const Scene *scene, int64_t tick, size_t *frame, int64_t *start) {
+    if (tick < 0 || tick >= scene->cold->easing_total_steps || !scene->all_frames_len) return false;
+    size_t at = *frame;
+    int64_t first = *start;
+    if (at >= scene->all_frames_len) {
+        at = 0;
+        first = 0;
     }
-    *out = scene->all_frames[head].visual;
-    *frame_index = head;
-    scene->all_frames[head].ticks_elapsed += 1;
-    if (scene->all_frames[head].ticks_elapsed == scene->all_frames[head].duration) {
-        scene->all_frames[head].ticks_elapsed = 0;
-        scene->head = head + 1;
-        if (scene->is_looping && scene->head >= scene->all_frames_len) {
-            scene->head = 0;
-        }
+    // Easing may run backwards or overshoot; retain the walk's exact interval
+    // boundaries rather than assuming that eased indices increase monotonically.
+    while (tick < first && at) {
+        first -= scene->all_frames[--at].duration;
     }
+    while (tick - first >= scene->all_frames[at].duration) {
+        first += scene->all_frames[at].duration;
+        if (++at == scene->all_frames_len) return false;
+    }
+    *frame = at;
+    *start = first;
+    return true;
 }
 
 void scene_reset(Scene *scene) {
+    scene_wake(scene);
     scene->head = 0;
-    for (size_t i = 0; i < scene->all_frames_len; i++) {
-        scene->all_frames[i].ticks_elapsed = 0;
-    }
+    scene->ticks_elapsed = 0;
     scene->easing_current_step = 0;
 }
 
@@ -413,6 +552,10 @@ int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, si
         bool overflow_used2 = false;
         size_t smaller_index2 = 0;
         size_t current_repeat_factor2 = 0;
+        // The symbol index never decreases: resolve each symbol once, not
+        // once per colour step.
+        size_t resolved = SIZE_MAX;
+        SymbolId handle = 0;
         for (size_t i = 0; i < pairs_len; i++) {
             if (current_repeat_factor2 >= repeat_factor2) {
                 if (overflow_count2 > 0) {
@@ -437,7 +580,11 @@ int scene_apply_gradient_to_symbols(Scene *scene, const char *const *symbols, si
             memset(&vp, 0, sizeof(vp));
             vp.has_colors = true;
             vp.colors = pairs[i];
-            if (scene_add_frame(scene, symbols[smaller_index2], duration, &vp) != 0) {
+            if (smaller_index2 != resolved) {
+                handle = strtab_handle(symbols[smaller_index2]);
+                resolved = smaller_index2;
+            }
+            if (scene_add_frame_symbol(scene, handle, duration, &vp) != 0) {
                 rc = -1;
                 break;
             }
@@ -479,63 +626,214 @@ static int32_t eased_compute(const Easing *e, int64_t total, int64_t step) {
     return (int32_t)idx;
 }
 
-int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step) {
-    if (total_steps <= 0 || step < 0) {
-        return 0;
-    }
-    EasedSeq *seq = NULL;
+static EasedSeq *eseq_find(const Easing *ease, int64_t total_steps) {
     for (size_t i = 0; i < g_eseq_len; i++) {
         if (g_eseq[i].total == total_steps && g_eseq[i].ease.kind == ease->kind &&
             g_eseq[i].ease.x1 == ease->x1 && g_eseq[i].ease.y1 == ease->y1 &&
             g_eseq[i].ease.x2 == ease->x2 && g_eseq[i].ease.y2 == ease->y2) {
-            seq = &g_eseq[i];
-            break;
+            return &g_eseq[i];
         }
     }
-    if (!seq) {
-        if (g_eseq_len == g_eseq_cap) {
-            size_t cap = g_eseq_cap ? g_eseq_cap * 2 : 8;
-            EasedSeq *grown = realloc(g_eseq, cap * sizeof(*grown));
-            if (!grown) {
-                return eased_compute(ease, total_steps, step);
-            }
-            g_eseq = grown;
-            g_eseq_cap = cap;
+    if (g_eseq_len == g_eseq_cap) {
+        size_t cap = g_eseq_cap ? g_eseq_cap * 2 : 8;
+        EasedSeq *grown = realloc(g_eseq, cap * sizeof(*grown));
+        if (!grown) {
+            return NULL;
         }
-        seq = &g_eseq[g_eseq_len++];
-        memset(seq, 0, sizeof(*seq));
-        seq->ease = *ease;
-        seq->total = total_steps;
+        g_eseq = grown;
+        g_eseq_cap = cap;
     }
-    size_t want = (size_t)step + 1;
-    if (want > seq->len) {
-        if (want > seq->cap) {
-            size_t cap = seq->cap ? seq->cap : 16;
-            while (cap < want) {
-                cap *= 2;
-            }
-            int32_t *grown = realloc(seq->vals, cap * sizeof(*grown));
-            if (!grown) {
-                return eased_compute(ease, total_steps, step);
-            }
-            seq->vals = grown;
-            seq->cap = cap;
+    EasedSeq *seq = &g_eseq[g_eseq_len++];
+    memset(seq, 0, sizeof(*seq));
+    seq->ease = *ease;
+    seq->total = total_steps;
+    return seq;
+}
+
+// Extends the memo through step want-1; false on allocation failure.
+static bool eseq_fill(EasedSeq *seq, size_t want) {
+    if (want <= seq->len) {
+        return true;
+    }
+    if (want > seq->cap) {
+        size_t cap = seq->cap ? seq->cap : 16;
+        while (cap < want) {
+            cap *= 2;
         }
-        for (size_t i = seq->len; i < want; i++) {
-            seq->vals[i] = eased_compute(ease, total_steps, (int64_t)i);
+        int32_t *grown = realloc(seq->vals, cap * sizeof(*grown));
+        if (!grown) {
+            return false;
         }
-        seq->len = want;
+        seq->vals = grown;
+        seq->cap = cap;
+    }
+    for (size_t i = seq->len; i < want; i++) {
+        seq->vals[i] = eased_compute(&seq->ease, seq->total, (int64_t)i);
+    }
+    seq->len = want;
+    return true;
+}
+
+// A shape resolves its FULL eased sequence once: per step, the frame whose
+// tick interval the eased index falls in. Scenes built from the same frames
+// (ease, total_steps, durations) share one entry, so no per-scene tick->frame
+// structure is needed. fx does the same through its shape table; wave scenes
+// (one easing pattern shared by a canvas of characters) are the point.
+const size_t SHAPE_LIMIT = 64;
+const int64_t SHAPE_MAX_STEPS = 1 << 16;
+
+typedef struct {
+    Easing ease;
+    int64_t total;
+    size_t frames_len;
+    int64_t *durations;  // shape key: the frames' (immutable) durations
+    int32_t *steps;      // shape value: frame index per step, len == total
+    size_t len;          // steps resolved so far
+} EasedShape;
+
+static EasedShape *g_shapes;
+static size_t g_shapes_len;
+static size_t g_shapes_cap;
+
+static bool shape_equal(const EasedShape *s, const Easing *ease, int64_t total,
+                        const Frame *frames, size_t frames_len) {
+    if (s->total != total || s->frames_len != frames_len) return false;
+    if (s->ease.kind != ease->kind || s->ease.x1 != ease->x1 || s->ease.y1 != ease->y1 ||
+        s->ease.x2 != ease->x2 || s->ease.y2 != ease->y2) return false;
+    for (size_t i = 0; i < frames_len; i++) {
+        if (s->durations[i] != frames[i].duration) return false;
+    }
+    return true;
+}
+
+// Frame whose tick interval contains `tick` in a duration list; false when
+// `tick` is outside the list's total.
+static bool shape_walk_tick(const Frame *frames, size_t frames_len, int64_t tick, int32_t *out) {
+    int64_t first = 0;
+    for (size_t i = 0; i < frames_len; i++) {
+        if (tick - first < frames[i].duration) {
+            *out = (int32_t)i;
+            return true;
+        }
+        first += frames[i].duration;
+    }
+    return false;
+}
+
+static bool shape_extend(EasedShape *shape, size_t want, const Frame *frames) {
+    if (want <= shape->len) {
+        return true;
+    }
+    // The eased tick memo doubles as the shape's tick stream.
+    const int32_t *ticks = eased_frame_seq(&shape->ease, shape->total);
+    if (!ticks) {
+        return false;
+    }
+    for (size_t i = shape->len; i < want; i++) {
+        int32_t frame = -1;
+        if (!shape_walk_tick(frames, shape->frames_len, ticks[i], &frame)) return false;
+        shape->steps[i] = frame;
+    }
+    uint32_t *ends = (uint32_t *)(shape->steps + shape->total);
+    for (size_t i = want; i-- > 0;) {
+        ends[i] = i + 1 < want && shape->steps[i] == shape->steps[i + 1]
+                    ? ends[i + 1] : (uint32_t)(i + 1);
+    }
+    shape->len = want;
+    return true;
+}
+
+const int32_t *shape_frames_by_step(const Easing *ease, int64_t total_steps, const Frame *frames,
+                                    size_t frames_len) {
+    if (total_steps <= 0 || total_steps > SHAPE_MAX_STEPS || frames_len == 0) return NULL;
+    for (size_t i = 0; i < g_shapes_len; i++) {
+        if (shape_equal(&g_shapes[i], ease, total_steps, frames, frames_len)) {
+            return shape_extend(&g_shapes[i], (size_t)total_steps, frames) ? g_shapes[i].steps : NULL;
+        }
+    }
+    if (g_shapes_len == SHAPE_LIMIT) return NULL;
+    if (g_shapes_len == g_shapes_cap) {
+        size_t cap = g_shapes_cap ? g_shapes_cap * 2 : 8;
+        EasedShape *grown = realloc(g_shapes, cap * sizeof(*grown));
+        if (!grown) return NULL;
+        g_shapes = grown;
+        g_shapes_cap = cap;
+    }
+    int64_t *durations = malloc(frames_len * sizeof(*durations));
+    if (!durations) return NULL;
+    int32_t *steps = calloc((size_t)total_steps * 2, sizeof(*steps));
+    if (!steps) {
+        free(durations);
+        return NULL;
+    }
+    EasedShape *shape = &g_shapes[g_shapes_len++];
+    *shape = (EasedShape){.ease = *ease, .total = total_steps, .frames_len = frames_len,
+                          .durations = durations, .steps = steps, .len = 0};
+    for (size_t i = 0; i < frames_len; i++) {
+        durations[i] = frames[i].duration;
+    }
+    if (!shape_extend(shape, (size_t)total_steps, frames)) {
+        g_shapes_len--;
+        free(durations);
+        free(steps);
+        return NULL;
+    }
+    return steps;
+}
+
+const int32_t *scene_easing_shape_seq(Scene *scene) {
+    SceneCold *cold = scene->cold;
+    if (cold->easing_shape_for_len == scene->all_frames_len &&
+        cold->easing_shape_for_ease.kind == cold->ease.kind &&
+        cold->easing_shape_for_ease.x1 == cold->ease.x1 &&
+        cold->easing_shape_for_ease.y1 == cold->ease.y1 &&
+        cold->easing_shape_for_ease.x2 == cold->ease.x2 &&
+        cold->easing_shape_for_ease.y2 == cold->ease.y2) {
+        return cold->easing_shape_seq;
+    }
+    cold->easing_shape_seq = NULL;
+    cold->easing_span_ends = NULL;
+    cold->easing_shape_for_len = 0;
+    if (!scene->has_ease || !scene->all_frames_len) return NULL;
+    const Frame *frames = (const Frame *)scene->all_frames;
+    cold->easing_shape_seq =
+        shape_frames_by_step(&cold->ease, cold->easing_total_steps, frames, scene->all_frames_len);
+    if (!cold->easing_shape_seq) return NULL;
+    cold->easing_span_ends = (const uint32_t *)(cold->easing_shape_seq + cold->easing_total_steps);
+    cold->easing_shape_for_len = scene->all_frames_len;
+    cold->easing_shape_for_ease = cold->ease;
+    return cold->easing_shape_seq;
+}
+
+int64_t eased_frame_index(const Easing *ease, int64_t total_steps, int64_t step) {
+    if (total_steps <= 0 || step < 0) {
+        return 0;
+    }
+    EasedSeq *seq = eseq_find(ease, total_steps);
+    if (!seq || !eseq_fill(seq, (size_t)step + 1)) {
+        return eased_compute(ease, total_steps, step);
     }
     return seq->vals[step];
+}
+
+const int32_t *eased_frame_seq(const Easing *ease, int64_t total_steps) {
+    if (total_steps <= 0) {
+        return NULL;
+    }
+    EasedSeq *seq = eseq_find(ease, total_steps);
+    if (!seq || !eseq_fill(seq, (size_t)total_steps)) {
+        return NULL;
+    }
+    return seq->vals;
 }
 
 
 void animation_init(Animation *anim, const char *input_symbol) {
     memset(anim, 0, sizeof(*anim));
     om_init(&anim->scenes);
-    anim->input_symbol = dup_cstr(input_symbol);
+    anim->input_symbol = strtab_handle(input_symbol);
     anim->existing_color_handling = EXISTING_COLOR_IGNORE;
-    anim->current_visual = visual_make(input_symbol, &(VisualParams){0});
+    anim->current_visual = visual_make_symbol(anim->input_symbol, &(VisualParams){0});
 }
 
 void animation_free(Animation *anim) {
@@ -543,14 +841,23 @@ void animation_free(Animation *anim) {
         scene_free((Scene *)om_value_at(&anim->scenes, i));
     }
     om_free(&anim->scenes);
-    free(anim->input_symbol);
-    free(anim->active_scene);
     memset(anim, 0, sizeof(*anim));
 }
 
 void animation_set_appearance(Animation *anim, bool uses_input_preexisting_colors, const char *symbol,
                               const ColorPair *colors) {
-    const char *use_symbol = symbol ? symbol : anim->input_symbol;
+    SymbolId use_symbol = anim->input_symbol;
+    // Characters hold their input symbol interned, so the common restyle of
+    // the input glyph is a pointer compare; any other text resolves its handle.
+    if (symbol && symbol != strtab_name(use_symbol)) {
+        use_symbol = strtab_handle(symbol);
+    }
+    animation_set_appearance_symbol(anim, uses_input_preexisting_colors, use_symbol, colors);
+}
+
+void animation_set_appearance_symbol(Animation *anim, bool uses_input_preexisting_colors, SymbolId use_symbol,
+                                     const ColorPair *colors) {
+    doze_wake((CharId)anim->render_id);
     ColorPair effective;
     if (colors) {
         effective = *colors;
@@ -566,23 +873,8 @@ void animation_set_appearance(Animation *anim, bool uses_input_preexisting_color
         bold = anim->input_bold;
     }
 
-    VisualParams params;
-    memset(&params, 0, sizeof(params));
-    params.bold = bold;
-    params.has_colors = true;
-    params.colors = effective;
-    if (effective.has_fg) {
-        params.has_fg_code =
-            resolve_color_code(true, &effective.fg, anim->no_color, anim->use_xterm_colors, &params.fg_code);
-    }
-    if (effective.has_bg) {
-        params.has_bg_code =
-            resolve_color_code(true, &effective.bg, anim->no_color, anim->use_xterm_colors, &params.bg_code);
-    }
-
-    // The pool keys on the appearance, so a restyle to the same look returns
-    // the same handle and costs nothing; a real change interns a new entry.
-    VisualHandle next = visual_make(use_symbol, &params);
+    VisualHandle next = visual_make_appearance_symbol(use_symbol, &effective, bold,
+                                              anim->no_color, anim->use_xterm_colors);
     if (next == 0 || next == anim->current_visual) {
         return;
     }
@@ -604,21 +896,26 @@ const char *animation_new_scene(Animation *anim, bool is_looping, bool has_sync,
         }
         scene_id = auto_id;
     }
+    scene_id = strtab_intern(scene_id);
+    if (!scene_id) {
+        return NULL;
+    }
     Scene *scene = scene_new(scene_id, is_looping, has_sync, sync, has_ease, ease, anim->no_color,
                              anim->use_xterm_colors);
     if (!scene) {
         return NULL;
     }
+    scene->cold->owner = anim->render_id;
     if (anim->existing_color_handling == EXISTING_COLOR_ALWAYS && uses_input_preexisting_colors) {
-        scene->has_preexisting_colors = true;
-        scene->preexisting_colors.has_fg = anim->has_input_fg;
-        scene->preexisting_colors.fg = anim->input_fg_color;
-        scene->preexisting_colors.has_bg = anim->has_input_bg;
-        scene->preexisting_colors.bg = anim->input_bg_color;
-        scene->preexisting_bold = anim->input_bold;
+        scene->cold->has_preexisting_colors = true;
+        scene->cold->preexisting_colors.has_fg = anim->has_input_fg;
+        scene->cold->preexisting_colors.fg = anim->input_fg_color;
+        scene->cold->preexisting_colors.has_bg = anim->has_input_bg;
+        scene->cold->preexisting_colors.bg = anim->input_bg_color;
+        scene->cold->preexisting_bold = anim->input_bold;
     }
-    om_insert(&anim->scenes, scene_id, scene);
-    return om_key_at(&anim->scenes, (size_t)om_slot(&anim->scenes, scene_id));
+    om_insert_interned(&anim->scenes, scene_id, scene);
+    return scene_id;
 }
 
 bool animation_active_scene_is_complete(const Animation *anim) {
@@ -627,8 +924,7 @@ bool animation_active_scene_is_complete(const Animation *anim) {
     }
     const Scene *scene = anim->active_scene_ref;
     if (!scene) {
-        scene = anim->active_scene_slot_valid ? (const Scene *)om_value_at(&anim->scenes, anim->active_scene_slot)
-                                              : (const Scene *)om_get(&anim->scenes, anim->active_scene);
+        scene = (const Scene *)om_get(&anim->scenes, anim->active_scene);
     }
     if (!scene) {
         return true;
@@ -637,25 +933,23 @@ bool animation_active_scene_is_complete(const Animation *anim) {
 }
 
 Scene *animation_active_scene(Animation *anim) {
+    doze_wake((CharId)anim->render_id);
     if (anim->active_scene_ref) {
         return anim->active_scene_ref;
     }
     if (!anim->active_scene) {
         return NULL;
     }
-    if (anim->active_scene_slot_valid) {
-        return (Scene *)om_value_at(&anim->scenes, anim->active_scene_slot);
-    }
     return (Scene *)om_get(&anim->scenes, anim->active_scene);
 }
 
 void animation_clear_scenes(Animation *anim) {
+    doze_wake((CharId)anim->render_id);
     for (size_t i = 0; i < om_len(&anim->scenes); i++) {
         scene_free((Scene *)om_value_at(&anim->scenes, i));
     }
     om_clear(&anim->scenes);
     anim->active_scene_ref = NULL;
-    anim->active_scene_slot_valid = false;
 }
 
 // --- frame memo -----------------------------------------------------------
@@ -664,6 +958,7 @@ typedef struct {
     char *symbol;  // owned copy for value comparison
     Color fg;
     Scene *scene;  // borrowed: the template scene for this pair
+    FrameRun run;  // immutable description captured before the source can change
 } FrameMemoEntry;
 
 struct FrameMemo {
@@ -690,7 +985,7 @@ FrameMemo *framemo_new(void) {
     return calloc(1, sizeof(FrameMemo));
 }
 
-Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg) {
+static FrameMemoEntry *framemo_find(FrameMemo *m, const char *symbol, Color fg) {
     FrameMemo *tab = m;
     if (!tab || tab->cap == 0) {
         return NULL;
@@ -699,11 +994,21 @@ Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg) {
     size_t i = (size_t)framemo_hash(symbol, fg) & mask;
     while (tab->slots[i].scene) {
         if (framemo_key_eq(&tab->slots[i], symbol, fg)) {
-            return tab->slots[i].scene;
+            return &tab->slots[i];
         }
         i = (i + 1) & mask;
     }
     return NULL;
+}
+
+Scene *framemo_get(FrameMemo *m, const char *symbol, Color fg) {
+    FrameMemoEntry *entry = framemo_find(m, symbol, fg);
+    return entry ? entry->scene : NULL;
+}
+
+const FrameRun *framemo_get_run(FrameMemo *m, const char *symbol, Color fg) {
+    FrameMemoEntry *entry = framemo_find(m, symbol, fg);
+    return entry ? &entry->run : NULL;
 }
 
 static int framemo_rehash(FrameMemo *tab, size_t cap) {
@@ -751,6 +1056,7 @@ int framemo_put(FrameMemo *m, const char *symbol, Color fg, Scene *scene) {
     tab->slots[i].symbol = copy;
     tab->slots[i].fg = fg;
     tab->slots[i].scene = scene;
+    tab->slots[i].run = scene_frame_run(scene);
     tab->used++;
     return 0;
 }

@@ -3,14 +3,27 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "engine/ctx.h"
+#include "engine/doze.h"
+
+// Only the engine's own active set holds dozers; effects also use this type
+// for scratch sets, whose changes must not end a doze.
+static bool doze_owns_set(const ActiveCharacters *ac) {
+    return g_doze && g_doze->live && ac == &g_doze->ctx->active_characters;
+}
+
 void ac_init(ActiveCharacters *ac) {
     ac->bits = NULL;
+    ac->candidates = NULL;
     ac->nwords = 0;
     ac->len = 0;
+    ac->lo = 0;
+    ac->hi = 0;
 }
 
 void ac_free(ActiveCharacters *ac) {
     free(ac->bits);
+    free(ac->candidates);
     ac_init(ac);
 }
 
@@ -23,10 +36,16 @@ bool ac_is_empty(const ActiveCharacters *ac) {
 }
 
 void ac_clear(ActiveCharacters *ac) {
+    if (doze_owns_set(ac)) {
+        doze_wake_all();
+    }
     if (ac->bits) {
         memset(ac->bits, 0, ac->nwords * sizeof(uint64_t));
     }
+    if (ac->candidates) memset(ac->candidates, 0, ac->nwords * sizeof(uint64_t));
     ac->len = 0;
+    ac->lo = 0;
+    ac->hi = 0;
 }
 
 static void ac_ensure(ActiveCharacters *ac, CharId id) {
@@ -44,6 +63,22 @@ static void ac_ensure(ActiveCharacters *ac, CharId id) {
     }
     memset(grown + ac->nwords, 0, (cap - ac->nwords) * sizeof(uint64_t));
     ac->bits = grown;
+    bool had_candidates = ac->candidates != NULL;
+    uint64_t *candidates = realloc(ac->candidates, cap * sizeof(uint64_t));
+    if (candidates) {
+        // Without the old candidate allocation, every old member needs checking.
+        if (had_candidates) {
+            memset(candidates + ac->nwords, 0, (cap - ac->nwords) * sizeof(uint64_t));
+        } else {
+            memcpy(candidates, ac->bits, cap * sizeof(uint64_t));
+        }
+        ac->candidates = candidates;
+    } else {
+        // Candidate tracking is optional. Never retain an undersized bitmap;
+        // pruning falls back to checking all members if this allocation fails.
+        free(ac->candidates);
+        ac->candidates = NULL;
+    }
     ac->nwords = cap;
 }
 
@@ -66,11 +101,26 @@ bool ac_insert(ActiveCharacters *ac, CharId id) {
         return false;
     }
     ac->bits[word] |= mask;
+    if (ac->candidates) ac->candidates[word] |= mask;
     ac->len++;
+    if (ac->hi <= ac->lo) {
+        ac->lo = word;
+        ac->hi = word + 1;
+    } else {
+        if (word < ac->lo) {
+            ac->lo = word;
+        }
+        if (word >= ac->hi) {
+            ac->hi = word + 1;
+        }
+    }
     return true;
 }
 
 bool ac_remove(ActiveCharacters *ac, CharId id) {
+    if (doze_owns_set(ac)) {
+        doze_wake(id);
+    }
     size_t word = (size_t)id >> 6;
     if (word >= ac->nwords) {
         return false;
@@ -80,13 +130,26 @@ bool ac_remove(ActiveCharacters *ac, CharId id) {
         return false;
     }
     ac->bits[word] &= ~mask;
+    if (ac->candidates) ac->candidates[word] &= ~mask;
     ac->len--;
     return true;
 }
 
-void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx) {
-    for (size_t w = 0; w < ac->nwords; w++) {
+// Drop the members `keep` rejects, skipping those set in `skip`, then narrow
+// the window to the words still holding members.
+static void retain_window(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
+                          bool candidates_only, bool (*keep)(CharId id, void *ctx), void *ctx) {
+    size_t lo = ac->lo;
+    size_t hi = ac->hi < ac->nwords ? ac->hi : ac->nwords;
+    for (size_t w = lo; w < hi; w++) {
         uint64_t bits = ac->bits[w];
+        if (candidates_only && ac->candidates) {
+            bits &= ac->candidates[w];
+            ac->candidates[w] = 0;
+        }
+        if (w < skip_words) {
+            bits &= ~skip[w];
+        }
         while (bits) {
             unsigned b = (unsigned)__builtin_ctzll(bits);
             CharId id = (CharId)((w << 6) | b);
@@ -97,11 +160,50 @@ void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *c
             bits &= bits - 1;
         }
     }
+    // keep() may have inserted members anywhere; the window already covers them
+    lo = ac->lo;
+    hi = ac->hi < ac->nwords ? ac->hi : ac->nwords;
+    while (lo < hi && ac->bits[lo] == 0) {
+        lo++;
+    }
+    while (hi > lo && ac->bits[hi - 1] == 0) {
+        hi--;
+    }
+    ac->lo = lo < hi ? lo : 0;
+    ac->hi = lo < hi ? hi : 0;
+}
+
+void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx) {
+    retain_window(ac, NULL, 0, false, keep, ctx);
+}
+
+void ac_retain_except(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
+                      bool (*keep)(CharId id, void *ctx), void *ctx) {
+    retain_window(ac, skip, skip_words, false, keep, ctx);
+}
+
+void ac_mark_candidate(ActiveCharacters *ac, CharId id) {
+    size_t word = (size_t)id >> 6;
+    if (ac->candidates && word < ac->nwords) {
+        ac->candidates[word] |= UINT64_C(1) << ((unsigned)id & 63u);
+    }
+}
+
+void ac_mark_all_candidates(ActiveCharacters *ac) {
+    if (ac->candidates) {
+        memcpy(ac->candidates, ac->bits, ac->nwords * sizeof(uint64_t));
+    }
+}
+
+void ac_retain_candidates(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
+                          bool (*keep)(CharId id, void *ctx), void *ctx) {
+    retain_window(ac, skip, skip_words, true, keep, ctx);
 }
 
 void ac_snapshot_into(const ActiveCharacters *ac, CharId *dst) {
     size_t k = 0;
-    for (size_t w = 0; w < ac->nwords; w++) {
+    size_t hi = ac->hi < ac->nwords ? ac->hi : ac->nwords;
+    for (size_t w = ac->lo; w < hi; w++) {
         uint64_t bits = ac->bits[w];
         while (bits) {
             unsigned b = (unsigned)__builtin_ctzll(bits);

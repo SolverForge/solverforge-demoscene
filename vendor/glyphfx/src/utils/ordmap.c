@@ -4,16 +4,7 @@
 #include <string.h>
 
 #include "utils/strhash.h"
-
-static char *dup_cstr(const char *s) {
-    size_t len = strlen(s);
-    char *out = malloc(len + 1);
-    if (!out) {
-        return NULL;
-    }
-    memcpy(out, s, len + 1);
-    return out;
-}
+#include "utils/strtab.h"
 
 static OrdEntry *om_arr(OrdMap *m) {
     return m->heap ? m->heap : m->inline_entries;
@@ -96,10 +87,6 @@ void om_init(OrdMap *m) {
 }
 
 void om_free(OrdMap *m) {
-    OrdEntry *a = om_arr(m);
-    for (size_t i = 0; i < m->len; i++) {
-        free(a[i].key);
-    }
     free(m->heap);
     om_init(m);
 }
@@ -109,6 +96,12 @@ size_t om_len(const OrdMap *m) {
 }
 
 long om_slot(const OrdMap *m, const char *key) {
+    // An interned key (every map key is one), or a literal naming one, is
+    // found by identity.
+    const char *interned = strtab_resolve(key);
+    if (interned) {
+        return om_slot_interned(m, interned);
+    }
     const OrdEntry *a = om_carr(m);
     uint64_t h = str_hash64(key);
     // len alone gates the index: the inline buffer holds OM_INLINE entries, so
@@ -129,13 +122,55 @@ bool om_contains(const OrdMap *m, const char *key) {
     return om_slot(m, key) >= 0;
 }
 
+long om_slot_interned(const OrdMap *m, const char *key) {
+    const OrdEntry *a = om_carr(m);
+    if (__builtin_expect(m->len >= OM_INDEX_MIN, 0)) {
+        size_t mask = om_idx_cap(m->len) - 1;
+        size_t i = (size_t)om_probe_hash(strtab_interned_hash(key)) & mask;
+        const uint32_t *idx = om_index(m);
+        for (;;) {
+            uint32_t s = idx[i];
+            if (s == 0) {
+                return -1;
+            }
+            if (a[s - 1].key == key) {
+                return (long)(s - 1);
+            }
+            i = (i + 1) & mask;
+        }
+    }
+    for (size_t i = 0; i < m->len; i++) {
+        if (a[i].key == key) {
+            return (long)i;
+        }
+    }
+    return -1;
+}
+
+void *om_get_interned(const OrdMap *m, const char *key) {
+    long slot = om_slot_interned(m, key);
+    return slot < 0 ? NULL : om_carr(m)[slot].value;
+}
+
 void *om_get(const OrdMap *m, const char *key) {
     long slot = om_slot(m, key);
     return slot < 0 ? NULL : om_carr(m)[slot].value;
 }
 
 void om_insert(OrdMap *m, const char *key, void *value) {
-    long slot = om_slot(m, key);
+    // Keys are interned: a character's scenes and paths repeat the same handful
+    // of names, so the map shares one copy per distinct name instead of
+    // malloc'ing one per entry. The table owns the bytes for the process
+    // lifetime, which is why om_free and om_clear never free a key. Interning
+    // first makes the duplicate check a pointer compare.
+    const char *interned = strtab_intern(key);
+    if (interned) {
+        om_insert_interned(m, interned, value);
+    }
+}
+
+void om_insert_interned(OrdMap *m, const char *interned, void *value) {
+    long slot = om_slot_interned(m, interned);
     if (slot >= 0) {
         om_arr(m)[slot].value = value;
         return;
@@ -162,8 +197,8 @@ void om_insert(OrdMap *m, const char *key, void *value) {
         m->cap = cap;
     }
     OrdEntry *a = om_arr(m);
-    a[m->len].key = dup_cstr(key);
-    a[m->len].hash = str_hash64(key);
+    a[m->len].key = (char *)interned;
+    a[m->len].hash = strtab_interned_hash(interned);
     a[m->len].value = value;
     m->len++;
     if (m->len >= OM_INDEX_MIN) {
@@ -192,10 +227,6 @@ void *om_value_at(const OrdMap *m, size_t slot) {
 }
 
 void om_clear(OrdMap *m) {
-    OrdEntry *a = om_arr(m);
-    for (size_t i = 0; i < m->len; i++) {
-        free(a[i].key);
-    }
     // Slot numbers stay valid for re-used slots; the len >= OM_INDEX_MIN gate
     // turns the index off, and it is rebuilt from scratch on the next crossing.
     m->len = 0;

@@ -9,16 +9,6 @@
 #include "utils/pycompat.h"
 #include "utils/strtab.h"
 
-static char *dup_cstr(const char *s) {
-    size_t len = strlen(s);
-    char *out = malloc(len + 1);
-    if (!out) {
-        return NULL;
-    }
-    memcpy(out, s, len + 1);
-    return out;
-}
-
 void waypoint_free(Waypoint *w) {
     // waypoint_id is interned and shared; the table owns it.
     free(w->bezier);
@@ -52,16 +42,22 @@ void segment_copy(Segment *dst, const Segment *src) {
     dst->exit_event_triggered = src->exit_event_triggered;
 }
 
-Path *path_new(const char *path_id, double speed, bool has_ease, Easing ease, bool has_layer, int64_t layer,
-               int64_t hold_time, bool loop_) {
-    if (speed <= 0.0) {
+// Like the engine's other global tables, path construction is serialized by
+// the Rust bridge. Identity outlives a particular malloc address: callbacks can
+// delete a path and allocate a different one at the same address.
+static uint64_t next_path_identity;
+
+static Path *path_new_interned(const char *path_id, double speed, bool has_ease, Easing ease, bool has_layer,
+                               int64_t layer, int64_t hold_time, bool loop_) {
+    if (speed <= 0.0 || !path_id) {
         return NULL;
     }
     Path *p = calloc(1, sizeof(Path));
     if (!p) {
         return NULL;
     }
-    p->path_id = dup_cstr(path_id);
+    p->identity = ++next_path_identity;
+    p->path_id = (char *)path_id;
     p->speed = speed;
     p->has_ease = has_ease;
     p->ease = ease;
@@ -71,6 +67,11 @@ Path *path_new(const char *path_id, double speed, bool has_ease, Easing ease, bo
     p->hold_time_remaining = hold_time;
     p->loop_ = loop_;
     return p;
+}
+
+Path *path_new(const char *path_id, double speed, bool has_ease, Easing ease, bool has_layer, int64_t layer,
+               int64_t hold_time, bool loop_) {
+    return path_new_interned(strtab_intern(path_id), speed, has_ease, ease, has_layer, layer, hold_time, loop_);
 }
 
 void path_free(Path *p) {
@@ -88,7 +89,6 @@ void path_free(Path *p) {
     if (p->has_origin_segment) {
         segment_free(&p->origin_segment);
     }
-    free(p->path_id);
     free(p);
 }
 
@@ -119,6 +119,7 @@ static void path_push_segment(Path *p, Segment seg) {
 }
 
 static void add_waypoint_to_path(Path *p, Waypoint waypoint) {
+    p->geometry_revision++;
     path_push_waypoint(p, waypoint);
     if (p->waypoints_len < 2) {
         return;
@@ -148,22 +149,30 @@ int path_new_waypoint(Path *p, Coord coord, const Coord *bezier, size_t bezier_l
     if (waypoint_id[0] == '\0') {
         size_t current_id = p->waypoints_len;
         char candidate[32];
-        for (;;) {
-            snprintf(candidate, sizeof(candidate), "%zu", current_id);
-            bool exists = false;
-            for (size_t i = 0; i < p->waypoints_len; i++) {
-                if (p->waypoints[i].waypoint_id && strcmp(p->waypoints[i].waypoint_id, candidate) == 0) {
-                    exists = true;
+        // Generated ids only need the existence scan once an explicitly named
+        // waypoint joined the path: before that every existing id is generated
+        // and below the current length, so id = length is always new.
+        if (p->custom_waypoint_ids) {
+            for (;;) {
+                snprintf(candidate, sizeof(candidate), "%zu", current_id);
+                bool exists = false;
+                for (size_t i = 0; i < p->waypoints_len; i++) {
+                    if (p->waypoints[i].waypoint_id && strcmp(p->waypoints[i].waypoint_id, candidate) == 0) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
                     break;
                 }
+                current_id++;
             }
-            if (!exists) {
-                break;
-            }
-            current_id++;
+        } else {
+            snprintf(candidate, sizeof(candidate), "%zu", current_id);
         }
         wp.waypoint_id = strtab_intern(candidate);
     } else {
+        p->custom_waypoint_ids = true;
         for (size_t i = 0; i < p->waypoints_len; i++) {
             if (p->waypoints[i].waypoint_id && strcmp(p->waypoints[i].waypoint_id, waypoint_id) == 0) {
                 return -1;
@@ -210,8 +219,6 @@ void motion_free(Motion *m) {
         path_free((Path *)om_value_at(&m->paths, i));
     }
     om_free(&m->paths);
-    free(m->active_path);
-    free(m->completed_path);
     memset(m, 0, sizeof(*m));
 }
 
@@ -223,7 +230,7 @@ void motion_set_coordinate(Motion *m, Coord coord) {
 }
 
 int motion_new_path(Motion *m, double speed, bool has_ease, Easing ease, bool has_layer, int64_t layer,
-                    int64_t hold_time, bool loop_, const char *path_id, char **out_id) {
+                    int64_t hold_time, bool loop_, const char *path_id, const char **out_id) {
     char auto_id[32];
     if (path_id[0] == '\0') {
         size_t current_id = om_len(&m->paths);
@@ -235,16 +242,18 @@ int motion_new_path(Motion *m, double speed, bool has_ease, Easing ease, bool ha
             current_id++;
         }
         path_id = auto_id;
-    } else if (om_contains(&m->paths, path_id)) {
+    }
+    const char *name = strtab_intern(path_id);
+    if (!name || (path_id != auto_id && om_slot_interned(&m->paths, name) >= 0)) {
         return -1;
     }
-    Path *p = path_new(path_id, speed, has_ease, ease, has_layer, layer, hold_time, loop_);
+    Path *p = path_new_interned(name, speed, has_ease, ease, has_layer, layer, hold_time, loop_);
     if (!p) {
         return -1;
     }
-    om_insert(&m->paths, path_id, p);
+    om_insert_interned(&m->paths, name, p);
     if (out_id) {
-        *out_id = dup_cstr(path_id);
+        *out_id = name;
     }
     return 0;
 }
@@ -254,14 +263,8 @@ bool motion_movement_is_complete(const Motion *m) {
 }
 
 void motion_deactivate_path(Motion *m, const char *path_id) {
-    if (!path_id) {
-        free(m->active_path);
-        m->active_path = NULL;
-        m->active_path_slot_valid = false;
-        return;
-    }
-    if (m->active_path && strcmp(m->active_path, path_id) == 0) {
-        free(m->active_path);
+    // Active and completed ids are interned: nothing to free.
+    if (!path_id || (m->active_path && (m->active_path == path_id || strcmp(m->active_path, path_id) == 0))) {
         m->active_path = NULL;
         m->active_path_slot_valid = false;
     }
@@ -272,7 +275,6 @@ void motion_clear_paths(Motion *m) {
         path_free((Path *)om_value_at(&m->paths, i));
     }
     om_clear(&m->paths);
-    free(m->active_path);
     m->active_path = NULL;
     m->active_path_slot_valid = false;
 }

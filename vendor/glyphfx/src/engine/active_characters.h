@@ -13,8 +13,14 @@
 
 typedef struct {
     uint64_t *bits;
+    uint64_t *candidates;  // members whose active state may have changed
     size_t nwords;
     size_t len;  // number of set bits
+    // Every set bit lies in words [lo, hi) (empty when hi <= lo): inserts
+    // widen the window, a retain pass narrows it, and the passes over the set
+    // visit only those words.
+    size_t lo;
+    size_t hi;
 } ActiveCharacters;
 
 void ac_init(ActiveCharacters *ac);
@@ -27,6 +33,15 @@ bool ac_contains(const ActiveCharacters *ac, CharId id);
 bool ac_insert(ActiveCharacters *ac, CharId id);
 bool ac_remove(ActiveCharacters *ac, CharId id);
 void ac_retain(ActiveCharacters *ac, bool (*keep)(CharId id, void *ctx), void *ctx);
+// ac_retain over the members not set in `skip` (the others are kept as is).
+void ac_retain_except(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
+                      bool (*keep)(CharId id, void *ctx), void *ctx);
+// Record potential inactivity; arbitrary callbacks can affect any member.
+void ac_mark_candidate(ActiveCharacters *ac, CharId id);
+void ac_mark_all_candidates(ActiveCharacters *ac);
+// Retain only marked members, keeping dozers without examining their state.
+void ac_retain_candidates(ActiveCharacters *ac, const uint64_t *skip, size_t skip_words,
+                          bool (*keep)(CharId id, void *ctx), void *ctx);
 // Ascending snapshot; caller frees.
 void ac_snapshot(const ActiveCharacters *ac, CharId **out, size_t *out_len);
 // Ascending snapshot into a caller buffer of at least ac_len() entries.
