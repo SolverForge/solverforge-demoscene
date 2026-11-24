@@ -2,7 +2,7 @@
 // picture. A glyphfx effect that belongs to the moment brings the words in,
 // they hold still to be read, then burn out letter by letter. A soft scrim
 // darkens the picture behind them so they stay legible over anything.
-use crate::cell::{lerp_rgb, pack, rgb_parts, Cell, CellSink, CELL_H, CELL_W};
+use crate::cell::{lerp_rgb, pack, rgb_parts, Cell, CellSink, CELL_H, CELL_W, NO_BG};
 use crate::clip::{Clip, ClipSpec};
 use crate::font::{mask, Mask};
 
@@ -153,6 +153,12 @@ impl Cards {
                     opts: spec.opts,
                 });
                 let cells = clip.final_cells();
+                assert!(
+                    !cells.is_empty(),
+                    "glyphfx effect {} left no text: {}",
+                    spec.effect,
+                    spec.text
+                );
                 let lo = cells.iter().map(|c| c.0).min().unwrap_or(0) as i32;
                 let hi = cells.iter().map(|c| c.0).max().unwrap_or(0) as i32 + 1;
                 let entrance = (window * ENTRANCE).min(ENTRANCE_MAX);
@@ -219,15 +225,34 @@ impl Cards {
     }
 }
 
-/// Rasterises cells into pixels with a faint phosphor halo.
-struct PixelSink<'a, P: Pixels> {
+/// Rasterises cells into pixels with a faint phosphor halo: cell (0, 0) at
+/// the place's top-left pixel, one cell `place.cell_w` x `place.cell_h`.
+/// Demos draw their own glyphfx clips through it.
+pub struct PixelSink<'a, P: Pixels> {
     px: &'a mut P,
     place: Place,
     masks: &'a mut Vec<(char, Mask)>,
 }
 
+impl<'a, P: Pixels> PixelSink<'a, P> {
+    /// `masks` caches the font's glyph masks between frames.
+    pub fn new(px: &'a mut P, place: Place, masks: &'a mut Vec<(char, Mask)>) -> Self {
+        Self { px, place, masks }
+    }
+}
+
 impl<P: Pixels> CellSink for PixelSink<'_, P> {
     fn set(&mut self, col: i32, row: i32, cell: Cell) {
+        if cell.bg != NO_BG {
+            let (cw, ch) = (self.place.cell_w as i32, self.place.cell_h as i32);
+            let (x0, y0) = (self.place.x + col * cw, self.place.y + row * ch);
+            let (w, h) = self.px.size();
+            for y in y0.max(0)..(y0 + ch).min(h as i32) {
+                for x in x0.max(0)..(x0 + cw).min(w as i32) {
+                    self.px.put(x as usize, y as usize, cell.bg);
+                }
+            }
+        }
         if cell.ch == ' ' || cell.rgb == 0 {
             return;
         }

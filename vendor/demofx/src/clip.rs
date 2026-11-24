@@ -2,7 +2,10 @@
 // keep its frames as sparse cell lists. Deterministic: same spec -> same frames.
 use std::ffi::{c_char, c_int, CStr, CString};
 
-use crate::cell::{Cell, CellSink};
+use crate::cell::{Cell, CellSink, NO_BG};
+
+/// glyphfx's default foreground, for text it has not coloured.
+const FG: u32 = 0xC8C8C8;
 
 #[repr(C)]
 struct RawClip {
@@ -135,13 +138,17 @@ fn parse_frame(frame: &str) -> SparseFrame {
     let mut out = Vec::new();
     for (row, line) in frame.split('\n').enumerate() {
         let mut col = 0u16;
-        let mut rgb = 0xC8C8C8u32;
+        let mut rgb = FG;
+        let mut bg = NO_BG;
         let mut chars = line.chars().peekable();
         while let Some(ch) = chars.next() {
             if ch == '\x1b' {
                 let mut seq = String::new();
                 for c in chars.by_ref() {
-                    if c == 'm' {
+                    if c.is_ascii_alphabetic() {
+                        if c != 'm' {
+                            seq.clear();
+                        }
                         break;
                     }
                     seq.push(c);
@@ -149,16 +156,40 @@ fn parse_frame(frame: &str) -> SparseFrame {
                 let params: Vec<u32> = seq
                     .trim_start_matches('[')
                     .split(';')
-                    .filter_map(|p| p.parse().ok())
+                    .map(|p| p.parse().unwrap_or(0))
                     .collect();
-                rgb = match params.as_slice() {
-                    [38, 2, r, g, b, ..] => (r << 16) | (g << 8) | b,
-                    _ => 0xC8C8C8,
-                };
+                // One SGR sequence may set several things: walk it.
+                let mut i = 0;
+                while i < params.len() {
+                    match params[i..] {
+                        [38, 2, r, g, b, ..] => {
+                            rgb = (r << 16) | (g << 8) | b;
+                            i += 5;
+                        }
+                        [48, 2, r, g, b, ..] => {
+                            bg = (r << 16) | (g << 8) | b;
+                            i += 5;
+                        }
+                        [0, ..] => {
+                            rgb = FG;
+                            bg = NO_BG;
+                            i += 1;
+                        }
+                        [39, ..] => {
+                            rgb = FG;
+                            i += 1;
+                        }
+                        [49, ..] => {
+                            bg = NO_BG;
+                            i += 1;
+                        }
+                        _ => i += 1,
+                    }
+                }
                 continue;
             }
-            if ch != ' ' {
-                out.push((col, row as u16, Cell::new(ch, rgb)));
+            if ch != ' ' || bg != NO_BG {
+                out.push((col, row as u16, Cell::with_bg(ch, rgb, bg)));
             }
             col += 1;
         }

@@ -7,6 +7,6 @@ pub mod clip;
 pub mod font;
 pub mod logo;
 
-pub use cards::{card, reading_window, CardSpec, Cards, Pixels, Place, RgbBuffer};
-pub use cell::{Cell, CellSink, CELL_H, CELL_W};
+pub use cards::{card, reading_window, CardSpec, Cards, PixelSink, Pixels, Place, RgbBuffer};
+pub use cell::{Cell, CellSink, CELL_H, CELL_W, NO_BG};
 pub use clip::{Clip, ClipSpec};

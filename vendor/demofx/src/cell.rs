@@ -9,19 +9,39 @@ pub const CELL_H: usize = 18;
 pub struct Cell {
     pub ch: char,
     pub rgb: u32,
+    /// The cell's background colour, or `NO_BG` where the effect paints none
+    /// (glyphfx's originals light whole cells: copper's bars, comet's and
+    /// burnout's glow).
+    pub bg: u32,
 }
 
+/// No background: the picture under the cell shows.
+pub const NO_BG: u32 = u32::MAX;
+
 impl Cell {
-    pub const BLANK: Cell = Cell { ch: ' ', rgb: 0 };
+    pub const BLANK: Cell = Cell {
+        ch: ' ',
+        rgb: 0,
+        bg: NO_BG,
+    };
 
     pub fn new(ch: char, rgb: u32) -> Cell {
-        Cell { ch, rgb }
+        Cell { ch, rgb, bg: NO_BG }
+    }
+
+    pub fn with_bg(ch: char, rgb: u32, bg: u32) -> Cell {
+        Cell { ch, rgb, bg }
     }
 
     pub fn scaled(self, gain: f32) -> Cell {
         Cell {
             ch: self.ch,
             rgb: scale_rgb(self.rgb, gain),
+            bg: if self.bg == NO_BG {
+                NO_BG
+            } else {
+                scale_rgb(self.bg, gain)
+            },
         }
     }
 }
