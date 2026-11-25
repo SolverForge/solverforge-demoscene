@@ -1,0 +1,28 @@
+[package]
+name = "roster-13-demo"
+version = "0.1.0"
+edition = "2021"
+description = "SolverForge demoscene: ROSTER_13 -- who covers Thursday? The SolverForge Workbench plugin replanning a hospital roster live in Hermes"
+
+[[bin]]
+name = "roster-13-demo"
+path = "src/main.rs"
+
+[dependencies]
+# Pixel framebuffer window
+minifb = "0.28"
+
+# Audio output (the track itself is synthesized by hand in src/audio)
+cpal = "0.17"
+
+# The three Cordelia stills of the call, stored as JPEG
+jpeg-decoder = { version = "0.3", default-features = false }
+
+# glyphfx (vendored once for every demo), the 8x8 font, story cards, the logo
+demofx = { path = "../vendor/demofx" }
+
+[profile.release]
+# One unit with link-time optimisation, so the per-pixel helpers from demofx
+# inline into the frame loops: a frame has to fit in 16.6 ms in the window.
+lto = "fat"
+codegen-units = 1

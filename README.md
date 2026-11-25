@@ -39,6 +39,7 @@ Audiovisual demos in the tradition of the Amiga/PC demoscene -- built to showcas
 | [`routing_10/`](routing_10/) | [SolverForge Routing](https://github.com/blackopsrepl/hermes-solverforge-routing) -- a solved loop around a live Desktop take, for the Hermes Plugin Hackathon | 88s | Complete |
 | [`forge_11/`](forge_11/) | SolverForge -- a real agent session replayed: describe, generate, solve on the laptop, repair the running solve; textmode on glyphfx | 3:32 | Complete |
 | [`workbench_12/`](workbench_12/) | [SolverForge Workbench](https://github.com/blackopsrepl/hermes-solverforge-workbench) -- the plugin's models land one per beat, then a narrated Desktop take of the whole plugin | 3:14 | Complete |
+| [`roster_13/`](roster_13/) | [SolverForge Workbench](https://github.com/blackopsrepl/hermes-solverforge-workbench) -- who covers Thursday? A hospital month planned and replanned live in Hermes, with Cordelia taking the call | 2:06 | Complete |
 
 Each demo is a standalone Rust crate. See the README inside each directory for details on scenes, architecture, controls, and rendering.
 

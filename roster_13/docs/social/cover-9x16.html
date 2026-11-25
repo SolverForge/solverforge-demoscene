@@ -1,0 +1,110 @@
+<!doctype html>
+<!-- ROSTER_13 vertical cover (1080x1920). The film's question over Cordelia
+     raising her hand (assets/cordelia-3-hand.jpg, the call's last still),
+     and its answer: the same Thursday shift, Cas South before the replan and
+     Oto North after it (the case the film records). Title, portrait and the
+     shift sit inside the 3:4 grid crop (y 240-1680).
+     Render with the html-to-image-assets recipe at 1080x1920
+     (canvas after an image load: --virtual-time-budget=3000). -->
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#020503}
+canvas{display:block}
+</style></head><body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+const W = 1080, H = 1920;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const MONO = 'ui-monospace, "DejaVu Sans Mono", Menlo, monospace';
+
+function h2(a, b) {
+  let v = Math.imul(a, 73856093) ^ Math.imul(b, 19349663);
+  v = Math.imul(v ^ (v >>> 13), 0x27d4eb2d);
+  return ((v ^ (v >>> 15)) >>> 0) / 4294967296;
+}
+
+function draw(img) {
+  ctx.fillStyle = '#020503';
+  ctx.fillRect(0, 0, W, H);
+
+  // Cordelia: the still's right half (she and her hand), 1080 wide, under
+  // the title, fading into the dark at the top and the bottom.
+  const sx = 640, sw = 1280, sh = 1080;
+  const dy = 470, dh = Math.round(sh * W / sw);
+  ctx.drawImage(img, sx, 0, sw, sh, 0, dy, W, dh);
+  const fadeTop = ctx.createLinearGradient(0, dy, 0, dy + 200);
+  fadeTop.addColorStop(0, 'rgba(2,5,3,1)');
+  fadeTop.addColorStop(1, 'rgba(2,5,3,0)');
+  ctx.fillStyle = fadeTop;
+  ctx.fillRect(0, dy, W, 200);
+  const fadeBot = ctx.createLinearGradient(0, dy + dh - 260, 0, dy + dh);
+  fadeBot.addColorStop(0, 'rgba(2,5,3,0)');
+  fadeBot.addColorStop(1, 'rgba(2,5,3,1)');
+  ctx.fillStyle = fadeBot;
+  ctx.fillRect(0, dy + dh - 260, W, 260);
+
+  // Phosphor scanlines, as the demo finishes its own scenes.
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  for (let y = 0; y < H; y += 3) ctx.fillRect(0, y + 2, W, 1);
+
+  // The question.
+  ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(80,252,0,0.55)';
+  ctx.shadowBlur = 22;
+  ctx.fillStyle = '#e8ffd6';
+  ctx.font = `700 92px ${MONO}`;
+  ctx.fillText('WHO COVERS', W / 2, 330);
+  ctx.fillText('THURSDAY?', W / 2, 432);
+  ctx.shadowBlur = 0;
+
+  // The answer: one shift, before and after the replan.
+  const top = 1290, x0 = 96, x1 = W - 96;
+  ctx.fillStyle = 'rgba(2,16,10,0.88)';
+  ctx.fillRect(x0, top, x1 - x0, 300);
+  ctx.strokeStyle = '#10b981';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = 'rgba(16,185,129,0.7)';
+  ctx.shadowBlur = 14;
+  ctx.strokeRect(x0, top, x1 - x0, 300);
+  ctx.shadowBlur = 0;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#6ee7b7';
+  ctx.font = `600 30px ${MONO}`;
+  ctx.fillText('WARD A  THU 4 MAR  07:00-15:00', x0 + 36, top + 62);
+  ctx.font = `700 54px ${MONO}`;
+  ctx.fillStyle = '#fbbf24';
+  ctx.fillText('CAS SOUTH', x0 + 36, top + 150);
+  ctx.fillStyle = '#9ca3af';
+  ctx.font = `500 26px ${MONO}`;
+  ctx.fillText('SICK', x1 - 120, top + 148);
+  ctx.fillStyle = '#50fc00';
+  ctx.font = `700 54px ${MONO}`;
+  ctx.fillText('OTO NORTH', x0 + 36, top + 240);
+  ctx.fillStyle = '#6ee7b7';
+  ctx.font = `500 26px ${MONO}`;
+  ctx.fillText('REPLANNED', x1 - 190, top + 238);
+
+  // Footer.
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ecfdf5';
+  ctx.font = `700 38px ${MONO}`;
+  ctx.fillText('SOLVERFORGE WORKBENCH', W / 2, 1640);
+  ctx.fillStyle = '#6ee7b7';
+  ctx.font = `500 26px ${MONO}`;
+  ctx.fillText('A PLUGIN FOR HERMES AGENT', W / 2, 1680);
+
+  // A few stars outside the crop, as in the intro's flight.
+  for (let y = 20; y < H; y += 30) {
+    for (let x = 20; x < W; x += 30) {
+      const r = h2(x, y);
+      if (r < 0.03 && (y < 240 || y > 1700)) {
+        ctx.fillStyle = `rgba(110,231,183,${0.15 + 3 * r})`;
+        ctx.fillRect(x, y, 2, 2);
+      }
+    }
+  }
+}
+
+const img = new Image();
+img.onload = () => draw(img);
+img.src = '../../assets/cordelia-3-hand.jpg';
+</script></body></html>
