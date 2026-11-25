@@ -1,0 +1,82 @@
+{
+  "model": "gpt-image-2-medium (openai-codex, Hermes image_generate)",
+  "art_direction": "/srv/lab/sites/solverforge-brand-direction (dark mode)",
+  "base": {
+    "cordelia": "cordelia-tired: text-to-image with references assets/dark/cordelia-expressions.png, cordelia-relief.png, cordelia-scrutiny.png",
+    "victor": "victor-watch: text-to-image with references assets/dark/victor-expressions.png, victor-scrutiny.png and cordelia-tired (for scale)"
+  },
+  "edits": "every other frame is an image-to-image edit of its character's base, changing only the facial acting (Cordelia also gets assets/dark/cordelia-expressions.png as reference)",
+  "masters": "~/Pictures/solverforge/valbondione_14/production/portraits/*.png (1254x1254)",
+  "frames": {
+    "cordelia-asleep": {
+      "request_id": "a7214417-58ff-48a7-bb97-3c06429c3990",
+      "ppm_sha256": "b7f533f26c1441a7302e25d2c9c94e4c88f65e70591aa623062e771eac24f2d2",
+      "size": "272x272"
+    },
+    "cordelia-awe": {
+      "request_id": "4d6b6c2a-2bc3-4282-8c16-d34aba2c2c14",
+      "ppm_sha256": "ca728ce000c4df45764d028857f0ceec10393e74720a5bb47857560bdce262e2",
+      "size": "272x272"
+    },
+    "cordelia-drowsy": {
+      "request_id": "c1859db6-b9df-4a4d-a644-0b95d693f1af",
+      "ppm_sha256": "dd7f5f84ccdf9589682f9a88c0a8dfa56f974cb4f69551e1a25a5e4eeb21107f",
+      "size": "272x272"
+    },
+    "cordelia-humor": {
+      "request_id": "a5edb792-1a97-4a30-b7d3-818998da8123",
+      "ppm_sha256": "672b190579394d227be67d3e9c53442229bb321ce55092dc644c7a59130b738c",
+      "size": "272x272"
+    },
+    "cordelia-relief": {
+      "request_id": "17acee60-b727-4264-8fa2-12a12892b25a",
+      "ppm_sha256": "de55dfc9b201e8776fc8b9929ee686219971d13bc2a8882143f1fbbf134f6f90",
+      "size": "272x272"
+    },
+    "cordelia-resolve": {
+      "request_id": "9fd807f2-2cc0-4e9d-9f07-3d05e2a1f99f",
+      "ppm_sha256": "8b8c8984f9c53abb9414f7b67d2945f325e524569526cdae5827882543a5022d",
+      "size": "272x272"
+    },
+    "cordelia-scrutiny": {
+      "request_id": "b9e41200-5075-4ba0-97b1-a3476a63e403",
+      "ppm_sha256": "689ca93a0ea2ec8d7204befc5e839e76b215fe06a01cca4179ba5b855e20126d",
+      "size": "272x272"
+    },
+    "cordelia-tired-blink": {
+      "request_id": "3e2f449f-4356-4c2f-a02b-d812b6ea9b2f",
+      "ppm_sha256": "8bf47a71ab69e508c69948cfa2df277ada29b14ccb88a60ec27dcd21e28476aa",
+      "size": "272x272"
+    },
+    "cordelia-tired": {
+      "request_id": "f18726f9-ff11-484b-86b7-bd43b67124cb",
+      "ppm_sha256": "f1a313dc2e24272974d7c6dc7c4ccffc2ff4488a4f0d1d2bc43f48cd00de9efd",
+      "size": "272x272"
+    },
+    "victor-blink": {
+      "request_id": "4af937e1-4170-43fe-9e2c-29a57ebe611e",
+      "ppm_sha256": "06b4643b7559537b253251fc3e77605e26b89ec16e14bbd86a7a2f29b777d386",
+      "size": "272x272"
+    },
+    "victor-defiance": {
+      "request_id": "d34fe5fa-cda1-463f-9e95-5aa097a93e57",
+      "ppm_sha256": "17f0f9cb0bacdbdb2a9253627fde1018830901ed885cb87ba46919084ad14acd",
+      "size": "272x272"
+    },
+    "victor-relief": {
+      "request_id": "ac10d96c-3a92-4794-a7cd-d61bd5438f7e",
+      "ppm_sha256": "022648e06d38104feea53a15d1dd9dad1eec488200642e6947b3c704f9dd86c8",
+      "size": "272x272"
+    },
+    "victor-resolve": {
+      "request_id": "8d339d7f-2501-4a3a-a76f-4a44c2024f88",
+      "ppm_sha256": "b59f903179948caa3cefa6398a8c0ca4f57c6790dee1efcba37231ca7df91b85",
+      "size": "272x272"
+    },
+    "victor-watch": {
+      "request_id": "9e19ac95-4f2a-4fe4-8c97-0afdf3baec3d",
+      "ppm_sha256": "612088c3ba413bf90e62815f53bd6a1f46f4bf13fa7df82bf6efb1d7f06c89b0",
+      "size": "272x272"
+    }
+  }
+}

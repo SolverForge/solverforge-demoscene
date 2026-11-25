@@ -1,0 +1,25 @@
+[package]
+name = "valbondione-14-demo"
+version = "0.1.0"
+edition = "2021"
+description = "SolverForge demoscene (valbondione_14): nightfall in the upper Val Seriana; Cordelia rests and the knight keeps watch. No words: textmode, Amiga effects, glyphfx and two portraits"
+
+[[bin]]
+name = "valbondione-14-demo"
+path = "src/main.rs"
+
+[dependencies]
+# Pixel framebuffer window
+minifb = "0.28"
+
+# Audio output (the track itself is synthesized by hand in src/audio)
+cpal = "0.17"
+
+# glyphfx (vendored once for every demo), text cells, the 8x8 font, the logo
+demofx = { path = "../vendor/demofx" }
+
+[profile.release]
+# One unit with link-time optimisation, so the per-cell and per-pixel
+# helpers inline into the frame loops.
+lto = "fat"
+codegen-units = 1
