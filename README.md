@@ -48,6 +48,15 @@ Text effects come from one vendored copy of [glyphfx](https://github.com/blackop
 
 Each demo keeps its vertical 9:16 social cover in `docs/social/`: a deterministic HTML source and its 1080x1920 PNG render.
 
+### Updating glyphfx
+
+Run `./scripts/update-glyphfx.sh v0.7.0` with the upstream release tag you want.
+The script refreshes `vendor/glyphfx` with the C sources, `LICENSE`, `NOTICE`,
+and `VERSION`, leaving out the CLI entry point. It refuses to overwrite local
+changes in that directory. Review `git diff -- vendor/glyphfx` and run
+`cargo test --manifest-path vendor/demofx/Cargo.toml` after updating.
+Normal builds use the checked-in snapshot and do not fetch glyphfx.
+
 ## Quick Start
 
 Each demo has its own Makefile. `cd` into a demo directory and run:

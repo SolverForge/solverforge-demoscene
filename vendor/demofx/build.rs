@@ -1,4 +1,4 @@
-// Compiles the vendored glyphfx engine (../glyphfx, pinned v0.6.0) plus the
+// Compiles the vendored glyphfx engine (../glyphfx, pinned in VERSION) plus the
 // demos' C shim into one static library. Every demo links this one copy.
 use std::fs;
 use std::path::{Path, PathBuf};
